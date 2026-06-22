@@ -13,8 +13,13 @@ const allowedStatusesForRole = function(role) {
 
 const ensureApprovalScope = function(req, res, reservation) {
   const allowedStatuses = allowedStatusesForRole(req.user && req.user.role);
+  const approvableStatuses = ['pending', 'counselor_pending'];
   if (allowedStatuses.length === 0) {
     response.error(res, '权限不足', 403);
+    return false;
+  }
+  if (!approvableStatuses.includes(reservation.status)) {
+    response.error(res, '该预约已被处理，请刷新后重试', 409);
     return false;
   }
   if (!allowedStatuses.includes(reservation.status)) {
