@@ -23,6 +23,9 @@ class CredentialError extends Error {
 }
 
 const ensureCredentialStoreAvailable = function() {
+  if (process.env.NODE_ENV === 'production' && !process.env.CHECKIN_CREDENTIAL_SECRET) {
+    throw new CredentialError('动态签到签名密钥未配置', 503);
+  }
   if (
     process.env.NODE_ENV === 'production' &&
     typeof redis.isMock === 'function' &&
@@ -165,30 +168,42 @@ const issue = async function(reservation) {
   };
 };
 
-const atomicGetAndDelete = async function(key) {
+const atomicConsumeNonce = async function(reservationId, nonce) {
+  const activeRedisKey = activeKey(reservationId);
+  const nonceRedisKey = nonceKey(nonce);
+
   if (typeof redis.isMock === 'function' && redis.isMock()) {
-    const mockValue = await redis.get(key);
-    if (mockValue) await redis.del(key);
-    return mockValue;
+    const currentNonce = await redis.get(activeRedisKey);
+    if (!currentNonce) return { status: 'expired', value: null };
+    if (currentNonce !== nonce) return { status: 'stale', value: null };
+    const mockValue = await redis.get(nonceRedisKey);
+    if (!mockValue) return { status: 'replayed', value: null };
+    await redis.del(nonceRedisKey);
+    return { status: 'ok', value: mockValue };
   }
 
-  try {
-    if (typeof redis.getdel === 'function') {
-      return await redis.getdel(key);
-    }
-  } catch (err) {
-    // Redis 6.2 以下不支持 GETDEL，继续使用 Lua 原子回退。
+  if (typeof redis.eval !== 'function') {
+    throw new CredentialError('签到凭证存储暂不可用，请稍后重试', 503);
   }
 
-  if (typeof redis.eval === 'function') {
-    return redis.eval(
-      "local value = redis.call('GET', KEYS[1]); if value then redis.call('DEL', KEYS[1]); end; return value",
-      1,
-      key
-    );
-  }
+  const result = await redis.eval(
+    "local active = redis.call('GET', KEYS[1]); " +
+    "if not active then return {-2, ''}; end; " +
+    "if active ~= ARGV[1] then return {-1, ''}; end; " +
+    "local value = redis.call('GET', KEYS[2]); " +
+    "if not value then return {0, ''}; end; " +
+    "redis.call('DEL', KEYS[2]); return {1, value};",
+    2,
+    activeRedisKey,
+    nonceRedisKey,
+    nonce
+  );
 
-  throw new CredentialError('签到凭证存储暂不可用，请稍后重试', 503);
+  const code = Number(result && result[0]);
+  if (code === 1) return { status: 'ok', value: result[1] };
+  if (code === -2) return { status: 'expired', value: null };
+  if (code === -1) return { status: 'stale', value: null };
+  return { status: 'replayed', value: null };
 };
 
 const consume = async function(input, reservation) {
@@ -197,22 +212,20 @@ const consume = async function(input, reservation) {
   const payload = parsed.payload;
   validatePayload(payload, reservation);
 
-  const currentNonce = await redis.get(activeKey(reservation.id));
-  if (!currentNonce) {
+  const consumeResult = await atomicConsumeNonce(reservation.id, payload.n);
+  if (consumeResult.status === 'expired') {
     throw new CredentialError('签到凭证已过期，请刷新后重试', 410);
   }
-  if (currentNonce !== payload.n) {
+  if (consumeResult.status === 'stale') {
     throw new CredentialError('签到凭证已被刷新，请使用最新凭证', 409);
   }
-
-  const storedPayloadRaw = await atomicGetAndDelete(nonceKey(payload.n));
-  if (!storedPayloadRaw) {
+  if (consumeResult.status === 'replayed') {
     throw new CredentialError('签到凭证已使用或已过期', 409);
   }
 
   let storedPayload;
   try {
-    storedPayload = JSON.parse(storedPayloadRaw);
+    storedPayload = JSON.parse(consumeResult.value);
   } catch (err) {
     throw new CredentialError('签到凭证状态无效', 409);
   }
@@ -237,5 +250,6 @@ module.exports = {
   parseInput,
   validatePayload,
   ensureCredentialStoreAvailable,
+  atomicConsumeNonce,
   CREDENTIAL_TTL_SECONDS
 };
