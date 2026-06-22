@@ -1,29 +1,37 @@
-const success = function(res, data, message) {
-  return res.json({
-    code: 200,
+const success = function(res, data, message, status) {
+  const httpStatus = status || 200;
+  return res.status(httpStatus).json({
+    code: httpStatus,
     message: message || 'success',
-    data: data || null
+    data: data === undefined ? null : data
   });
 };
 
-const error = function(res, message, code) {
-  return res.json({
-    code: code || 500,
+const error = function(res, message, code, details) {
+  const httpStatus = Number(code) || 500;
+  const payload = {
+    code: httpStatus,
     message: message || '服务器内部错误',
     data: null
-  });
+  };
+  if (details !== undefined && process.env.NODE_ENV !== 'production') {
+    payload.details = details;
+  }
+  return res.status(httpStatus).json(payload);
 };
 
 const paginate = function(res, data, total, page, pageSize) {
-  return res.json({
+  const normalizedPage = parseInt(page, 10);
+  const normalizedPageSize = parseInt(pageSize, 10);
+  return res.status(200).json({
     code: 200,
     message: 'success',
     data: {
       list: data,
       total: total,
-      page: parseInt(page),
-      pageSize: parseInt(pageSize),
-      totalPages: Math.ceil(total / pageSize)
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+      totalPages: Math.ceil(total / normalizedPageSize)
     }
   });
 };
