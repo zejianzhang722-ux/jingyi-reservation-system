@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const reservationController = require('../controllers/reservationController');
 const reservationApprovalController = require('../controllers/reservationApprovalController');
+const checkinCredentialController = require('../controllers/checkinCredentialController');
 const { auth, requireAdmin } = require('../middleware/auth');
 const {
   createReservationRules,
@@ -21,7 +22,7 @@ router.put('/:id/reject', auth, requireAdmin, auditRules, reservationApprovalCon
 router.get('/:id', auth, reservationIdRules, reservationController.detail);
 router.delete('/:id', auth, reservationIdRules, reservationController.cancel);
 router.put('/:id', auth, reservationIdRules, reservationController.update);
-router.get('/:id/qrcode', auth, reservationIdRules, reservationController.qrcode);
+router.get('/:id/qrcode', auth, reservationIdRules, checkinCredentialController.issue);
 router.post('/:id/rebook', auth, reservationIdRules, reservationController.rebook);
 router.post('/check-conflict', auth, reservationController.checkConflict);
 router.post('/waitlist', auth, reservationLimiter, waitlistRules, reservationController.joinWaitlist);
