@@ -16,6 +16,9 @@ const { checkTokenBlacklist } = require('./middleware/auth');
 const { initScheduler } = require('./services/schedulerService');
 
 const app = express();
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
