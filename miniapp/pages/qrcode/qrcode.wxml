@@ -10,11 +10,12 @@
         <image class="qrcode-image" wx:if="{{qrCodeUrl}}" src="{{qrCodeUrl}}" mode="aspectFit"></image>
         <view class="qrcode-placeholder" wx:if="{{!qrCodeUrl}}">
           <view class="qrcode-placeholder-icon"></view>
-          <text class="qrcode-placeholder-text">签到凭证码</text>
-          <text class="qrcode-placeholder-id">{{reservation.voucherCode}}</text>
+          <text class="qrcode-placeholder-text">{{refreshing ? '正在生成动态凭证' : '动态签到凭证'}}</text>
+          <text class="qrcode-placeholder-id" wx:if="{{credentialReference}}">{{credentialReference}}</text>
+          <text class="qrcode-placeholder-id" wx:if="{{credentialError}}">{{credentialError}}</text>
         </view>
         <view class="expired-mask" wx:if="{{isExpired}}">
-          <text class="expired-text">已过期</text>
+          <text class="expired-text">已失效</text>
         </view>
       </view>
 
@@ -31,20 +32,25 @@
           <text class="info-label">座位</text>
           <text class="info-value">{{reservation.seatName}}</text>
         </view>
+        <view class="qrcode-info-row" wx:if="{{credentialCountdown && !isExpired}}">
+          <text class="info-label">凭证刷新</text>
+          <text class="info-value text-warning">{{credentialCountdown}}</text>
+        </view>
         <view class="qrcode-info-row" wx:if="{{countdown}}">
-          <text class="info-label">剩余时间</text>
+          <text class="info-label">预约剩余</text>
           <text class="info-value text-warning">{{countdown}}</text>
         </view>
       </view>
     </view>
 
     <view class="qrcode-tips">
-      <text class="tip-text">请在预约时间内出示此凭证码进行签到</text>
-      <text class="tip-text">凭证码每5分钟自动刷新</text>
+      <text class="tip-text">请向工作人员出示当前动态二维码进行签到</text>
+      <text class="tip-text">二维码约60秒失效，并会在到期前自动刷新</text>
+      <text class="tip-text">截图或旧二维码不能重复使用</text>
     </view>
 
-    <view class="refresh-btn" bindtap="onRefreshQRCode">
-      <text class="refresh-text">刷新凭证码</text>
+    <view class="refresh-btn" bindtap="onRefreshQRCode" wx:if="{{!isExpired}}">
+      <text class="refresh-text">{{refreshing ? '正在刷新' : '立即刷新凭证'}}</text>
     </view>
   </view>
 
