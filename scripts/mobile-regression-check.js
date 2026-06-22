@@ -126,6 +126,60 @@ async function main() {
     d.setDate(d.getDate() + days)
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
   }
+
+  async function cleanupSharedRegressionReservations(token) {
+    const list = await api('/reservation?page=1&pageSize=100&roomId=8', {
+      headers: { Authorization: 'Bearer ' + token }
+    })
+    const activeStatuses = ['approved', 'pending', 'counselor_pending', 'checked_in']
+    const reservations = (list.json.data && list.json.data.list) || list.json.data || []
+    for (const reservation of reservations) {
+      const purpose = String(reservation.purpose || '')
+      const isRegressionData = purpose.indexOf('mobile-regression-shared-space') !== -1 || Number(reservation.participants) === 4
+      if (Number(reservation.room_id) === 8 && activeStatuses.includes(reservation.status) && isRegressionData) {
+        await api('/reservation/' + reservation.id, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + token }
+        })
+      }
+    }
+  }
+
+  async function findSharedRegressionSlot(token) {
+    const slots = [
+      ['08:00', '09:00'],
+      ['09:00', '10:00'],
+      ['10:00', '11:00'],
+      ['14:00', '15:00'],
+      ['15:00', '16:00'],
+      ['16:00', '17:00'],
+      ['19:00', '20:00']
+    ]
+    const maxDays = Math.max(3, Math.min(Number(config.reservation.advanceDays || 7), 7))
+    for (let day = 1; day <= maxDays; day++) {
+      const date = localDatePlus(day)
+      for (const slot of slots) {
+        const conflict = await api('/reservation/check-conflict', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            roomId: 8,
+            date: date,
+            startTime: slot[0],
+            endTime: slot[1]
+          })
+        })
+        if (conflict.json.code === 200 && conflict.json.data && !conflict.json.data.hasConflict) {
+          return { date: date, startTime: slot[0], endTime: slot[1] }
+        }
+      }
+    }
+    throw new Error('未找到可用于共享空间回归测试的空闲时段')
+  }
+
   const liLogin = await api('/auth/login/student', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -133,7 +187,8 @@ async function main() {
   })
   assert(liLogin.json.code === 200, '李四登录失败')
   const sharedToken = liLogin.json.data.token
-  const futureDate = localDatePlus(3)
+  await cleanupSharedRegressionReservations(sharedToken)
+  const sharedSlot = await findSharedRegressionSlot(sharedToken)
   const invalidShared = await api('/reservation', {
     method: 'POST',
     headers: {
@@ -142,9 +197,9 @@ async function main() {
     },
     body: JSON.stringify({
       roomId: 8,
-      date: futureDate,
-      startTime: '08:00',
-      endTime: '09:00'
+      date: sharedSlot.date,
+      startTime: sharedSlot.startTime,
+      endTime: sharedSlot.endTime
     })
   })
   assert(invalidShared.json.code !== 200, '共享空间缺少用途和人数时不应预约成功')
@@ -157,9 +212,9 @@ async function main() {
     },
     body: JSON.stringify({
       roomId: 8,
-      date: futureDate,
-      startTime: '08:00',
-      endTime: '09:00',
+      date: sharedSlot.date,
+      startTime: sharedSlot.startTime,
+      endTime: sharedSlot.endTime,
       purposeCategory: '项目合作',
       participantCount: 4
     })
@@ -167,6 +222,11 @@ async function main() {
   assert(validShared.json.code === 200, '共享空间填写用途和人数后应预约成功')
   assert(Number(validShared.json.data.participants) === 4, '共享空间预约应保存参与人数')
   assert(validShared.json.data.purpose === '项目合作', '共享空间预约应保存用途分类')
+
+  await api('/reservation/' + validShared.json.data.id, {
+    method: 'DELETE',
+    headers: { Authorization: 'Bearer ' + sharedToken }
+  })
 
   const credit = await api('/user/credit', {
     headers: { Authorization: 'Bearer ' + refresh.json.data.token }
