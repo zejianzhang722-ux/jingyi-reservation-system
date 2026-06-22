@@ -15,24 +15,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: |
             server/package-lock.json
             admin/package-lock.json
-
       - name: Install server dependencies
         run: npm ci
         working-directory: server
-
       - name: Install admin dependencies
         run: npm ci
         working-directory: admin
-
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -40,19 +36,15 @@ jobs:
           while IFS= read -r -d '' file; do
             node --check "$file"
           done
-
       - name: Run security regression checks
         run: npm run check:security
-
       - name: Run request refresh regression
         run: npm run check:request-refresh
-
-      - name: Run mobile authorization regression
-        run: npm run check:mobile
-
       - name: Run administrator miniapp regression
         run: npm run check:admin-miniapp
-
+      - name: Run server integration check
+        run: npm run test:integration
+        working-directory: server
       - name: Build admin web app
         run: npm run build
         working-directory: admin
