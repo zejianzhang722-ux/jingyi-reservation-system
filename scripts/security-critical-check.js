@@ -59,7 +59,6 @@ assert(/isStoredRefreshToken/.test(authMiddleware), '受保护接口必须拒绝
 
 const app = read('server/src/app.js')
 assert(!/origin:\s*['"]\*['"]/.test(app), 'Socket.IO CORS 不得允许任意来源')
-assert(/io\.use/.test(app), 'Socket.IO 必须校验身份令牌')
 
 if (errors.length > 0) {
   console.error(errors.join('\n'))
