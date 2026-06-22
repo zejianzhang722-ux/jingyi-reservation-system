@@ -3,16 +3,18 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const config = require('../config');
 const creditService = require('../services/creditService');
-const notificationService = require('../services/notificationService');
+const credentialService = require('../services/checkinCredentialService');
 const helpers = require('../utils/helpers');
 
 const checkin = async function(req, res) {
+  let connection = null;
+  let transactional = false;
   try {
-    const { reservationId, code } = req.body;
-    const userId = req.user.id;
+    const { reservationId } = req.body;
+    const credential = req.body.credential || req.body.code;
 
     const [reservations] = await db.query(
-      "SELECT r.*, rm.name as room_name FROM reservations r JOIN rooms rm ON r.room_id = rm.id WHERE r.id = ?",
+      'SELECT r.*, rm.name AS room_name FROM reservations r JOIN rooms rm ON r.room_id = rm.id WHERE r.id = ?',
       [reservationId]
     );
     if (reservations.length === 0) {
@@ -20,11 +22,14 @@ const checkin = async function(req, res) {
     }
 
     const reservation = reservations[0];
-    if (Number(reservation.user_id) !== Number(userId) && req.user.role === 'student') {
+    if (Number(reservation.user_id) !== Number(req.user.id) && req.user.role === 'student') {
       return response.error(res, '无权签到此预约', 403);
     }
 
     if (reservation.status !== 'approved') {
+      if (reservation.status === 'checked_in') {
+        return response.error(res, '已签到，请勿重复签到', 409);
+      }
       return response.error(res, '当前预约状态无法签到', 400);
     }
 
@@ -51,20 +56,53 @@ const checkin = async function(req, res) {
       [reservationId]
     );
     if (existingCheckin.length > 0) {
-      return response.error(res, '已签到，请勿重复签到', 400);
+      return response.error(res, '已签到，请勿重复签到', 409);
     }
 
-    await db.query(
+    await credentialService.consume(credential, reservation);
+
+    connection = await db.getConnection();
+    transactional = !!(
+      connection &&
+      typeof connection.beginTransaction === 'function' &&
+      typeof connection.execute === 'function'
+    );
+    if (transactional) await connection.beginTransaction();
+    const runQuery = transactional
+      ? function(sql, params) { return connection.execute(sql, params); }
+      : db.query;
+
+    const [updateResult] = await runQuery(
+      "UPDATE reservations SET status = 'checked_in' WHERE id = ? AND status = 'approved'",
+      [reservationId]
+    );
+    if (!updateResult || updateResult.affectedRows === 0) {
+      const err = new Error('预约状态已变化，请刷新后重试');
+      err.httpStatus = 409;
+      throw err;
+    }
+
+    await runQuery(
       'INSERT INTO checkins (reservation_id, user_id, room_id, checkin_time, checkin_type, created_at) VALUES (?, ?, ?, NOW(), ?, NOW())',
-      [reservationId, userId, reservation.room_id, code ? 'qrcode' : 'manual']
+      [reservationId, reservation.user_id, reservation.room_id, 'qrcode']
     );
 
-    await db.query("UPDATE reservations SET status = 'checked_in' WHERE id = ?", [reservationId]);
-
+    if (transactional) await connection.commit();
     return response.success(res, null, '签到成功');
   } catch (err) {
+    if (transactional && connection && typeof connection.rollback === 'function') {
+      try {
+        await connection.rollback();
+      } catch (rollbackErr) {
+        logger.error('签到事务回滚失败:', rollbackErr);
+      }
+    }
     logger.error('签到异常:', err);
-    return response.error(res, err.message);
+    return response.error(res, err.message || '签到失败', err.httpStatus || 500);
+  } finally {
+    if (connection && typeof connection.release === 'function') {
+      connection.release();
+    }
   }
 };
 
@@ -159,7 +197,7 @@ const currentCheckins = async function(req, res) {
     const roomId = req.params.roomId;
 
     const [checkins] = await db.query(
-      "SELECT c.*, r.date, r.start_time, r.end_time, u.nickname, u.real_name, u.student_id FROM checkins c JOIN reservations r ON c.reservation_id = r.id JOIN users u ON c.user_id = u.id WHERE c.room_id = ? AND c.checkout_time IS NULL ORDER BY c.checkin_time DESC",
+      'SELECT c.*, r.date, r.start_time, r.end_time, u.nickname, u.real_name, u.student_id FROM checkins c JOIN reservations r ON c.reservation_id = r.id JOIN users u ON c.user_id = u.id WHERE c.room_id = ? AND c.checkout_time IS NULL ORDER BY c.checkin_time DESC',
       [roomId]
     );
 
@@ -172,7 +210,7 @@ const currentCheckins = async function(req, res) {
 
 const patrol = async function(req, res) {
   try {
-    const { roomId, reservationId, status, note } = req.body;
+    const { reservationId, status } = req.body;
 
     const [reservations] = await db.query('SELECT * FROM reservations WHERE id = ?', [reservationId]);
     if (reservations.length === 0) {
