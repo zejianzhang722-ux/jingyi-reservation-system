@@ -155,6 +155,12 @@ const issue = async function(reservation) {
 };
 
 const atomicGetAndDelete = async function(key) {
+  if (typeof redis.isMock === 'function' && redis.isMock()) {
+    const mockValue = await redis.get(key);
+    if (mockValue) await redis.del(key);
+    return mockValue;
+  }
+
   try {
     if (typeof redis.getdel === 'function') {
       return await redis.getdel(key);
