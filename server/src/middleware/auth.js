@@ -12,16 +12,18 @@ const getRefreshTokenKey = function(decoded) {
 
 const isStoredRefreshToken = async function(decoded, tokenStr) {
   if (!decoded || !tokenStr) return false;
+  if (decoded.tokenType === 'access' || decoded.typ === 'access') return false;
   if (decoded.tokenType === 'refresh' || decoded.typ === 'refresh') return true;
 
+  // 兼容旧版本未携带 tokenType 的令牌。旧访问令牌与刷新令牌只能通过
+  // Redis 中保存的当前刷新令牌区分；如果该状态不存在，则必须拒绝，
+  // 不能在 Redis 故障或会话已撤销时把旧刷新令牌误当作访问令牌。
   const redisKey = getRefreshTokenKey(decoded);
-  if (!redisKey) return false;
-  try {
-    const storedRefreshToken = await redis.get(redisKey);
-    return !!storedRefreshToken && storedRefreshToken === tokenStr;
-  } catch (err) {
-    return false;
-  }
+  if (!redisKey) throw new Error('无法识别令牌类型');
+
+  const storedRefreshToken = await redis.get(redisKey);
+  if (!storedRefreshToken) throw new Error('旧版会话状态不存在');
+  return storedRefreshToken === tokenStr;
 };
 
 const auth = async function(req, res, next) {
