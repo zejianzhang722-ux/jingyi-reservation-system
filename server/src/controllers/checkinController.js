@@ -1,4 +1,4 @@
-﻿const db = require('../config/database');
+const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const config = require('../config');
@@ -114,11 +114,16 @@ const getStatus = async function(req, res) {
 
 const manualCheckin = async function(req, res) {
   try {
-    const { reservationId, userId } = req.body;
+    const { reservationId } = req.body;
 
     const [reservations] = await db.query('SELECT * FROM reservations WHERE id = ?', [reservationId]);
     if (reservations.length === 0) {
       return response.error(res, '预约不存在', 404);
+    }
+
+    const reservation = reservations[0];
+    if (reservation.status !== 'approved') {
+      return response.error(res, '当前预约状态无法手动签到', 400);
     }
 
     const [existingCheckin] = await db.query(
@@ -126,15 +131,21 @@ const manualCheckin = async function(req, res) {
       [reservationId]
     );
     if (existingCheckin.length > 0) {
-      return response.error(res, '已签到', 400);
+      return response.error(res, '已签到', 409);
     }
 
     await db.query(
       'INSERT INTO checkins (reservation_id, user_id, room_id, checkin_time, checkin_type, created_at) VALUES (?, ?, ?, NOW(), ?, NOW())',
-      [reservationId, userId || reservations[0].user_id, reservations[0].room_id, 'admin_manual']
+      [reservationId, reservation.user_id, reservation.room_id, 'admin_manual']
     );
 
-    await db.query("UPDATE reservations SET status = 'checked_in' WHERE id = ?", [reservationId]);
+    const [updateResult] = await db.query(
+      "UPDATE reservations SET status = 'checked_in' WHERE id = ? AND status = 'approved'",
+      [reservationId]
+    );
+    if (!updateResult || updateResult.affectedRows === 0) {
+      return response.error(res, '预约状态已变化，请刷新后重试', 409);
+    }
 
     return response.success(res, null, '手动签到成功');
   } catch (err) {
