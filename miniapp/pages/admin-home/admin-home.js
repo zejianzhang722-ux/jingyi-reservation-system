@@ -59,6 +59,13 @@ Page({
       that.setData({ pendingList: [] })
     })
   },
+  showScanError: function (message) {
+    wx.showToast({
+      title: message || '扫码签到失败',
+      icon: 'none',
+      duration: 2500
+    })
+  },
   onScanCheckin: function () {
     var that = this
     if (this.data.scanning) return
@@ -67,30 +74,30 @@ Page({
       onlyFromCamera: true,
       scanType: ['qrCode'],
       success: function (scanResult) {
-        var payload
+        var payload = null
         try {
           payload = JSON.parse(scanResult.result || '')
         } catch (err) {
-          throw new Error('该二维码不是有效的敬一书院签到凭证')
+          that.showScanError('该二维码不是有效的签到凭证')
+          return
         }
         if (!payload || payload.type !== 'jingyi-checkin' || !payload.reservationId || !payload.credential) {
-          throw new Error('动态签到凭证格式无效')
+          that.showScanError('动态签到凭证格式无效')
+          return
         }
-        return request.post('/checkin', {
+        request.post('/checkin', {
           reservationId: payload.reservationId,
           credential: payload.credential
         }).then(function () {
           wx.showToast({ title: '签到成功', icon: 'success' })
           that.loadStats()
+        }).catch(function (err) {
+          that.showScanError(err && err.message ? err.message : '签到失败，请刷新二维码后重试')
         })
       },
       fail: function (err) {
         if (err && String(err.errMsg || '').indexOf('cancel') !== -1) return
-        wx.showToast({
-          title: err && err.message ? err.message : '扫码签到失败',
-          icon: 'none',
-          duration: 2500
-        })
+        that.showScanError('无法完成扫码，请检查相机权限')
       },
       complete: function () {
         that.setData({ scanning: false })
