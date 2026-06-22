@@ -102,13 +102,22 @@ const notifyBatchResult = async function(reservation, action, reason) {
   }
 };
 
-const batchAudit = async function(req, res) {
-  try {
-    const ids = Array.from(new Set((req.body.ids || []).map(Number)));
-    const action = req.body.action;
-    const reason = String(req.body.reason || '').trim();
-    const allowedStatuses = allowedStatusesForRole(req.user && req.user.role);
+const createHttpError = function(status, message) {
+  const err = new Error(message);
+  err.httpStatus = status;
+  return err;
+};
 
+const batchAudit = async function(req, res) {
+  const ids = Array.from(new Set((req.body.ids || []).map(Number)));
+  const action = req.body.action;
+  const reason = String(req.body.reason || '').trim();
+  const allowedStatuses = allowedStatusesForRole(req.user && req.user.role);
+  let connection = null;
+  let transactional = false;
+  let reservations = [];
+
+  try {
     if (allowedStatuses.length === 0) {
       return response.error(res, '权限不足', 403);
     }
@@ -116,22 +125,35 @@ const batchAudit = async function(req, res) {
       return response.error(res, '批量拒绝时必须填写原因', 400);
     }
 
-    const reservations = [];
+    connection = await db.getConnection();
+    transactional = !!(
+      connection &&
+      typeof connection.beginTransaction === 'function' &&
+      typeof connection.execute === 'function'
+    );
+    if (transactional) await connection.beginTransaction();
+
+    const runQuery = transactional
+      ? function(sql, params) { return connection.execute(sql, params); }
+      : db.query;
+
+    reservations = [];
     for (const id of ids) {
-      const [rows] = await db.query(
+      const lockClause = transactional ? ' FOR UPDATE' : '';
+      const [rows] = await runQuery(
         'SELECT r.*, rm.name AS room_name FROM reservations r ' +
-        'JOIN rooms rm ON r.room_id = rm.id WHERE r.id = ?',
+        'JOIN rooms rm ON r.room_id = rm.id WHERE r.id = ?' + lockClause,
         [id]
       );
       if (!rows || rows.length === 0) {
-        return response.error(res, '预约不存在：' + id, 404);
+        throw createHttpError(404, '预约不存在：' + id);
       }
       const reservation = rows[0];
       if (!['pending', 'counselor_pending'].includes(reservation.status)) {
-        return response.error(res, '预约已被处理：' + id, 409);
+        throw createHttpError(409, '预约已被处理：' + id);
       }
       if (!allowedStatuses.includes(reservation.status)) {
-        return response.error(res, '当前角色无权处理预约：' + id, 403);
+        throw createHttpError(403, '当前角色无权处理预约：' + id);
       }
       reservations.push(reservation);
     }
@@ -139,13 +161,13 @@ const batchAudit = async function(req, res) {
     for (const reservation of reservations) {
       let updateResult;
       if (action === 'approve') {
-        [updateResult] = await db.query(
+        [updateResult] = await runQuery(
           "UPDATE reservations SET status = 'approved', audited_at = NOW(), audited_by = ? " +
           'WHERE id = ? AND status = ?',
           [req.user.id, reservation.id, reservation.status]
         );
       } else {
-        [updateResult] = await db.query(
+        [updateResult] = await runQuery(
           "UPDATE reservations SET status = 'rejected', audited_at = NOW(), audited_by = ?, reject_reason = ? " +
           'WHERE id = ? AND status = ?',
           [req.user.id, reason, reservation.id, reservation.status]
@@ -153,16 +175,33 @@ const batchAudit = async function(req, res) {
       }
 
       if (!updateResult || updateResult.affectedRows === 0) {
-        return response.error(res, '部分预约已被其他管理员处理，请刷新后重试', 409);
+        throw createHttpError(409, '部分预约已被其他管理员处理，请刷新后重试');
       }
-      await notifyBatchResult(reservation, action, reason);
     }
 
-    return response.success(res, { processed: reservations.length }, '批量审核完成');
+    if (transactional) await connection.commit();
   } catch (err) {
+    if (transactional && connection && typeof connection.rollback === 'function') {
+      try {
+        await connection.rollback();
+      } catch (rollbackErr) {
+        logger.error('批量审核回滚失败:', rollbackErr);
+      }
+    }
     logger.error('批量审核异常:', err);
-    return response.error(res, '批量审核失败', 500);
+    return response.error(res, err.message || '批量审核失败', err.httpStatus || 500);
+  } finally {
+    if (connection && typeof connection.release === 'function') {
+      connection.release();
+    }
   }
+
+  // 通知属于提交后的副作用，失败不回滚已成功的业务状态。
+  for (const reservation of reservations) {
+    await notifyBatchResult(reservation, action, reason);
+  }
+
+  return response.success(res, { processed: reservations.length }, '批量审核完成');
 };
 
 const counselorPending = async function(req, res) {
