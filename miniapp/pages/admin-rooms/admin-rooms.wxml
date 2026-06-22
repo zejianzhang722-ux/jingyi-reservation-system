@@ -1,0 +1,40 @@
+<view class="container">
+  <view class="header">
+    <text class="title">功能房管理</text>
+    <text class="subtitle">查看房间状态，按分类快速筛选</text>
+  </view>
+
+  <scroll-view class="filter-tabs" scroll-x="true" show-scrollbar="false">
+    <view class="tab {{filterType === '' ? 'active' : ''}}" bindtap="onFilterType" data-type="">全部</view>
+    <view class="tab {{filterType === 'study' ? 'active' : ''}}" bindtap="onFilterType" data-type="study">自习室</view>
+    <view class="tab {{filterType === 'shared' ? 'active' : ''}}" bindtap="onFilterType" data-type="shared">共享空间</view>
+    <view class="tab {{filterType === 'media' ? 'active' : ''}}" bindtap="onFilterType" data-type="media">影音室</view>
+    <view class="tab {{filterType === 'competition' ? 'active' : ''}}" bindtap="onFilterType" data-type="competition">备赛间</view>
+    <view class="tab {{filterType === 'roadshow' ? 'active' : ''}}" bindtap="onFilterType" data-type="roadshow">路演空间</view>
+    <view class="tab {{filterType === 'reading' ? 'active' : ''}}" bindtap="onFilterType" data-type="reading">阅览室</view>
+  </scroll-view>
+
+  <view class="room-list" wx:if="{{list.length > 0}}">
+    <view class="room-item" wx:for="{{list}}" wx:key="id">
+      <view class="room-info" data-id="{{item.id}}" bindtap="onViewDetail">
+        <view class="room-header">
+          <text class="room-name">{{item.name}}</text>
+          <text class="room-status status-{{item.status}}">{{statusMap[item.status] || item.status}}</text>
+        </view>
+        <view class="room-detail">
+          <text class="detail-text">{{typeMap[item.type] || item.type}} | {{item.location || item.building_name || '-'}}</text>
+          <text class="detail-text">容量 {{item.capacity || '-'}} 人 | {{item.open_start_time || '-'}}-{{item.open_end_time || '-'}}</text>
+        </view>
+      </view>
+      <view class="room-actions">
+        <view class="btn-toggle" data-id="{{item.id}}" data-status="{{item.status}}" bindtap="onToggleStatus">
+          {{item.status === 'open' ? '关闭' : '开放'}}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty" wx:else>
+    <text>暂无功能房数据</text>
+  </view>
+</view>

@@ -1,0 +1,44 @@
+<view class="container page-fade-in">
+  <view class="profile-header">
+    <view class="profile-avatar-wrap avatar-choose-button" bindtap="onAvatarTap">
+      <image class="profile-avatar-img" src="{{avatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" wx:if="{{!avatarLoadError}}" />
+      <view class="profile-avatar-fallback" wx:else>{{avatarFallbackText}}</view>
+      <view class="profile-avatar-edit"></view>
+    </view>
+    <view class="profile-info">
+      <text class="profile-name">{{userInfo.name || userInfo.real_name || userInfo.realName || userInfo.nickname || '未登录'}}</text>
+      <text class="profile-student-id">{{userInfo.student_no || userInfo.studentNo || '请完善个人信息'}}</text>
+    </view>
+    <view class="profile-credit">
+      <text class="credit-score" style="color:{{creditColorValue}}">{{creditScore}}</text>
+      <text class="credit-label">信用分</text>
+    </view>
+  </view>
+
+  <view class="profile-credit-bar">
+    <view class="credit-bar-title">
+      <text>预约信用状态</text>
+      <text style="color:{{creditColorValue}}">{{creditScore >= 80 ? '良好' : creditScore >= 60 ? '需注意' : '受限'}}</text>
+    </view>
+    <view class="credit-bar-bg">
+      <view class="credit-bar-fill" style="width:{{creditScore}}%;background-color:{{creditColorValue}}"></view>
+    </view>
+    <view class="credit-bar-labels">
+      <text class="credit-bar-label">0</text>
+      <text class="credit-bar-label">60</text>
+      <text class="credit-bar-label">100</text>
+    </view>
+  </view>
+
+  <view class="menu-list">
+    <view class="menu-item" wx:for="{{menuList}}" wx:key="key" data-key="{{item.key}}" bindtap="onMenuTap">
+      <view class="menu-item-left">
+        <view class="menu-icon-wrap menu-icon-{{item.tone}}">
+          <view class="menu-symbol menu-symbol-{{item.icon}}"></view>
+        </view>
+        <text class="menu-name">{{item.name}}</text>
+      </view>
+      <view class="menu-arrow"></view>
+    </view>
+  </view>
+</view>

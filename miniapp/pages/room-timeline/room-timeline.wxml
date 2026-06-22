@@ -1,0 +1,77 @@
+<view class="container">
+  <view class="rules-modal" wx:if="{{showRulesModal}}">
+    <view class="rules-modal-mask"></view>
+    <view class="rules-modal-content">
+      <view class="rules-modal-header">
+        <text class="rules-modal-title">功能房管理制度</text>
+      </view>
+      <scroll-view class="rules-modal-body" scroll-y enhanced show-scrollbar="{{true}}" bindscrolltolower="onRulesScrollToLower">
+        <text class="rules-text">{{rulesContent}}</text>
+        <view style="height: 20px;"></view>
+      </scroll-view>
+      <view class="rules-modal-footer">
+        <view class="rules-agree-row" bindtap="onRulesAgreeChange">
+          <view class="rules-checkbox {{rulesAgreed ? 'rules-checkbox-checked' : ''}}"></view>
+          <text class="rules-agree-text">我已知悉上述管理制度并遵守相关规定</text>
+        </view>
+        <view class="rules-btn-row">
+          <view class="rules-btn rules-btn-cancel" bindtap="onRulesCancel">返回</view>
+          <view class="rules-btn rules-btn-confirm {{rulesAgreed ? '' : 'rules-btn-disabled'}}" bindtap="onRulesConfirm">
+            {{rulesCountdown > 0 ? '请阅读(' + rulesCountdown + 's)' : '确认进入'}}
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view class="room-header" wx:if="{{room}}">
+    <view class="room-header-info">
+      <text class="room-header-name">{{room.name}}</text>
+      <text class="room-header-number">{{room.roomNumber}}</text>
+    </view>
+    <view class="room-header-capacity">
+      <text class="capacity-text">容量: {{room.capacity}}人</text>
+    </view>
+  </view>
+
+  <date-picker days="{{4}}" selectedDate="{{selectedDate}}" bind:change="onDateChange"></date-picker>
+
+  <view class="timeline-section" wx:if="{{!loading}}">
+    <timeline seats="{{seats}}" timeline="{{timeline}}" myReservations="{{myReservations}}"
+              openHour="{{openHour}}" closeHour="{{closeHour}}" maxHours="{{maxHours}}"
+              mode="{{isStudyRoom ? 'seat' : 'room'}}" isToday="{{isToday}}" bind:selecttime="onTimelineSelect">
+    </timeline>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <view class="time-picker-mask" wx:if="{{showTimePicker}}" bindtap="onCancelTime"></view>
+  <view class="time-picker {{showTimePicker ? 'time-picker-show' : ''}}">
+    <view class="time-picker-header">
+      <text class="time-picker-title">选择时间段</text>
+      <text class="time-picker-close" bindtap="onCancelTime">✕</text>
+    </view>
+    <view class="time-picker-body">
+      <view class="time-picker-row">
+        <text class="time-picker-label">开始时间</text>
+        <picker mode="selector" range="{{startHourList}}" value="{{startHourIndex}}" bindchange="onStartHourChange">
+          <text class="time-picker-value">{{selectedStartTimeStr}}</text>
+        </picker>
+      </view>
+      <view class="time-picker-row">
+        <text class="time-picker-label">结束时间</text>
+        <picker mode="selector" range="{{endHourList}}" value="{{endHourIndex}}" bindchange="onEndHourChange">
+          <text class="time-picker-value">{{selectedEndTimeStr}}</text>
+        </picker>
+      </view>
+      <view class="time-picker-duration">
+        <text class="duration-text">时长: {{durationStr}}</text>
+      </view>
+    </view>
+    <view class="time-picker-footer">
+      <view class="time-picker-btn btn-cancel" bindtap="onCancelTime">取消</view>
+      <view class="time-picker-btn btn-confirm" bindtap="onConfirmTime">确认预约</view>
+    </view>
+  </view>
+</view>

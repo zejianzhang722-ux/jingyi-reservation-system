@@ -1,0 +1,39 @@
+<view class="container">
+  <view class="header">
+    <text class="title">预约列表</text>
+    <view class="search-bar">
+      <input class="search-input" placeholder="搜索用户/房间" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" />
+    </view>
+  </view>
+  <view class="filter-tabs">
+    <view class="tab {{filterStatus === '' ? 'active' : ''}}" bindtap="onFilter" data-status="">全部</view>
+    <view class="tab {{filterStatus === 'pending' ? 'active' : ''}}" bindtap="onFilter" data-status="pending">待审批</view>
+    <view class="tab {{filterStatus === 'approved' ? 'active' : ''}}" bindtap="onFilter" data-status="approved">已通过</view>
+    <view class="tab {{filterStatus === 'rejected' ? 'active' : ''}}" bindtap="onFilter" data-status="rejected">已拒绝</view>
+    <view class="tab {{filterStatus === 'checked_in' ? 'active' : ''}}" bindtap="onFilter" data-status="checked_in">使用中</view>
+    <view class="tab {{filterStatus === 'completed' ? 'active' : ''}}" bindtap="onFilter" data-status="completed">已完成</view>
+  </view>
+  <view class="reservation-list" wx:if="{{list.length > 0}}">
+    <view class="reservation-item" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="onViewDetail">
+      <view class="item-top">
+        <text class="item-user">{{item.userName || item.user_name || '未知'}}</text>
+        <text class="item-status status-{{item.status}}">{{statusMap[item.status] || item.status}}</text>
+      </view>
+      <view class="item-info">
+        <text class="info-row">房间: {{item.roomName || item.room_name || '-'}}</text>
+        <text class="info-row">日期: {{item.date || '-'}}</text>
+        <text class="info-row">时间: {{item.startTime || item.start_time || '-'}} - {{item.endTime || item.end_time || '-'}}</text>
+      </view>
+      <view class="item-actions" wx:if="{{item.status === 'pending' || item.status === 'counselor_pending'}}" catchtap="">
+        <view class="btn-approve" data-id="{{item.id}}" catchtap="onApprove">通过</view>
+        <view class="btn-reject" data-id="{{item.id}}" catchtap="onReject">拒绝</view>
+      </view>
+    </view>
+  </view>
+  <view class="empty" wx:else>
+    <text>暂无预约记录</text>
+  </view>
+  <view class="load-more" wx:if="{{hasMore && list.length > 0}}" bindtap="onLoadMore">
+    <text>加载更多</text>
+  </view>
+</view>

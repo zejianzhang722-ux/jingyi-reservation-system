@@ -1,0 +1,99 @@
+<view class="container page-fade-in">
+  <view class="confirm-card" wx:if="{{room}}">
+    <view class="confirm-section summary-section">
+      <text class="confirm-section-title">预约信息</text>
+      <view class="summary-room">
+        <text class="summary-name">{{room.name}}</text>
+        <text class="summary-time">{{date}} {{timeStr}}</text>
+      </view>
+      <view class="summary-grid">
+        <view class="summary-item">
+          <text class="summary-label">时长</text>
+          <text class="summary-value">{{durationStr}}</text>
+        </view>
+        <view class="summary-item" wx:if="{{seatName}}">
+          <text class="summary-label">座位</text>
+          <text class="summary-value">{{seatName}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="confirm-section">
+      <text class="confirm-section-title">个人信息</text>
+      <view class="confirm-row">
+        <text class="confirm-label">学号</text>
+        <text class="confirm-value">{{userInfo.student_no || userInfo.student_id || '-'}}</text>
+      </view>
+      <view class="confirm-row">
+        <text class="confirm-label">姓名</text>
+        <text class="confirm-value">{{userInfo.real_name || userInfo.name || '-'}}</text>
+      </view>
+      <view class="confirm-input-row">
+        <text class="confirm-label">手机号</text>
+        <input class="confirm-input" placeholder="请输入11位手机号" type="number" maxlength="11" value="{{phone}}" bindinput="onPhoneInput" />
+      </view>
+      <view class="confirm-input-row">
+        <text class="confirm-label">一卡通号</text>
+        <input class="confirm-input" placeholder="请输入6位一卡通号" type="number" maxlength="6" value="{{cardNo}}" bindinput="onCardNoInput" />
+      </view>
+    </view>
+
+    <view class="confirm-section" wx:if="{{room.type === 'discussion' || room.type === 'seminar' || room.type === 'seminar_room' || room.type === 'shared_space'}}">
+      <text class="confirm-section-title">共享空间信息</text>
+      <view class="confirm-input-row">
+        <text class="confirm-label"><text class="required-star">*</text>用途分类</text>
+        <picker mode="selector" range="{{purposeCategories}}" bindchange="onPurposeCategoryChange">
+          <text class="confirm-value {{discussionFields.purposeCategory ? '' : 'placeholder'}}">{{discussionFields.purposeCategory || '请选择'}}</text>
+        </picker>
+      </view>
+      <view class="confirm-input-row">
+        <text class="confirm-label"><text class="required-star">*</text>参与人数</text>
+        <input class="confirm-input" placeholder="请输入人数" type="number" confirm-type="done" maxlength="3" value="{{discussionFields.participantCount}}" bindinput="onParticipantCountInput" data-field="discussionFields" />
+      </view>
+      <view class="confirm-switch-row">
+        <text class="confirm-label">需要多媒体</text>
+        <switch checked="{{discussionFields.hasMultimedia}}" bindchange="onMultimediaChange" color="#0066CC" />
+      </view>
+      <view class="confirm-switch-row">
+        <text class="confirm-label">自带电器</text>
+        <switch checked="{{discussionFields.hasOwnAppliance}}" bindchange="onOwnApplianceChange" color="#0066CC" />
+      </view>
+    </view>
+
+    <view class="confirm-section" wx:if="{{room.type === 'media' || room.type === 'media_room'}}">
+      <text class="confirm-section-title">影音室信息</text>
+      <view class="confirm-input-row">
+        <text class="confirm-label"><text class="required-star">*</text>参与人数</text>
+        <input class="confirm-input" placeholder="请输入人数" type="number" confirm-type="done" maxlength="3" value="{{mediaFields.participantCount}}" bindinput="onParticipantCountInput" data-field="mediaFields" />
+      </view>
+      <view class="confirm-input-row">
+        <text class="confirm-label"><text class="required-star">*</text>用途</text>
+        <input class="confirm-input" placeholder="请输入用途" value="{{mediaFields.purpose}}" bindinput="onMediaPurposeInput" />
+      </view>
+    </view>
+
+    <view class="confirm-section" wx:if="{{room.type === 'competition' || room.type === 'roadshow' || room.type === 'competition_room' || room.type === 'roadshow_space'}}">
+      <text class="confirm-section-title">备赛/路演信息</text>
+      <view class="confirm-input-row">
+        <text class="confirm-label"><text class="required-star">*</text>项目名称</text>
+        <input class="confirm-input" placeholder="请输入项目名称" value="{{competitionFields.competitionName}}" bindinput="onCompetitionNameInput" data-field="competitionFields" />
+      </view>
+      <view class="confirm-input-row">
+        <text class="confirm-label"><text class="required-star">*</text>参与人数</text>
+        <input class="confirm-input" placeholder="请输入人数" type="number" confirm-type="done" maxlength="3" value="{{competitionFields.participantCount}}" bindinput="onParticipantCountInput" data-field="competitionFields" />
+      </view>
+    </view>
+
+    <view class="confirm-agree">
+      <view class="agree-check" bindtap="onAgreeRules">
+        <view class="checkbox {{agreedRules ? 'checkbox-checked' : ''}}"></view>
+        <text class="agree-text">我已阅读并同意</text>
+      </view>
+      <text class="agree-link" bindtap="onViewRules">《管理制度》</text>
+    </view>
+  </view>
+
+  <view class="submit-btn {{submitting ? 'btn-disabled' : 'btn-primary'}}" bindtap="onSubmit">
+    {{submitting ? '提交中...' : '确认预约'}}
+  </view>
+</view>

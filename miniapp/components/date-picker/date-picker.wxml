@@ -1,0 +1,11 @@
+<scroll-view class="date-picker" scroll-x="true" enhanced="true" show-scrollbar="{{false}}">
+  <view class="date-picker-inner">
+    <view class="date-item {{currentIndex === index ? 'date-item-active' : ''}}"
+          wx:for="{{dateList}}" wx:key="date"
+          data-index="{{index}}"
+          bindtap="onDateTap">
+      <text class="date-weekday">{{item.weekday}}</text>
+      <text class="date-display">{{item.display}}</text>
+    </view>
+  </view>
+</scroll-view>

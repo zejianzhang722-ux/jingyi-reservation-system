@@ -1,0 +1,57 @@
+<view class="container">
+  <view class="page-header">
+    <text class="title">信用管理</text>
+    <text class="subtitle">查看违规、限制名单和信用配置摘要</text>
+  </view>
+
+  <view class="tabs">
+    <view class="tab {{activeTab === item.key ? 'active' : ''}}"
+          wx:for="{{tabs}}"
+          wx:key="key"
+          data-key="{{item.key}}"
+          bindtap="onTabTap">{{item.name}}</view>
+  </view>
+
+  <view class="action-strip">
+    <text>需要手动调整信用分时，请进入宿生管理。</text>
+    <text class="link" bindtap="onGoUsers">去调分</text>
+  </view>
+
+  <view wx:if="{{activeTab === 'violations'}}">
+    <view class="list-card" wx:if="{{violations.length > 0}}">
+      <view class="list-item" wx:for="{{violations}}" wx:key="id">
+        <view class="item-main">
+          <text class="item-title">{{item.real_name || item.nickname || item.student_id}}</text>
+          <text class="item-desc">{{item.description || item.type || '违规记录'}}</text>
+          <text class="item-time">{{item.created_at || '-'}}</text>
+        </view>
+        <text class="score danger">{{item.score}}</text>
+      </view>
+    </view>
+    <view class="empty" wx:else>暂无违规记录</view>
+  </view>
+
+  <view wx:if="{{activeTab === 'blacklist'}}">
+    <view class="list-card" wx:if="{{blacklist.length > 0}}">
+      <view class="list-item" wx:for="{{blacklist}}" wx:key="id">
+        <view class="item-main">
+          <text class="item-title">{{item.real_name || item.nickname || item.student_id}}</text>
+          <text class="item-desc">信用分 {{item.credit_score}} · {{item.status}}</text>
+          <text class="item-time">限制至 {{item.restricted_until || '未设置'}}</text>
+        </view>
+        <text class="small-btn" data-id="{{item.id}}" bindtap="onUnban">解除</text>
+      </view>
+    </view>
+    <view class="empty" wx:else>暂无受限或封禁宿生</view>
+  </view>
+
+  <view wx:if="{{activeTab === 'config'}}">
+    <view class="list-card" wx:if="{{configList.length > 0}}">
+      <view class="config-row" wx:for="{{configList}}" wx:key="key">
+        <text class="config-key">{{item.key}}</text>
+        <text class="config-value">{{item.value}}</text>
+      </view>
+    </view>
+    <view class="empty" wx:else>暂无信用配置</view>
+  </view>
+</view>

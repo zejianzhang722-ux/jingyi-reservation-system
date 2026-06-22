@@ -1,0 +1,204 @@
+var networkConfig = require('./network-config')
+
+var config = {
+  baseUrl: '',
+  timeout: 30000
+}
+
+function initBaseUrl() {
+  var customUrl = wx.getStorageSync('customBaseUrl')
+  if (customUrl) {
+    config.baseUrl = networkConfig.normalizeBaseUrl(customUrl)
+    return
+  }
+
+  var runtimeConfig = wx.getStorageSync('networkConfig') || {}
+  try {
+    config.baseUrl = networkConfig.getDefaultBaseUrl(wx.getSystemInfoSync(), runtimeConfig)
+  } catch (e) {
+    config.baseUrl = networkConfig.getDefaultBaseUrl(null, runtimeConfig)
+  }
+}
+
+initBaseUrl()
+
+function setBaseUrl(url) {
+  config.baseUrl = networkConfig.normalizeBaseUrl(url)
+  wx.setStorageSync('customBaseUrl', config.baseUrl)
+}
+
+function getBaseUrl() {
+  return config.baseUrl
+}
+
+function setNetworkConfig(nextConfig) {
+  var current = wx.getStorageSync('networkConfig') || {}
+  var merged = Object.assign({}, current, nextConfig || {})
+  wx.setStorageSync('networkConfig', merged)
+  wx.removeStorageSync('customBaseUrl')
+  initBaseUrl()
+  return config.baseUrl
+}
+
+function testConnection() {
+  return new Promise(function (resolve, reject) {
+    wx.request({
+      url: networkConfig.buildHealthUrl(config.baseUrl),
+      method: 'GET',
+      timeout: 8000,
+      success: function (res) {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res.data || {})
+        } else {
+          reject({ message: '服务器响应异常：' + res.statusCode })
+        }
+      },
+      fail: function () {
+        reject({ message: '无法连接服务器：' + config.baseUrl })
+      }
+    })
+  })
+}
+
+function normalizeErrorMessage(message) {
+  var msg = message || '请求失败'
+  if (msg.indexOf('功能房ID') !== -1 || msg.indexOf('roomId') !== -1 || msg.indexOf('room_id') !== -1) {
+    return '房间信息异常，请返回重新选择功能房'
+  }
+  if (msg.indexOf('认证令牌') !== -1 || msg.indexOf('token') !== -1 || msg.indexOf('Token') !== -1) {
+    return '登录状态已失效，请重新登录'
+  }
+  return msg
+}
+
+function clearAuthAndRedirect() {
+  wx.removeStorageSync('token')
+  wx.removeStorageSync('refreshToken')
+  wx.removeStorageSync('userInfo')
+  wx.redirectTo({ url: '/pages/login/login' })
+}
+
+function refreshAccessToken() {
+  return new Promise(function (resolve, reject) {
+    var token = wx.getStorageSync('token')
+    var refreshToken = wx.getStorageSync('refreshToken')
+    if (!token || !refreshToken) {
+      reject({ message: '登录状态已失效，请重新登录' })
+      return
+    }
+    wx.request({
+      url: config.baseUrl + '/auth/refresh',
+      method: 'POST',
+      data: { refreshToken: refreshToken },
+      header: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      timeout: config.timeout,
+      success: function (res) {
+        if (res.data && res.data.code === 200 && res.data.data && res.data.data.token) {
+          wx.setStorageSync('token', res.data.data.token)
+          if (res.data.data.refreshToken) wx.setStorageSync('refreshToken', res.data.data.refreshToken)
+          resolve(res.data.data)
+        } else {
+          reject({ message: normalizeErrorMessage((res.data && res.data.message) || '登录状态已失效，请重新登录') })
+        }
+      },
+      fail: function () {
+        reject({ message: '登录状态刷新失败，请重新登录' })
+      }
+    })
+  })
+}
+
+function request(options) {
+  return new Promise(function (resolve, reject) {
+    if (!config.baseUrl) {
+      var emptyMsg = '未设置服务器地址，请在网络设置中填写局域网地址或正式域名'
+      if (!options.silent) {
+        wx.showToast({ title: emptyMsg, icon: 'none', duration: 2500 })
+      }
+      reject({ message: emptyMsg })
+      return
+    }
+
+    var token = wx.getStorageSync('token')
+    var header = {
+      'Content-Type': 'application/json'
+    }
+    if (token) {
+      header.Authorization = 'Bearer ' + token
+    }
+    wx.request({
+      url: config.baseUrl + options.url,
+      method: options.method || 'GET',
+      data: options.data || {},
+      header: Object.assign(header, options.header || {}),
+      timeout: config.timeout,
+      success: function (res) {
+        var dataCode = res.data && Number(res.data.code)
+        if (res.statusCode === 401 || dataCode === 401) {
+          if (!options._retried) {
+            refreshAccessToken().then(function () {
+              request(Object.assign({}, options, { _retried: true })).then(resolve).catch(reject)
+            }).catch(function (err) {
+              clearAuthAndRedirect()
+              reject(err)
+            })
+            return
+          }
+          clearAuthAndRedirect()
+          reject({ message: '登录状态已失效，请重新登录' })
+          return
+        }
+        if (res.data && res.data.code === 200) {
+          resolve(res.data.data)
+        } else {
+          var msg = normalizeErrorMessage((res.data && res.data.message) || '请求失败')
+          if (!options.silent) {
+            wx.showToast({ title: msg, icon: 'none', duration: 2000 })
+          }
+          reject({ message: msg, code: res.data ? res.data.code : -1 })
+        }
+      },
+      fail: function () {
+        var msg = '网络连接失败，请检查服务器地址：' + config.baseUrl
+        if (!options.silent) {
+          wx.showToast({ title: msg, icon: 'none', duration: 2500 })
+        }
+        reject({ message: msg })
+      }
+    })
+  })
+}
+
+function get(url, data, options) {
+  return request(Object.assign({ url: url, method: 'GET', data: data }, options || {}))
+}
+
+function post(url, data, options) {
+  return request(Object.assign({ url: url, method: 'POST', data: data }, options || {}))
+}
+
+function put(url, data, options) {
+  return request(Object.assign({ url: url, method: 'PUT', data: data }, options || {}))
+}
+
+function del(url, data, options) {
+  return request(Object.assign({ url: url, method: 'DELETE', data: data }, options || {}))
+}
+
+module.exports = {
+  request: request,
+  get: get,
+  post: post,
+  put: put,
+  del: del,
+  config: config,
+  setBaseUrl: setBaseUrl,
+  getBaseUrl: getBaseUrl,
+  setNetworkConfig: setNetworkConfig,
+  testConnection: testConnection,
+  refreshAccessToken: refreshAccessToken,
+  clearAuthAndRedirect: clearAuthAndRedirect
+}

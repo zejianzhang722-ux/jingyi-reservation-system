@@ -1,0 +1,20 @@
+.container { padding: 20rpx 30rpx; background: #f5f7fa; min-height: 100vh; }
+.header { padding: 20rpx 0; }
+.title { font-size: 36rpx; font-weight: 700; color: #1a1a2e; display: block; margin-bottom: 20rpx; }
+.filter-tabs { display: flex; gap: 12rpx; flex-wrap: wrap; }
+.tab { padding: 8rpx 24rpx; font-size: 24rpx; color: #666; background: #fff; border-radius: 30rpx; border: 1rpx solid #e8e8e8; }
+.tab.active { background: #0077ff; color: #fff; border-color: #0077ff; }
+.reservation-list { margin-top: 20rpx; }
+.reservation-item { background: #fff; border-radius: 16rpx; padding: 24rpx 30rpx; margin-bottom: 16rpx; }
+.item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12rpx; }
+.item-user { font-size: 28rpx; font-weight: 500; color: #333; }
+.item-status { font-size: 22rpx; padding: 4rpx 12rpx; border-radius: 6rpx; }
+.item-status.pending { color: #fa8c16; background: #fff7e6; }
+.item-status.approved { color: #52c41a; background: #f6ffed; }
+.item-status.rejected { color: #ff4d4f; background: #fff1f0; }
+.item-status.cancelled { color: #999; background: #f5f5f5; }
+.info-row { display: block; font-size: 24rpx; color: #666; line-height: 1.8; }
+.item-actions { display: flex; gap: 16rpx; margin-top: 16rpx; justify-content: flex-end; }
+.btn-approve { padding: 10rpx 28rpx; background: #52C41A; color: #fff; font-size: 24rpx; border-radius: 8rpx; }
+.btn-reject { padding: 10rpx 28rpx; background: #FF4D4F; color: #fff; font-size: 24rpx; border-radius: 8rpx; }
+.empty { text-align: center; padding: 100rpx 0; color: #999; font-size: 28rpx; }

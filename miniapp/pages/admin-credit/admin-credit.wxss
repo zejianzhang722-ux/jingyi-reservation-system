@@ -1,0 +1,24 @@
+.container { min-height: 100vh; background: #f5f7fa; padding: 24rpx; box-sizing: border-box; }
+.page-header { padding: 8rpx 4rpx 24rpx; }
+.title { display: block; font-size: 38rpx; font-weight: 800; color: #172033; }
+.subtitle { display: block; margin-top: 8rpx; font-size: 24rpx; color: #7b8794; }
+.tabs { display: flex; gap: 12rpx; margin-bottom: 18rpx; }
+.tab { flex: 1; text-align: center; background: #fff; color: #647084; border-radius: 14rpx; padding: 18rpx 0; font-size: 26rpx; box-shadow: 0 4rpx 14rpx rgba(12, 32, 64, 0.04); }
+.tab.active { background: #0066cc; color: #fff; font-weight: 700; }
+.action-strip { display: flex; justify-content: space-between; gap: 20rpx; align-items: center; background: #edf5ff; color: #52627a; border-radius: 14rpx; padding: 20rpx 22rpx; font-size: 24rpx; margin-bottom: 18rpx; }
+.link { color: #0066cc; font-weight: 700; flex-shrink: 0; }
+.list-card { background: #fff; border-radius: 16rpx; overflow: hidden; box-shadow: 0 6rpx 18rpx rgba(12, 32, 64, 0.05); }
+.list-item { display: flex; justify-content: space-between; align-items: center; padding: 24rpx; border-bottom: 1rpx solid #eef1f5; }
+.list-item:last-child { border-bottom: 0; }
+.item-main { flex: 1; min-width: 0; }
+.item-title { display: block; font-size: 30rpx; font-weight: 700; color: #172033; }
+.item-desc { display: block; margin-top: 8rpx; font-size: 24rpx; color: #647084; }
+.item-time { display: block; margin-top: 6rpx; font-size: 22rpx; color: #99a3b3; }
+.score { font-size: 32rpx; font-weight: 800; margin-left: 20rpx; }
+.danger { color: #d94841; }
+.small-btn { margin-left: 20rpx; padding: 10rpx 18rpx; border-radius: 10rpx; background: #eef7ee; color: #2f8a3b; font-size: 24rpx; }
+.config-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 20rpx; padding: 22rpx 24rpx; border-bottom: 1rpx solid #eef1f5; }
+.config-row:last-child { border-bottom: 0; }
+.config-key { flex: 0 0 260rpx; font-size: 24rpx; color: #647084; }
+.config-value { flex: 1; text-align: right; font-size: 24rpx; color: #172033; word-break: break-all; }
+.empty { text-align: center; color: #99a3b3; font-size: 26rpx; padding: 90rpx 0; }

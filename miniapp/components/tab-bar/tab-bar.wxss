@@ -1,0 +1,137 @@
+.tab-bar {
+  display: flex;
+  flex-direction: row;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100rpx;
+  background-color: #FFFFFF;
+  border-top: 1rpx solid #E8E8E8;
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 999;
+}
+
+.tab-bar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8rpx 0;
+}
+
+.tab-bar-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-bottom: 4rpx;
+  position: relative;
+}
+
+.tab-bar-icon-home::before {
+  content: '';
+  position: absolute;
+  left: 6rpx;
+  top: 13rpx;
+  width: 24rpx;
+  height: 18rpx;
+  border: 4rpx solid #999999;
+  border-top: 0;
+  border-radius: 2rpx;
+}
+
+.tab-bar-icon-home::after {
+  content: '';
+  position: absolute;
+  left: 7rpx;
+  top: 3rpx;
+  width: 22rpx;
+  height: 22rpx;
+  border-left: 4rpx solid #999999;
+  border-top: 4rpx solid #999999;
+  transform: rotate(45deg);
+}
+
+.tab-bar-icon-calendar {
+  border: 4rpx solid #999999;
+  border-radius: 5rpx;
+}
+
+.tab-bar-icon-calendar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10rpx;
+  height: 4rpx;
+  background: #999999;
+}
+
+.tab-bar-icon-message {
+  border: 4rpx solid #999999;
+  border-radius: 18rpx;
+}
+
+.tab-bar-icon-message::after {
+  content: '';
+  position: absolute;
+  left: 7rpx;
+  bottom: -8rpx;
+  width: 12rpx;
+  height: 12rpx;
+  background: #FFFFFF;
+  border-left: 4rpx solid #999999;
+  border-bottom: 4rpx solid #999999;
+}
+
+.tab-bar-icon-user::before {
+  content: '';
+  position: absolute;
+  left: 10rpx;
+  top: 2rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #999999;
+}
+
+.tab-bar-icon-user::after {
+  content: '';
+  position: absolute;
+  left: 5rpx;
+  bottom: 2rpx;
+  width: 26rpx;
+  height: 15rpx;
+  border-radius: 15rpx 15rpx 4rpx 4rpx;
+  background: #999999;
+}
+
+.tab-bar-item-active .tab-bar-icon-home::before,
+.tab-bar-item-active .tab-bar-icon-calendar,
+.tab-bar-item-active .tab-bar-icon-message {
+  border-color: #0066CC;
+}
+
+.tab-bar-item-active .tab-bar-icon-home::after {
+  border-color: #0066CC;
+}
+
+.tab-bar-item-active .tab-bar-icon-calendar::before,
+.tab-bar-item-active .tab-bar-icon-user::before,
+.tab-bar-item-active .tab-bar-icon-user::after {
+  background: #0066CC;
+}
+
+.tab-bar-item-active .tab-bar-icon-message::after {
+  border-color: #0066CC;
+}
+
+.tab-bar-text {
+  font-size: 20rpx;
+  color: #999999;
+}
+
+.tab-bar-item-active .tab-bar-text {
+  color: #0066CC;
+  font-weight: bold;
+}

@@ -1,0 +1,10 @@
+<view class="admin-nav">
+  <view class="admin-nav-item {{selected === item.key ? 'active' : ''}}"
+        wx:for="{{items}}"
+        wx:key="key"
+        data-item="{{item}}"
+        bindtap="onTap">
+    <text class="admin-nav-icon">{{item.icon}}</text>
+    <text class="admin-nav-text">{{item.text}}</text>
+  </view>
+</view>

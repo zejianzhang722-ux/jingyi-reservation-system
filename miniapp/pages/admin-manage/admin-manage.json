@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "管理中心",
+  "usingComponents": {
+    "admin-nav": "/components/admin-nav/admin-nav"
+  }
+}

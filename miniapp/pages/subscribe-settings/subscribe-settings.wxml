@@ -1,0 +1,29 @@
+<view class="container page-fade-in">
+  <view class="subscribe-header">
+    <text class="subscribe-title">订阅消息管理</text>
+    <text class="subscribe-desc">预约提醒、审核结果和信用分变动会优先通过“消息”页展示；可用时将在这里开启提醒授权。</text>
+  </view>
+
+  <view class="status-card">
+    <view class="status-row">
+      <text class="status-label">模板配置</text>
+      <text class="status-value {{configuredCount > 0 ? 'status-ok' : 'status-warn'}}">{{configuredCount > 0 ? '已配置' + configuredCount + '项' : '未配置'}}</text>
+    </view>
+    <text class="status-note">{{configuredCount > 0 ? '可以按需开启预约提醒。' : '当前暂不支持订阅提醒，可在消息页查看通知。'}}</text>
+  </view>
+
+  <view class="template-list">
+    <view class="template-item" wx:for="{{templateStatus}}" wx:key="key">
+      <view class="template-main">
+        <text class="template-name">{{item.name}}</text>
+        <text class="template-desc">{{item.desc}}</text>
+      </view>
+      <text class="template-badge {{item.configured ? 'badge-ok' : 'badge-warn'}}">{{item.configured ? '已配置' : '待配置'}}</text>
+    </view>
+  </view>
+
+  <view class="subscribe-actions">
+    <view class="action-btn btn-primary" bindtap="onRequestSubscribe">更新订阅授权</view>
+    <view class="action-btn btn-outline" bindtap="onViewMessages">查看消息页</view>
+  </view>
+</view>

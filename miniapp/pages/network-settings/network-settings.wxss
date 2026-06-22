@@ -1,0 +1,137 @@
+.network-hero {
+  padding: 40rpx 32rpx 36rpx;
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  border-radius: 0 0 28rpx 28rpx;
+  color: #fff;
+}
+
+.network-title {
+  display: block;
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.network-subtitle {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: rgba(255,255,255,0.76);
+  line-height: 1.5;
+}
+
+.network-card {
+  margin: 20rpx 24rpx;
+  padding: 28rpx;
+  background: var(--bg-card);
+  border: 1rpx solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.card-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16rpx;
+}
+
+.current-url {
+  display: block;
+  padding: 18rpx 20rpx;
+  background: #F7F9FC;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 24rpx;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 18rpx;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: var(--text-hint);
+}
+
+.status-row.success .status-dot { background: var(--success); }
+.status-row.fail .status-dot { background: var(--danger); }
+.status-row.testing .status-dot { background: var(--warning); }
+
+.status-text {
+  font-size: 24rpx;
+  line-height: 1.4;
+}
+
+.field-hint {
+  display: block;
+  margin-bottom: 18rpx;
+  font-size: 24rpx;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
+  border-top: 1rpx solid var(--border-color);
+}
+
+.input-label {
+  width: 140rpx;
+  font-size: 26rpx;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.network-input,
+.full-url-input {
+  flex: 1;
+  font-size: 26rpx;
+  color: var(--text-primary);
+}
+
+.full-url-input {
+  min-height: 84rpx;
+  padding: 0 20rpx;
+  background: #F7F9FC;
+  border-radius: var(--radius-md);
+}
+
+.button-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.mini-btn {
+  flex: 1;
+  padding: 20rpx 12rpx;
+  border-radius: var(--radius-md);
+  font-size: 26rpx;
+  text-align: center;
+}
+
+.mini-btn.primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.mini-btn.accent {
+  background: var(--accent);
+  color: #fff;
+}
+
+.mini-btn.ghost {
+  color: var(--primary);
+  background: var(--primary-light);
+}

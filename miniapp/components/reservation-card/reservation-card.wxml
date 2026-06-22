@@ -1,0 +1,36 @@
+<view class="reservation-card" bindtap="onTap">
+  <view class="reservation-card-header">
+    <view class="reservation-card-room">
+      <text class="reservation-card-room-name">{{reservation.roomName}}</text>
+      <text class="reservation-card-room-number">{{reservation.roomNumber}}</text>
+    </view>
+    <text class="status-tag {{statusClass}}">{{statusText}}</text>
+  </view>
+
+  <view class="reservation-card-body">
+    <view class="reservation-card-info-row">
+      <text class="reservation-card-label">日期</text>
+      <text class="reservation-card-value">{{reservation.date}}</text>
+    </view>
+    <view class="reservation-card-info-row">
+      <text class="reservation-card-label">时间</text>
+      <text class="reservation-card-value">{{reservation.startTime}} - {{reservation.endTime}}</text>
+    </view>
+    <view class="reservation-card-info-row" wx:if="{{reservation.seatName}}">
+      <text class="reservation-card-label">座位</text>
+      <text class="reservation-card-value">{{reservation.seatName}}</text>
+    </view>
+  </view>
+
+  <view class="reservation-card-actions" wx:if="{{showActions && (canCancel || canCheckIn)}}">
+    <view class="reservation-card-action btn-cancel" wx:if="{{canCancel}}" catchtap="onCancel">
+      取消预约
+    </view>
+    <view class="reservation-card-action btn-checkin" wx:if="{{canCheckIn}}" catchtap="onCheckIn">
+      签到
+    </view>
+    <view class="reservation-card-action btn-qrcode" wx:if="{{reservation.status === 'approved' || reservation.status === 'using'}}" catchtap="onQRCode">
+      凭证码
+    </view>
+  </view>
+</view>

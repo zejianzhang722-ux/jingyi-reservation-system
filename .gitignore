@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+build/
+coverage/
+
+# Runtime files
+server/uploads/
+server/tmp-devtools/
+uploads/
+*.log
+logs/
+*.pid
+
+# Bundled local runtime
+nodejs/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+config.toml
+
+# WeChat DevTools local-only settings
+miniapp/project.private.config.json
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Temporary files
+*.tmp
+*.temp
+~$*

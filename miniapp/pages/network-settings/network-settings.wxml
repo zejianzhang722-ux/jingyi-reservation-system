@@ -1,0 +1,42 @@
+<view class="container page-fade-in">
+  <view class="network-hero">
+    <text class="network-title">网络设置</text>
+    <text class="network-subtitle">检查预约服务连接状态</text>
+  </view>
+
+  <view class="network-card">
+    <text class="card-title">连接状态</text>
+    <text class="current-url">{{baseUrl ? '已设置服务地址' : '未设置服务地址'}}</text>
+    <view class="status-row {{testStatus}}">
+      <view class="status-dot"></view>
+      <text class="status-text">{{testMessage}}</text>
+    </view>
+  </view>
+
+  <view class="network-card">
+    <text class="card-title">局域网调试</text>
+    <text class="field-hint">手机真机调试时，填写电脑所在局域网 IP，例如 192.168.1.8。</text>
+    <view class="input-row">
+      <text class="input-label">电脑 IP</text>
+      <input class="network-input" placeholder="192.168.1.8" value="{{lanHost}}" bindinput="onLanHostInput" />
+    </view>
+    <view class="input-row">
+      <text class="input-label">端口</text>
+      <input class="network-input" placeholder="3000" type="number" value="{{port}}" bindinput="onPortInput" />
+    </view>
+    <view class="button-row">
+      <view class="mini-btn primary" bindtap="onSaveLan">保存局域网地址</view>
+      <view class="mini-btn ghost" bindtap="onReset">恢复默认</view>
+    </view>
+  </view>
+
+  <view class="network-card">
+    <text class="card-title">完整接口地址</text>
+    <text class="field-hint">已有正式域名后，可填写 https://域名/api/v1；系统会自动补齐 /api/v1。</text>
+    <input class="full-url-input" placeholder="https://example.edu.cn/api/v1" value="{{customBaseUrl}}" bindinput="onCustomUrlInput" />
+    <view class="button-row">
+      <view class="mini-btn primary" bindtap="onSaveCustom">保存完整地址</view>
+      <view class="mini-btn accent" bindtap="onTest">测试连接</view>
+    </view>
+  </view>
+</view>

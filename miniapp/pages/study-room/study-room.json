@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "自习室预约",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "date-picker": "/components/date-picker/date-picker",
+    "timeline": "/components/timeline/timeline"
+  }
+}

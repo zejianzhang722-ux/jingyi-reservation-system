@@ -1,0 +1,72 @@
+<view class="container">
+  <view class="detail-card" wx:if="{{reservation && !loading}}">
+    <view class="detail-status-bar">
+      <text class="status-tag {{statusClass}}">{{statusText}}</text>
+    </view>
+
+    <view class="detail-section">
+      <view class="detail-row">
+        <text class="detail-label">功能房</text>
+        <text class="detail-value">{{reservation.roomName}}<text wx:if="{{reservation.seatName}}">（{{reservation.seatName}}）</text></text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">日期</text>
+        <text class="detail-value">{{reservation.date}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">时间段</text>
+        <text class="detail-value">{{reservation.startTime}} - {{reservation.endTime}}</text>
+      </view>
+      <view class="detail-row" wx:if="{{reservation.seatName}}">
+        <text class="detail-label">座位</text>
+        <text class="detail-value">{{reservation.seatName}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">时长</text>
+        <text class="detail-value">{{reservation.duration}}小时</text>
+      </view>
+    </view>
+
+    <view class="detail-section">
+      <view class="detail-row">
+        <text class="detail-label">预约人</text>
+        <text class="detail-value">{{reservation.userName}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">学号</text>
+        <text class="detail-value">{{reservation.studentId}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">手机号</text>
+        <text class="detail-value">{{reservation.phone}}</text>
+      </view>
+      <view class="detail-row" wx:if="{{reservation.purpose || reservation.purposeCategory}}">
+        <text class="detail-label">用途</text>
+        <text class="detail-value">{{reservation.purposeCategory || reservation.purpose}}</text>
+      </view>
+      <view class="detail-row" wx:if="{{reservation.participantCount}}">
+        <text class="detail-label">参与人数</text>
+        <text class="detail-value">{{reservation.participantCount}}人</text>
+      </view>
+    </view>
+
+    <view class="qrcode-section" wx:if="{{reservation.status === 'approved' || reservation.status === 'using'}}">
+      <view class="qrcode-placeholder" bindtap="onViewQRCode">
+        <text class="qrcode-icon">▦</text>
+        <text class="qrcode-text">查看签到凭证码</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="detail-actions" wx:if="{{reservation && !loading}}">
+    <view class="action-btn btn-danger" wx:if="{{canCancel}}" bindtap="onCancel">取消预约</view>
+    <view class="action-btn btn-primary" wx:if="{{canCheckIn}}" bindtap="onCheckIn">签到</view>
+    <view class="action-btn btn-outline" wx:if="{{reservation.status === 'approved' || reservation.status === 'using'}}" bindtap="onViewQRCode">查看凭证码</view>
+    <view class="action-btn btn-secondary" bindtap="onGoMyReservations">我的预约</view>
+    <view class="action-btn btn-secondary" bindtap="onGoHome">返回首页</view>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <text class="loading-text">加载中...</text>
+  </view>
+</view>

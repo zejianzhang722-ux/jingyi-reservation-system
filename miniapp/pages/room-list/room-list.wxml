@@ -1,0 +1,56 @@
+<view class="container page-fade-in">
+  <view class="offline-tip" wx:if="{{isOffline}}">
+    <view class="offline-dot"></view>
+    <text class="offline-text">当前显示本地数据，连接服务器后会自动刷新。</text>
+  </view>
+
+  <view class="room-list" wx:if="{{!loading}}">
+    <view class="room-item" wx:for="{{rooms}}" wx:key="id"
+          data-id="{{item.id}}" bindtap="onRoomTap">
+      <view class="room-item-status-bar" style="background-color:{{item.status === 'open' || item.status === 'active' ? '#52C41A' : '#FF4D4F'}}"></view>
+      <view class="room-item-content">
+        <view class="room-item-header">
+          <view class="room-type-dot" style="background-color:{{item.typeColor || '#1890FF'}}"></view>
+          <view class="room-item-info">
+            <text class="room-item-name">{{item.name}}</text>
+            <text class="room-item-location">{{item.location || item.room_number || ''}}</text>
+          </view>
+          <view class="room-item-status-tag {{item.status === 'open' || item.status === 'active' ? 'status-open' : 'status-closed'}}">
+            {{item.statusText}}
+          </view>
+        </view>
+        <view class="room-item-details">
+          <view class="room-item-detail">
+            <text class="detail-label">容量</text>
+            <text class="detail-value">{{item.capacityText}}</text>
+          </view>
+          <view class="room-item-detail">
+            <text class="detail-label">时间</text>
+            <text class="detail-value">{{item.openTimeText}}</text>
+          </view>
+          <view class="room-item-detail" wx:if="{{item.max_duration}}">
+            <text class="detail-label">最长</text>
+            <text class="detail-value">{{item.max_duration}}分钟</text>
+          </view>
+        </view>
+        <view class="room-item-facilities" wx:if="{{item.facilityList && item.facilityList.length > 0}}">
+          <text class="facility-tag" wx:for="{{item.facilityList}}" wx:for-item="f" wx:key="*this">{{f}}</text>
+        </view>
+        <view class="room-item-audit" wx:if="{{item.need_counselor_audit || item.need_counselor}}">
+          <text class="audit-tag">需辅导员审核</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:if="{{!loading && rooms.length === 0}}">
+    <view class="empty-icon-svg"></view>
+    <text class="empty-text">暂无功能房</text>
+    <text class="empty-hint">请尝试其他搜索条件</text>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">正在加载...</text>
+  </view>
+</view>

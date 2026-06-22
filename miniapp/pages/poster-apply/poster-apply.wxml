@@ -1,0 +1,70 @@
+<view class="container">
+  <view class="form-card">
+    <view class="form-section">
+      <text class="form-section-title">海报信息</text>
+
+      <view class="form-item">
+        <text class="form-label">标题</text>
+        <input class="form-input" placeholder="请输入海报标题" value="{{form.title}}" bindinput="onTitleInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">内容</text>
+        <textarea class="form-textarea" placeholder="请输入海报内容" value="{{form.content}}" bindinput="onContentInput" maxlength="500" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">组织</text>
+        <input class="form-input" placeholder="请输入组织名称" value="{{form.organization}}" bindinput="onOrganizationInput" />
+      </view>
+    </view>
+
+    <view class="form-section">
+      <text class="form-section-title">联系信息</text>
+
+      <view class="form-item">
+        <text class="form-label">联系人</text>
+        <input class="form-input" placeholder="请输入联系人" value="{{form.contactPerson}}" bindinput="onContactPersonInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">联系电话</text>
+        <input class="form-input" placeholder="请输入联系电话" type="number" value="{{form.contactPhone}}" bindinput="onContactPhoneInput" />
+      </view>
+    </view>
+
+    <view class="form-section">
+      <text class="form-section-title">展示时间</text>
+
+      <view class="form-item">
+        <text class="form-label">开始日期</text>
+        <picker mode="date" value="{{form.startDate}}" bindchange="onStartDateChange">
+          <text class="form-value {{form.startDate ? '' : 'placeholder'}}">{{form.startDate || '请选择'}}</text>
+        </picker>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">结束日期</text>
+        <picker mode="date" value="{{form.endDate}}" bindchange="onEndDateChange">
+          <text class="form-value {{form.endDate ? '' : 'placeholder'}}">{{form.endDate || '请选择'}}</text>
+        </picker>
+      </view>
+    </view>
+
+    <view class="form-section">
+      <text class="form-section-title">海报预览图</text>
+
+      <view class="image-upload" bindtap="onChooseImage">
+        <image class="upload-preview" wx:if="{{form.posterImage}}" src="{{form.posterImage}}" mode="aspectFill"></image>
+        <view class="upload-placeholder" wx:if="{{!form.posterImage}}">
+          <text class="upload-icon">+</text>
+          <text class="upload-text">上传海报</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="submit-btn {{submitting ? 'btn-disabled' : 'btn-primary'}}" bindtap="{{submitting ? '' : 'onSubmit'}}">
+    {{submitting ? '提交中...' : '提交申请'}}
+  </view>
+</view>

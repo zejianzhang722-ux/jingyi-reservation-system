@@ -1,0 +1,54 @@
+.rules-card {
+  background-color: #FFFFFF;
+  margin: 24rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.rules-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 24rpx;
+  background-color: #FAFAFA;
+  border-bottom: 1rpx solid #F0F0F0;
+  gap: 12rpx;
+}
+
+.rules-type-icon {
+  width: 44rpx;
+  height: 44rpx;
+  border: 5rpx solid #1677D2;
+  border-left-width: 12rpx;
+  border-radius: 6rpx;
+  flex-shrink: 0;
+}
+
+.rules-type-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.rules-content {
+  padding: 32rpx 24rpx;
+}
+
+.rules-text {
+  font-size: 28rpx;
+  color: #666666;
+  line-height: 2;
+  white-space: pre-wrap;
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 120rpx 0;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #999999;
+}

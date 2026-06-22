@@ -1,0 +1,42 @@
+<view class="container">
+  <view class="admin-header">
+    <text class="admin-title">管理控制台</text>
+    <text class="admin-role">{{roleName}}</text>
+  </view>
+  <view class="stats-grid">
+    <view class="stat-card">
+      <text class="stat-value">{{pendingCount}}</text>
+      <text class="stat-label">待审批</text>
+    </view>
+    <view class="stat-card">
+      <text class="stat-value">{{todayReservations}}</text>
+      <text class="stat-label">今日预约</text>
+    </view>
+    <view class="stat-card">
+      <text class="stat-value">{{feedbackCount}}</text>
+      <text class="stat-label">待处理反馈</text>
+    </view>
+    <view class="stat-card">
+      <text class="stat-value">{{activeRooms}}</text>
+      <text class="stat-label">开放功能房</text>
+    </view>
+  </view>
+  <view class="section-title">待审批预约</view>
+  <view class="pending-list" wx:if="{{pendingList.length > 0}}">
+    <view class="pending-item" wx:for="{{pendingList}}" wx:key="id">
+      <view class="pending-info">
+        <text class="pending-name">{{item.userName || item.user_name || '未知用户'}}</text>
+        <text class="pending-room">{{item.roomName || item.room_name || '未知房间'}}</text>
+        <text class="pending-time">{{item.date}} {{item.start_time}}-{{item.end_time}}</text>
+      </view>
+      <view class="pending-actions">
+        <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove">通过</view>
+        <view class="btn-reject" data-id="{{item.id}}" bindtap="onReject">拒绝</view>
+      </view>
+    </view>
+  </view>
+  <view class="empty-tip" wx:else>
+    <text>暂无待审批预约</text>
+  </view>
+</view>
+<admin-nav selected="home"></admin-nav>

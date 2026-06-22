@@ -1,0 +1,92 @@
+<view class="container">
+  <view class="create-form" wx:if="{{mode === 'create'}}">
+    <view class="form-card">
+      <view class="form-section-title">发起组团</view>
+
+      <view class="form-item">
+        <text class="form-label">标题</text>
+        <input class="form-input" placeholder="请输入组团标题" value="{{form.title}}" bindinput="onTitleInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">日期</text>
+        <picker mode="date" value="{{form.date}}" bindchange="onDateChange">
+          <text class="form-value {{form.date ? '' : 'placeholder'}}">{{form.date || '请选择'}}</text>
+        </picker>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">开始时间</text>
+        <picker mode="time" value="{{form.startHour}}" bindchange="onStartHourChange">
+          <text class="form-value {{form.startHour ? '' : 'placeholder'}}">{{form.startHour || '请选择'}}</text>
+        </picker>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">结束时间</text>
+        <picker mode="time" value="{{form.endHour}}" bindchange="onEndHourChange">
+          <text class="form-value {{form.endHour ? '' : 'placeholder'}}">{{form.endHour || '请选择'}}</text>
+        </picker>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">人数上限</text>
+        <input class="form-input" placeholder="请输入人数" type="number" value="{{form.maxMembers}}" bindinput="onMaxMembersChange" />
+      </view>
+
+      <view class="form-item-vertical">
+        <text class="form-label">描述</text>
+        <textarea class="form-textarea" placeholder="请输入组团描述" value="{{form.description}}" bindinput="onDescriptionInput" maxlength="200" />
+      </view>
+    </view>
+
+    <view class="submit-btn btn-primary" bindtap="onCreateGroup">创建组团</view>
+  </view>
+
+  <view class="group-detail" wx:if="{{mode === 'detail' || mode === 'join'}}">
+    <view class="group-card" wx:if="{{group}}">
+      <view class="group-header">
+        <text class="group-title">{{group.title}}</text>
+        <text class="group-status">{{group.status === 'open' ? '招募中' : '已满'}}</text>
+      </view>
+
+      <view class="group-info">
+        <view class="group-info-row">
+          <text class="info-label">日期</text>
+          <text class="info-value">{{group.date}}</text>
+        </view>
+        <view class="group-info-row">
+          <text class="info-label">时间</text>
+          <text class="info-value">{{group.startHour || group.start_hour}} - {{group.endHour || group.end_hour}}</text>
+        </view>
+        <view class="group-info-row">
+          <text class="info-label">人数</text>
+          <text class="info-value">{{members.length}}/{{group.maxMembers}}</text>
+        </view>
+        <view class="group-info-row" wx:if="{{group.description}}">
+          <text class="info-label">描述</text>
+          <text class="info-value">{{group.description}}</text>
+        </view>
+      </view>
+
+      <view class="members-section">
+        <text class="members-title">成员列表</text>
+        <view class="member-item" wx:for="{{members}}" wx:key="id">
+          <image class="member-avatar" src="{{item.avatarUrl || item.avatar_url || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+          <text class="member-name">{{item.name}}</text>
+          <text class="member-tag" wx:if="{{item.isCreator || item.is_creator}}">发起人</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="group-actions">
+      <view class="action-btn btn-primary" wx:if="{{mode === 'join' && group && group.status === 'open'}}" bindtap="onJoinGroup">加入组团</view>
+      <button class="action-btn btn-outline share-btn" wx:if="{{mode === 'detail'}}" open-type="share">邀请成员</button>
+      <view class="action-btn btn-danger" wx:if="{{mode === 'detail'}}" bindtap="onLeaveGroup">退出组团</view>
+    </view>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <text class="loading-text">加载中...</text>
+  </view>
+</view>

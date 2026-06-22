@@ -1,0 +1,23 @@
+<view class="room-card" bindtap="onTap">
+  <view class="room-card-status-bar" style="background-color:{{statusColor}}"></view>
+  <view class="room-card-content">
+    <view class="room-card-header">
+      <view class="room-card-icon room-card-icon-{{room.iconKey || 'room'}}">
+        <view class="room-card-symbol room-card-symbol-{{room.iconKey || 'room'}}"></view>
+      </view>
+      <view class="room-card-info">
+        <text class="room-card-name">{{room.name}}</text>
+        <text class="room-card-number">{{room.roomNumber || room.room_number}}</text>
+      </view>
+    </view>
+    <view class="room-card-footer">
+      <view class="room-card-rate">
+        <text class="room-card-rate-label">空闲率</text>
+        <text class="room-card-rate-value" style="color:{{statusColor}}">{{freeRate}}</text>
+      </view>
+      <view class="room-card-status">
+        <text class="room-card-status-text" style="color:{{statusColor}}">{{statusText}}</text>
+      </view>
+    </view>
+  </view>
+</view>

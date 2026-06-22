@@ -1,0 +1,30 @@
+<view class="container">
+  <view class="profile-header">
+    <view class="avatar-wrap">
+      <view class="avatar-icon">{{avatarInitial}}</view>
+    </view>
+    <view class="profile-info">
+      <text class="profile-name">{{adminInfo.name || adminInfo.realName || adminInfo.real_name || adminInfo.username || '管理员'}}</text>
+      <text class="profile-role">{{roleMap[adminInfo.role] || adminInfo.role || '管理员'}}</text>
+    </view>
+  </view>
+
+  <view class="notice-card">
+    <text class="notice-title">管理员工作区</text>
+    <text class="notice-desc">个人设置在这里维护，业务处理从“管理”进入。</text>
+  </view>
+
+  <view class="menu-list">
+    <view class="menu-item" wx:for="{{menuList}}" wx:key="key" data-key="{{item.key}}" bindtap="onMenuTap">
+      <view class="menu-icon menu-icon-{{item.tone}}">
+        <view class="admin-profile-symbol admin-profile-symbol-{{item.icon}}"></view>
+      </view>
+      <view class="menu-info">
+        <text class="menu-name">{{item.name}}</text>
+        <text class="menu-desc">{{item.desc}}</text>
+      </view>
+      <view class="menu-arrow"></view>
+    </view>
+  </view>
+</view>
+<admin-nav selected="profile"></admin-nav>

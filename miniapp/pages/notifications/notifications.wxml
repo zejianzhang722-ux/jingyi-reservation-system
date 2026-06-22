@@ -1,0 +1,44 @@
+<view class="container">
+  <scroll-view class="category-scroll" scroll-x="true" enhanced="true" show-scrollbar="{{false}}">
+    <view class="categories">
+      <view class="category-item {{currentCategory === item.key ? 'category-active' : ''}}"
+            wx:for="{{categories}}" wx:key="key"
+            data-key="{{item.key}}" bindtap="onCategoryChange">
+        <text class="category-name">{{item.name}}</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="notification-header" wx:if="{{unreadCount > 0}}">
+    <text class="unread-text">{{unreadCount}}条未读</text>
+    <text class="mark-read-btn" bindtap="onMarkAllRead">全部已读</text>
+  </view>
+
+  <view class="notification-list" wx:if="{{!loading}}">
+    <view class="notification-item {{(item.isRead || item.is_read) ? '' : 'notification-unread'}}"
+          wx:for="{{notifications}}" wx:key="id"
+          data-id="{{item.id}}" bindtap="onNotificationTap">
+      <view class="notification-icon-wrap notification-icon-type-{{item.category}}">
+        <view class="notification-icon-svg"></view>
+        <view class="unread-dot" wx:if="{{!(item.isRead || item.is_read)}}"></view>
+      </view>
+      <view class="notification-content">
+        <view class="notification-title-row">
+          <text class="notification-title">{{item.title}}</text>
+          <text class="notification-time">{{item.timeAgo || item.createdAt || item.created_at}}</text>
+        </view>
+        <text class="notification-body">{{item.content}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:if="{{!loading && notifications.length === 0}}">
+    <view class="empty-icon-svg"></view>
+    <text class="empty-text">暂无消息</text>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+</view>

@@ -1,0 +1,21 @@
+{
+  "name": "jingyi-reservation-system",
+  "version": "1.0.0",
+  "description": "敬一书院功能房预约管理系统",
+  "private": true,
+  "scripts": {
+    "server": "cd server && npm run dev",
+    "admin": "cd admin && npm run dev",
+    "check:network": "node scripts/network-config-check.js",
+    "check:test-data": "node scripts/test-data-consistency-check.js",
+    "check:student-loop": "node scripts/student-closed-loop-check.js",
+    "check:mobile": "node scripts/mobile-regression-check.js",
+    "check:admin-miniapp": "node scripts/admin-miniapp-regression-check.js",
+    "check:miniapp-ui": "node scripts/miniapp-ui-polish-check.js",
+    "check:request-refresh": "node scripts/request-refresh-check.js",
+    "install:all": "cd server && npm install && cd ../admin && npm install",
+    "db:init": "mysql -u root -p < server/sql/schema.sql && mysql -u root -p < server/sql/seed.sql",
+    "db:schema": "mysql -u root -p < server/sql/schema.sql",
+    "db:seed": "mysql -u root -p < server/sql/seed.sql"
+  }
+}

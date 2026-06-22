@@ -1,0 +1,43 @@
+<view class="container">
+  <view class="selected-rooms">
+    <view class="selected-room" wx:for="{{selectedRooms}}" wx:key="id">
+      <text class="selected-room-name">{{item.name}}</text>
+      <text class="selected-room-remove" data-id="{{item.id}}" bindtap="onRemoveRoom">✕</text>
+    </view>
+    <view class="add-room-btn" wx:if="{{selectedRooms.length < 3}}" bindtap="onAddRoom">
+      <text class="add-room-text">+ 添加</text>
+    </view>
+  </view>
+
+  <view class="compare-table" wx:if="{{compareResult.length > 0}}">
+    <view class="compare-row compare-header">
+      <text class="compare-label">对比项</text>
+      <text class="compare-value" wx:for="{{selectedRooms}}" wx:key="id">{{item.name}}</text>
+    </view>
+    <view class="compare-row" wx:for="{{compareResult}}" wx:key="label">
+      <text class="compare-label">{{item.label}}</text>
+      <text class="compare-value" wx:for="{{item.values}}" wx:for-item="val" wx:key="*this">{{val}}</text>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:if="{{selectedRooms.length === 0}}">
+    <view class="empty-icon"></view>
+    <text class="empty-text">请添加功能房进行对比</text>
+  </view>
+
+  <view class="picker-mask" wx:if="{{showPicker}}" bindtap="onClosePicker"></view>
+  <view class="picker-panel {{showPicker ? 'picker-show' : ''}}">
+    <view class="picker-header">
+      <text class="picker-title">选择功能房</text>
+      <text class="picker-close" bindtap="onClosePicker">✕</text>
+    </view>
+    <scroll-view class="picker-list" scroll-y="true">
+      <view class="picker-item" wx:for="{{allRooms}}" wx:key="id"
+            data-index="{{index}}" bindtap="onPickerSelect">
+        <view class="picker-item-icon picker-item-icon-{{item.iconKey || 'room'}}"></view>
+        <text class="picker-item-name">{{item.name}}</text>
+        <text class="picker-item-number">{{item.roomNumber || item.room_number}}</text>
+      </view>
+    </scroll-view>
+  </view>
+</view>

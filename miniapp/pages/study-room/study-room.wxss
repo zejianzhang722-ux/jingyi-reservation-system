@@ -1,0 +1,180 @@
+.room-header {
+  background-color: #FFFFFF;
+  padding: 24rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.room-header-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.room-header-name {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 8rpx;
+}
+
+.room-header-stats {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.stat-item {
+  font-size: 26rpx;
+  color: #999999;
+}
+
+.stat-free {
+  color: #52C41A;
+  font-weight: bold;
+}
+
+.stat-divider {
+  font-size: 24rpx;
+  color: #D9D9D9;
+}
+
+.timeline-section {
+  padding: 16rpx 24rpx;
+}
+
+.time-picker-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.time-picker {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #FFFFFF;
+  border-radius: 24rpx 24rpx 0 0;
+  z-index: 101;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.time-picker-show {
+  transform: translateY(0);
+}
+
+.time-picker-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 32rpx 32rpx 16rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.time-picker-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.time-picker-close {
+  font-size: 36rpx;
+  color: #999999;
+  padding: 8rpx;
+}
+
+.time-picker-body {
+  padding: 24rpx 32rpx;
+}
+
+.time-picker-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #F8F8F8;
+}
+
+.time-picker-label {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.time-picker-value {
+  font-size: 30rpx;
+  color: #0066CC;
+  font-weight: bold;
+}
+
+.time-picker-duration {
+  padding: 20rpx 0;
+  text-align: center;
+}
+
+.duration-text {
+  font-size: 28rpx;
+  color: #FA8C16;
+}
+
+.time-picker-footer {
+  display: flex;
+  flex-direction: row;
+  padding: 24rpx 32rpx;
+  gap: 16rpx;
+}
+
+.time-picker-btn {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx;
+  border-radius: 12rpx;
+  font-size: 30rpx;
+}
+
+.btn-cancel {
+  background-color: #F5F5F5;
+  color: #666666;
+}
+
+.btn-confirm {
+  background-color: #0066CC;
+  color: #FFFFFF;
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 120rpx 0;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #999999;
+}
+
+.rules-modal{position:fixed;top:0;left:0;right:0;bottom:0;z-index:1000;display:flex;align-items:center;justify-content:center}
+.rules-modal-mask{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5)}
+.rules-modal-content{position:relative;width:85%;max-height:80vh;background:#fff;border-radius:16rpx;overflow:hidden;display:flex;flex-direction:column}
+.rules-modal-header{padding:30rpx;text-align:center;border-bottom:1rpx solid #f0f0f0}
+.rules-modal-title{font-size:34rpx;font-weight:600;color:#1a1a2e}
+.rules-modal-body{flex:1;padding:30rpx;max-height:50vh}
+.rules-text{font-size:28rpx;line-height:1.8;color:#4a4a5a;white-space:pre-wrap}
+.rules-modal-footer{padding:20rpx 30rpx 30rpx;border-top:1rpx solid #f0f0f0}
+.rules-agree-row{display:flex;align-items:center;padding:16rpx 0}
+.rules-checkbox{width:36rpx;height:36rpx;border:2rpx solid #d9d9d9;border-radius:6rpx;margin-right:16rpx;flex-shrink:0}
+.rules-checkbox-checked{background:#0066CC;border-color:#0066CC}
+.rules-checkbox-checked::after{content:'✓';color:#fff;font-size:24rpx;display:flex;align-items:center;justify-content:center;height:100%}
+.rules-agree-text{font-size:26rpx;color:#4a4a5a}
+.rules-btn-row{display:flex;gap:20rpx;margin-top:16rpx}
+.rules-btn{flex:1;text-align:center;padding:20rpx 0;border-radius:12rpx;font-size:30rpx}
+.rules-btn-cancel{background:#f5f5f5;color:#666}
+.rules-btn-confirm{background:#0066CC;color:#fff}
+.rules-btn-disabled{background:#b0c4de;color:#fff}

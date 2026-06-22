@@ -1,0 +1,49 @@
+.date-picker {
+  width: 100%;
+  white-space: nowrap;
+  background-color: #FFFFFF;
+  padding: 16rpx 0;
+}
+
+.date-picker-inner {
+  display: flex;
+  flex-direction: row;
+  padding: 0 24rpx;
+  gap: 16rpx;
+}
+
+.date-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16rpx 28rpx;
+  border-radius: 12rpx;
+  background-color: #F5F5F5;
+  min-width: 120rpx;
+  transition: all 0.2s;
+}
+
+.date-item-active {
+  background-color: #0066CC;
+}
+
+.date-weekday {
+  font-size: 22rpx;
+  color: #999999;
+  margin-bottom: 4rpx;
+}
+
+.date-item-active .date-weekday {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.date-display {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.date-item-active .date-display {
+  color: #FFFFFF;
+}

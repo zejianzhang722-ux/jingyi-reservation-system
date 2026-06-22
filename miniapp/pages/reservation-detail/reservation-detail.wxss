@@ -1,0 +1,96 @@
+.detail-card {
+  background-color: #FFFFFF;
+  margin: 24rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.detail-status-bar {
+  padding: 24rpx;
+  text-align: center;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.detail-section {
+  padding: 24rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.detail-section:last-of-type {
+  border-bottom: none;
+}
+
+.detail-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 10rpx 0;
+}
+
+.detail-label {
+  font-size: 28rpx;
+  color: #999999;
+}
+
+.detail-value {
+  font-size: 28rpx;
+  color: #333333;
+}
+
+.qrcode-section {
+  padding: 32rpx 24rpx;
+  display: flex;
+  justify-content: center;
+}
+
+.qrcode-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32rpx;
+  background-color: #F5F5F5;
+  border-radius: 12rpx;
+  width: 300rpx;
+}
+
+.qrcode-icon {
+  font-size: 80rpx;
+  margin-bottom: 12rpx;
+}
+
+.qrcode-text {
+  font-size: 24rpx;
+  color: #0066CC;
+}
+
+.detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 0 24rpx 40rpx;
+}
+
+.action-btn {
+  text-align: center;
+  padding: 24rpx;
+  border-radius: 12rpx;
+  font-size: 30rpx;
+}
+
+.btn-secondary {
+  background-color: #FFFFFF;
+  color: #0066CC;
+  border: 1rpx solid #BBD7F5;
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 120rpx 0;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #999999;
+}

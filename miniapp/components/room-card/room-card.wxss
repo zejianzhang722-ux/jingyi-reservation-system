@@ -1,0 +1,143 @@
+.room-card {
+  display: flex;
+  flex-direction: row;
+  background-color: #FFFFFF;
+  border-radius: 12rpx;
+  overflow: hidden;
+  margin: 12rpx 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.room-card-status-bar {
+  width: 8rpx;
+  flex-shrink: 0;
+}
+
+.room-card-content {
+  flex: 1;
+  padding: 24rpx;
+}
+
+.room-card-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.room-card-icon {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
+  margin-right: 16rpx;
+  background: linear-gradient(135deg, #E7F1FF, #F6FBFF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.room-card-symbol {
+  position: relative;
+  width: 34rpx;
+  height: 34rpx;
+}
+
+.room-card-symbol-study,
+.room-card-symbol-room {
+  border: 5rpx solid #1677D2;
+  border-top: 12rpx solid #1677D2;
+  border-radius: 6rpx;
+}
+
+.room-card-symbol-shared,
+.room-card-symbol-discussion {
+  border: 5rpx solid #16A085;
+  border-radius: 50%;
+}
+
+.room-card-symbol-shared::after,
+.room-card-symbol-discussion::after {
+  content: '';
+  position: absolute;
+  right: -10rpx;
+  bottom: -6rpx;
+  width: 20rpx;
+  height: 5rpx;
+  background: #16A085;
+  border-radius: 999rpx;
+  transform: rotate(35deg);
+}
+
+.room-card-symbol-media {
+  border-left: 30rpx solid #6C5CE7;
+  border-top: 18rpx solid transparent;
+  border-bottom: 18rpx solid transparent;
+  width: 0;
+  height: 0;
+}
+
+.room-card-symbol-reading {
+  border: 5rpx solid #2E7D32;
+  border-left-width: 12rpx;
+  border-radius: 6rpx;
+}
+
+.room-card-symbol-dance,
+.room-card-symbol-roadshow,
+.room-card-symbol-competition,
+.room-card-symbol-multi,
+.room-card-symbol-academic,
+.room-card-symbol-career,
+.room-card-symbol-party,
+.room-card-symbol-psychology {
+  border-radius: 50%;
+  background: #F7B731;
+  box-shadow: 0 0 0 10rpx rgba(247, 183, 49, 0.16);
+}
+
+.room-card-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.room-card-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.room-card-number {
+  font-size: 24rpx;
+  color: #999999;
+  margin-top: 4rpx;
+}
+
+.room-card-footer {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.room-card-rate {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.room-card-rate-label {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+.room-card-rate-value {
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.room-card-status-text {
+  font-size: 24rpx;
+  font-weight: bold;
+}

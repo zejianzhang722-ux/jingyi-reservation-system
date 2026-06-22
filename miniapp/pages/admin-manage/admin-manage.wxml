@@ -1,0 +1,22 @@
+<view class="container">
+  <view class="manage-header">
+    <text class="manage-title">管理中心</text>
+    <text class="manage-subtitle">集中处理审核、空间、宿生与运营事务</text>
+  </view>
+
+  <view class="menu-section" wx:for="{{groups}}" wx:key="title">
+    <text class="section-label">{{item.title}}</text>
+    <view class="menu-grid">
+      <view class="menu-card" wx:for="{{item.items}}" wx:for-item="entry" wx:key="key" data-key="{{entry.key}}" bindtap="onItemTap">
+        <view class="menu-icon menu-icon-{{entry.tone}}">
+          <view class="admin-symbol admin-symbol-{{entry.icon}}"></view>
+        </view>
+        <view class="menu-info">
+          <text class="menu-name">{{entry.name}}</text>
+          <text class="menu-desc">{{entry.desc}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+<admin-nav selected="manage"></admin-nav>

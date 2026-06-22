@@ -1,0 +1,80 @@
+<view class="container">
+  <view wx:if="{{mode === 'credit'}}">
+    <view class="credit-header">
+      <text class="credit-score-label">当前信用分</text>
+      <text class="credit-score-value" style="color:{{creditColorValue}}">{{creditScore}}</text>
+      <view class="credit-bar-bg">
+        <view class="credit-bar-fill" style="width:{{creditScore}}%;background-color:{{creditColorValue}}"></view>
+      </view>
+      <view class="credit-levels">
+        <text class="level-text level-red">失信(&lt;60)</text>
+        <text class="level-text level-yellow">一般(60-79)</text>
+        <text class="level-text level-green">良好(≥80)</text>
+      </view>
+    </view>
+
+    <view class="section-title">变动记录</view>
+
+    <view class="record-list" wx:if="{{!loading && records.length > 0}}">
+      <view class="record-item" wx:for="{{records}}" wx:key="id">
+        <view class="record-left">
+          <text class="record-title">{{item.title}}</text>
+          <text class="record-reason">{{item.reason}}</text>
+          <text class="record-time">{{item.time}}</text>
+        </view>
+        <view class="record-right">
+          <text class="record-change {{item.change >= 0 ? 'change-positive' : 'change-negative'}}">
+            {{item.change >= 0 ? '+' : ''}}{{item.change}}
+          </text>
+          <text class="record-score" wx:if="{{item.scoreAfter !== ''}}">变动后 {{item.scoreAfter}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="empty-state" wx:if="{{!loading && records.length === 0}}">
+      <text class="empty-icon">☆</text>
+      <text class="empty-text">暂无信用分变动记录</text>
+    </view>
+  </view>
+
+  <view wx:if="{{mode === 'stats'}}">
+    <view class="stats-header">
+      <view class="stats-card">
+        <text class="stats-num">{{stats.totalReservations}}</text>
+        <text class="stats-label">累计预约</text>
+      </view>
+      <view class="stats-card">
+        <text class="stats-num">{{stats.activeReservations}}</text>
+        <text class="stats-label">进行中</text>
+      </view>
+      <view class="stats-card">
+        <text class="stats-num">{{stats.completedCount}}</text>
+        <text class="stats-label">已完成</text>
+      </view>
+      <view class="stats-card stats-warning">
+        <text class="stats-num">{{stats.noshowCount}}</text>
+        <text class="stats-label">爽约</text>
+      </view>
+    </view>
+
+    <view class="section-title">最近预约</view>
+    <view class="record-list" wx:if="{{!loading && stats.recentReservations.length > 0}}">
+      <view class="record-item" wx:for="{{stats.recentReservations}}" wx:key="id">
+        <view class="record-left">
+          <text class="record-title">{{item.roomName}}</text>
+          <text class="record-reason">{{item.date}} {{item.time}}</text>
+        </view>
+        <text class="status-pill">{{item.status}}</text>
+      </view>
+    </view>
+
+    <view class="empty-state" wx:if="{{!loading && stats.recentReservations.length === 0}}">
+      <text class="empty-icon">□</text>
+      <text class="empty-text">暂无预约统计</text>
+    </view>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <text class="loading-text">加载中...</text>
+  </view>
+</view>

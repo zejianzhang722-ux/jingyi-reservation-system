@@ -1,0 +1,41 @@
+<view class="container">
+  <view class="header">
+    <text class="title">反馈管理</text>
+    <view class="filter-tabs">
+      <view class="tab {{filterStatus === '' ? 'active' : ''}}" bindtap="onFilter" data-status="">全部</view>
+      <view class="tab {{filterStatus === 'pending' ? 'active' : ''}}" bindtap="onFilter" data-status="pending">待处理</view>
+      <view class="tab {{filterStatus === 'resolved' ? 'active' : ''}}" bindtap="onFilter" data-status="resolved">已处理</view>
+    </view>
+  </view>
+  <view class="feedback-list" wx:if="{{list.length > 0}}">
+    <view class="feedback-item" wx:for="{{list}}" wx:key="id">
+      <view class="item-header">
+        <text class="item-user">{{item.userName || item.user_name || '匿名'}}</text>
+        <text class="item-type">{{item.type === 'bug' ? '问题' : item.type === 'feature' ? '功能请求' : '建议'}}</text>
+        <text class="item-status {{item.status === 'resolved' ? 'resolved' : 'pending'}}">{{item.status === 'resolved' ? '已处理' : '待处理'}}</text>
+      </view>
+      <text class="item-content">{{item.content}}</text>
+      <view class="item-reply" wx:if="{{item.reply}}">
+        <text class="reply-label">回复: </text>
+        <text class="reply-content">{{item.reply}}</text>
+      </view>
+      <view class="item-footer">
+        <text class="item-time">{{item.createdAt || item.created_at}}</text>
+        <view class="item-actions" wx:if="{{item.status !== 'resolved'}}">
+          <view class="btn-reply" data-id="{{item.id}}" bindtap="showReply">回复</view>
+          <view class="btn-resolve" data-id="{{item.id}}" bindtap="onResolve">标记已处理</view>
+        </view>
+      </view>
+      <view class="reply-form" wx:if="{{replyId === item.id}}">
+        <textarea class="reply-input" placeholder="输入回复内容" value="{{replyContent}}" bindinput="onReplyInput" maxlength="200" />
+        <view class="reply-btns">
+          <view class="reply-btn btn-cancel-reply" bindtap="cancelReply">取消</view>
+          <view class="reply-btn btn-submit-reply" bindtap="submitReply">发送</view>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view class="empty" wx:else>
+    <text>暂无反馈</text>
+  </view>
+</view>

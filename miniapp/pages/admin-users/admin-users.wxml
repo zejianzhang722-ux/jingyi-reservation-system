@@ -1,0 +1,28 @@
+<view class="container">
+  <view class="header">
+    <text class="title">宿生管理</text>
+    <view class="search-bar">
+      <input class="search-input" placeholder="搜索学号/姓名" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" />
+    </view>
+  </view>
+  <view class="user-list" wx:if="{{filteredList.length > 0}}">
+    <view class="user-item" wx:for="{{filteredList}}" wx:key="id">
+      <view class="user-avatar">{{item.avatarInitial}}</view>
+      <view class="user-info">
+        <text class="user-name">{{item.name || item.real_name || '未知'}}</text>
+        <text class="user-detail">{{item.student_no || item.student_id || '-'}} | {{item.college || '-'}}</text>
+        <text class="user-credit">信用分: {{item.creditDisplay}}</text>
+      </view>
+      <view class="user-actions">
+        <text class="user-status {{item.status}}">{{item.status === 'active' ? '正常' : item.status === 'banned' ? '封禁' : item.status}}</text>
+        <view class="action-btns">
+          <view class="btn-credit" data-id="{{item.id}}" data-score="{{item.credit_score}}" catchtap="onAdjustCredit">调分</view>
+          <view class="btn-ban {{item.status === 'banned' ? 'btn-unban' : ''}}" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleBan">{{item.status === 'banned' ? '解封' : '封禁'}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view class="empty" wx:else>
+    <text>暂无用户数据</text>
+  </view>
+</view>

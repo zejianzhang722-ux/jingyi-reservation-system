@@ -1,0 +1,37 @@
+<view class="container">
+  <view class="section-title">常见问题</view>
+  <view class="faq-list">
+    <view class="faq-item" wx:for="{{faqList}}" wx:key="q"
+          data-index="{{index}}" bindtap="onFaqToggle">
+      <view class="faq-question">
+        <text class="faq-q">{{item.q}}</text>
+        <text class="faq-arrow {{item.expanded ? 'faq-arrow-up' : ''}}">›</text>
+      </view>
+      <view class="faq-answer" wx:if="{{item.expanded}}">
+        <text class="faq-a">{{item.a}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section-title">提交反馈</view>
+  <view class="feedback-card">
+    <view class="form-item">
+      <text class="form-label">类型</text>
+      <picker mode="selector" range="{{typeOptions}}" value="{{typeIndex}}" bindchange="onTypeChange">
+        <text class="form-value">{{typeOptions[typeIndex]}} ›</text>
+      </picker>
+    </view>
+    <view class="form-item-vertical">
+      <text class="form-label">内容</text>
+      <textarea class="form-textarea" placeholder="请描述您的问题或建议" value="{{form.content}}" bindinput="onContentInput" maxlength="500" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">联系方式</text>
+      <input class="form-input" placeholder="选填" value="{{form.contact}}" bindinput="onContactInput" />
+    </view>
+  </view>
+
+  <view class="submit-btn {{submitting ? 'btn-disabled' : 'btn-primary'}}" bindtap="{{submitting ? '' : 'onSubmit'}}">
+    {{submitting ? '提交中...' : '提交反馈'}}
+  </view>
+</view>

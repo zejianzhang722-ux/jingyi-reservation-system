@@ -1,0 +1,54 @@
+<view class="container">
+  <view class="qrcode-page" wx:if="{{reservation && !loading}}">
+    <view class="qrcode-card {{isExpired ? 'qrcode-expired' : ''}}">
+      <view class="qrcode-header">
+        <text class="qrcode-room">{{reservation.roomName}}</text>
+        <text class="qrcode-room-number" wx:if="{{reservation.seatName}}">{{reservation.seatName}}</text>
+      </view>
+
+      <view class="qrcode-area">
+        <image class="qrcode-image" wx:if="{{qrCodeUrl}}" src="{{qrCodeUrl}}" mode="aspectFit"></image>
+        <view class="qrcode-placeholder" wx:if="{{!qrCodeUrl}}">
+          <view class="qrcode-placeholder-icon"></view>
+          <text class="qrcode-placeholder-text">签到凭证码</text>
+          <text class="qrcode-placeholder-id">{{reservation.voucherCode}}</text>
+        </view>
+        <view class="expired-mask" wx:if="{{isExpired}}">
+          <text class="expired-text">已过期</text>
+        </view>
+      </view>
+
+      <view class="qrcode-info">
+        <view class="qrcode-info-row">
+          <text class="info-label">日期</text>
+          <text class="info-value">{{reservation.date}}</text>
+        </view>
+        <view class="qrcode-info-row">
+          <text class="info-label">时间</text>
+          <text class="info-value">{{reservation.startTime}} - {{reservation.endTime}}</text>
+        </view>
+        <view class="qrcode-info-row" wx:if="{{reservation.seatName}}">
+          <text class="info-label">座位</text>
+          <text class="info-value">{{reservation.seatName}}</text>
+        </view>
+        <view class="qrcode-info-row" wx:if="{{countdown}}">
+          <text class="info-label">剩余时间</text>
+          <text class="info-value text-warning">{{countdown}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="qrcode-tips">
+      <text class="tip-text">请在预约时间内出示此凭证码进行签到</text>
+      <text class="tip-text">凭证码每5分钟自动刷新</text>
+    </view>
+
+    <view class="refresh-btn" bindtap="onRefreshQRCode">
+      <text class="refresh-text">刷新凭证码</text>
+    </view>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <text class="loading-text">加载中...</text>
+  </view>
+</view>

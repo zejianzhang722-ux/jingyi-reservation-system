@@ -1,0 +1,37 @@
+<view class="container">
+  <view class="reading-header">
+    <view class="reading-icon"></view>
+    <text class="reading-title">阅览室登记</text>
+    <text class="reading-desc">扫码登记进入/离开阅览室</text>
+  </view>
+
+  <view class="status-card" wx:if="{{status === 'inside' && currentRecord}}">
+    <text class="status-label">当前状态</text>
+    <text class="status-value text-success">在馆</text>
+    <view class="record-info">
+      <text class="record-row">进入时间: {{currentRecord.enterTime}}</text>
+      <text class="record-row">座位: {{currentRecord.seatName || '自由座位'}}</text>
+    </view>
+  </view>
+
+  <view class="status-card" wx:if="{{status === 'idle'}}">
+    <text class="status-label">当前状态</text>
+    <text class="status-value text-secondary">未在馆</text>
+  </view>
+
+  <view class="action-area">
+    <view class="scan-btn {{status === 'inside' ? 'btn-leave' : 'btn-enter'}}"
+          bindtap="{{status === 'inside' ? 'onScanLeave' : 'onScanEnter'}}">
+      <view class="scan-btn-icon {{status === 'inside' ? 'scan-btn-icon-leave' : 'scan-btn-icon-enter'}}"></view>
+      <text class="scan-btn-text">{{status === 'inside' ? '扫码离开' : '扫码进入'}}</text>
+    </view>
+  </view>
+
+  <view class="tips-card">
+    <text class="tips-title">使用须知</text>
+    <text class="tips-item">1. 进入阅览室请扫码登记</text>
+    <text class="tips-item">2. 离开时请扫码登记离开</text>
+    <text class="tips-item">3. 未登记离开将影响信用分</text>
+    <text class="tips-item">4. 请保持安静，爱护书籍</text>
+  </view>
+</view>

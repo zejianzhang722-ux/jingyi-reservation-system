@@ -1,0 +1,63 @@
+<view class="container">
+  <view class="page-header">
+    <text class="title">数据统计</text>
+    <text class="subtitle">预约、使用、爽约和信用状态概览</text>
+  </view>
+
+  <view class="stats-grid">
+    <view class="stat-card">
+      <text class="stat-value">{{dashboard.todayReservations}}</text>
+      <text class="stat-label">今日预约</text>
+    </view>
+    <view class="stat-card">
+      <text class="stat-value">{{dashboard.pendingCount}}</text>
+      <text class="stat-label">待审核</text>
+    </view>
+    <view class="stat-card">
+      <text class="stat-value">{{dashboard.usingCount}}</text>
+      <text class="stat-label">使用中</text>
+    </view>
+    <view class="stat-card warning">
+      <text class="stat-value">{{dashboard.noshowCount}}</text>
+      <text class="stat-label">今日爽约</text>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <text class="section-title">近 30 天使用排行</text>
+      <text class="refresh" bindtap="onRefresh">刷新</text>
+    </view>
+    <view wx:if="{{usageRows.length > 0}}">
+      <view class="rank-row" wx:for="{{usageRows}}" wx:key="room_name">
+        <view class="rank-info">
+          <text class="rank-name">{{item.room_name}}</text>
+          <text class="rank-meta">{{item.reservation_count}} 次预约 · {{item.used_days}} 天使用</text>
+        </view>
+        <text class="rank-rate">{{item.displayRate}}</text>
+      </view>
+    </view>
+    <view class="empty" wx:else>暂无使用排行</view>
+  </view>
+
+  <view class="section">
+    <text class="section-title">爽约概览</text>
+    <view class="summary-line">
+      <text>近 30 天爽约总数</text>
+      <text class="summary-value danger">{{noshow.totalNoshow}}</text>
+    </view>
+    <view class="simple-row" wx:for="{{noshow.topNoshowUsers}}" wx:key="id">
+      <text>{{item.real_name || item.nickname || item.student_id}}</text>
+      <text>{{item.noshow_count}} 次</text>
+    </view>
+  </view>
+
+  <view class="section">
+    <text class="section-title">信用分布</text>
+    <view class="simple-row" wx:for="{{creditDistribution}}" wx:key="level">
+      <text>{{item.level === 'good' ? '良好' : item.level === 'warning' ? '需注意' : item.level === 'restricted' ? '受限' : '封禁'}}</text>
+      <text>{{item.count}} 人</text>
+    </view>
+    <view class="empty" wx:if="{{creditDistribution.length === 0}}">暂无信用分布数据</view>
+  </view>
+</view>

@@ -1,0 +1,47 @@
+<view class="container">
+  <scroll-view class="tabs-scroll" scroll-x="true" enhanced="true" show-scrollbar="{{false}}">
+    <view class="tabs">
+      <view class="tab-item {{currentTab === item.key ? 'tab-active' : ''}}"
+            wx:for="{{tabs}}" wx:key="key"
+            data-key="{{item.key}}" bindtap="onTabChange">
+        <text class="tab-name" style="color:{{currentTab === item.key ? item.color : '#999999'}}">{{item.name}}</text>
+        <view class="tab-indicator" wx:if="{{currentTab === item.key}}" style="background-color:{{item.color}}"></view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="reservation-list" wx:if="{{!loading}}">
+    <view class="reservation-item" wx:for="{{reservations}}" wx:key="id"
+          data-id="{{item.id}}" bindtap="onReservationTap">
+      <view class="reservation-status-bar status-{{item.status}}"></view>
+      <view class="reservation-content">
+        <view class="reservation-header">
+          <text class="reservation-room">{{item.room_name || item.roomName || '功能房'}}</text>
+          <view class="reservation-status-tag status-tag-{{item.status}}">
+            {{item.statusText}}
+          </view>
+        </view>
+        <view class="reservation-info">
+          <text class="reservation-date">{{item.date}} {{item.start_time}}-{{item.end_time}}</text>
+          <text class="reservation-purpose" wx:if="{{item.purpose}}">{{item.purpose}}</text>
+        </view>
+        <view class="reservation-actions" wx:if="{{item.canCancel || item.canCheckIn}}">
+          <view class="action-btn action-cancel" wx:if="{{item.canCancel}}"
+                data-id="{{item.id}}" catchtap="onCancel">取消预约</view>
+          <view class="action-btn action-checkin" wx:if="{{item.canCheckIn}}"
+                data-id="{{item.id}}" catchtap="onCheckIn">签到</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:if="{{!loading && reservations.length === 0}}">
+    <view class="empty-icon-svg"></view>
+    <text class="empty-text">暂无{{currentTabName}}预约</text>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+</view>
