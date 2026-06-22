@@ -23,10 +23,20 @@ const ensureApprovalScope = function(req, res, reservation) {
     return false;
   }
   if (!allowedStatuses.includes(reservation.status)) {
-    response.error(res, '当前角色无权处理该审核或预约已被处理', 403);
+    response.error(res, '当前角色无权处理该审核', 403);
     return false;
   }
   return true;
+};
+
+const createNotificationSafely = async function(userId, type, title, content, data) {
+  try {
+    await notificationService.createNotification(userId, type, title, content, data);
+  } catch (err) {
+    // 审批状态已经成功落库时，通知失败不应把整个审批响应变成 500，
+    // 否则客户端重试会得到 409，造成“操作失败但实际已成功”的错觉。
+    logger.error('创建审批站内通知失败:', err);
+  }
 };
 
 const pending = async function(req, res) {
@@ -94,11 +104,11 @@ const approve = async function(req, res) {
       'WHERE id = ? AND status = ?',
       [req.user.id, id, reservation.status]
     );
-    if (updateResult && updateResult.affectedRows === 0) {
+    if (!updateResult || updateResult.affectedRows === 0) {
       return response.error(res, '该预约已被其他管理员处理，请刷新后重试', 409);
     }
 
-    await notificationService.createNotification(
+    await createNotificationSafely(
       reservation.user_id,
       'reservation_approved',
       '预约已通过',
@@ -151,11 +161,11 @@ const reject = async function(req, res) {
       'WHERE id = ? AND status = ?',
       [reason, req.user.id, id, reservation.status]
     );
-    if (updateResult && updateResult.affectedRows === 0) {
+    if (!updateResult || updateResult.affectedRows === 0) {
       return response.error(res, '该预约已被其他管理员处理，请刷新后重试', 409);
     }
 
-    await notificationService.createNotification(
+    await createNotificationSafely(
       reservation.user_id,
       'reservation_rejected',
       '预约未通过',
@@ -181,4 +191,11 @@ const reject = async function(req, res) {
   }
 };
 
-module.exports = { pending, pendingCount, approve, reject };
+module.exports = {
+  allowedStatusesForRole,
+  ensureApprovalScope,
+  pending,
+  pendingCount,
+  approve,
+  reject
+};
