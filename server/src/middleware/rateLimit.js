@@ -21,6 +21,18 @@ const authLimiter = rateLimit({
   }
 });
 
+// Token 刷新是正常会话维护，不应与登录失败共享同一个计数器，
+// 否则多个页面并发刷新会误伤后续登录。
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: function(req, res) {
+    return response.error(res, '登录状态刷新过于频繁，请稍后再试', 429);
+  }
+});
+
 const reservationLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
@@ -41,4 +53,10 @@ const checkinLimiter = rateLimit({
   }
 });
 
-module.exports = { apiLimiter, authLimiter, reservationLimiter, checkinLimiter };
+module.exports = {
+  apiLimiter,
+  authLimiter,
+  refreshLimiter,
+  reservationLimiter,
+  checkinLimiter
+};

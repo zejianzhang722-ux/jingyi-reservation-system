@@ -16,11 +16,15 @@ const { checkTokenBlacklist } = require('./middleware/auth');
 const { initScheduler } = require('./services/schedulerService');
 
 const app = express();
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
+    origin: config.corsOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
   }
 });
 
@@ -38,8 +42,8 @@ var corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(helmet());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan('combined', { stream: { write: function(msg) { logger.info(msg.trim()); } } }));
 app.use(checkTokenBlacklist);
 app.use(apiLimiter);
@@ -48,13 +52,28 @@ const uploadsDir = path.join(__dirname, '..', config.upload.dir);
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+  dotfiles: 'deny',
+  setHeaders: function(res) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
 
 app.use('/api/v1', routes);
 
+app.use('/api', function(req, res) {
+  res.status(404).json({ code: 404, message: '接口不存在', data: null });
+});
+
 app.use(function(err, req, res, next) {
   logger.error('未捕获异常:', err);
-  res.json({ code: 500, message: err.message || '服务器内部错误', data: null });
+  if (res.headersSent) return next(err);
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.status(500).json({
+    code: 500,
+    message: isProduction ? '服务器内部错误' : (err.message || '服务器内部错误'),
+    data: null
+  });
 });
 
 io.on('connection', function(socket) {

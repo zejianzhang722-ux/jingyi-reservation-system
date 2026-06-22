@@ -13,6 +13,8 @@
     "check:admin-miniapp": "node scripts/admin-miniapp-regression-check.js",
     "check:miniapp-ui": "node scripts/miniapp-ui-polish-check.js",
     "check:request-refresh": "node scripts/request-refresh-check.js",
+    "check:security": "node scripts/security-critical-check.js && node scripts/security-runtime-check.js",
+    "check:all": "npm run check:network && npm run check:test-data && npm run check:student-loop && npm run check:mobile && npm run check:admin-miniapp && npm run check:miniapp-ui && npm run check:request-refresh && npm run check:security",
     "install:all": "cd server && npm install && cd ../admin && npm install",
     "db:init": "mysql -u root -p < server/sql/schema.sql && mysql -u root -p < server/sql/seed.sql",
     "db:schema": "mysql -u root -p < server/sql/schema.sql",
