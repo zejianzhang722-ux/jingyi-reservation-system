@@ -6,10 +6,19 @@ const creditService = require('../services/creditService');
 const credentialService = require('../services/checkinCredentialService');
 const helpers = require('../utils/helpers');
 
+const ensureProductionDatabase = function() {
+  if (process.env.NODE_ENV === 'production' && db.isMock()) {
+    const err = new Error('动态签到数据库暂不可用');
+    err.httpStatus = 503;
+    throw err;
+  }
+};
+
 const checkin = async function(req, res) {
   let connection = null;
   let transactional = false;
   try {
+    ensureProductionDatabase();
     const { reservationId } = req.body;
     const credential = req.body.credential || req.body.code;
 
@@ -17,6 +26,7 @@ const checkin = async function(req, res) {
       'SELECT r.*, rm.name AS room_name FROM reservations r JOIN rooms rm ON r.room_id = rm.id WHERE r.id = ?',
       [reservationId]
     );
+    ensureProductionDatabase();
     if (reservations.length === 0) {
       return response.error(res, '预约不存在', 404);
     }
@@ -55,19 +65,28 @@ const checkin = async function(req, res) {
       'SELECT id FROM checkins WHERE reservation_id = ?',
       [reservationId]
     );
+    ensureProductionDatabase();
     if (existingCheckin.length > 0) {
       return response.error(res, '已签到，请勿重复签到', 409);
     }
 
-    await credentialService.consume(credential, reservation);
-
     connection = await db.getConnection();
+    ensureProductionDatabase();
     transactional = !!(
       connection &&
       typeof connection.beginTransaction === 'function' &&
       typeof connection.execute === 'function'
     );
+    if (process.env.NODE_ENV === 'production' && !transactional) {
+      const err = new Error('动态签到事务服务暂不可用');
+      err.httpStatus = 503;
+      throw err;
+    }
     if (transactional) await connection.beginTransaction();
+
+    // 凭证只在确认数据库事务可用后消费，避免数据库故障导致有效凭证被提前作废。
+    await credentialService.consume(credential, reservation);
+
     const runQuery = transactional
       ? function(sql, params) { return connection.execute(sql, params); }
       : db.query;
@@ -229,4 +248,12 @@ const patrol = async function(req, res) {
   }
 };
 
-module.exports = { checkin, checkout, getStatus, manualCheckin, currentCheckins, patrol };
+module.exports = {
+  ensureProductionDatabase,
+  checkin,
+  checkout,
+  getStatus,
+  manualCheckin,
+  currentCheckins,
+  patrol
+};
