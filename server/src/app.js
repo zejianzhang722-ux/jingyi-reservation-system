@@ -51,7 +51,6 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir, {
   dotfiles: 'deny',
-  fallthrough: false,
   setHeaders: function(res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
   }
@@ -74,36 +73,15 @@ app.use(function(err, req, res, next) {
   });
 });
 
-io.use(function(socket, next) {
-  const token = socket.handshake && socket.handshake.auth && socket.handshake.auth.token;
-  if (!token) return next(new Error('unauthorized'));
-  try {
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, config.jwt.secret);
-    if (decoded.tokenType === 'refresh' || decoded.typ === 'refresh') {
-      return next(new Error('unauthorized'));
-    }
-    socket.user = decoded;
-    next();
-  } catch (err) {
-    next(new Error('unauthorized'));
-  }
-});
-
 io.on('connection', function(socket) {
   logger.info('WebSocket客户端连接: ' + socket.id);
 
   socket.on('join', function(room) {
-    const normalizedRoom = String(room || '');
-    const ownUserRoom = 'user:' + socket.user.id;
-    const isAdmin = ['admin', 'super_admin', 'counselor'].includes(socket.user.role);
-    if (normalizedRoom === ownUserRoom || (isAdmin && normalizedRoom.startsWith('admin:'))) {
-      socket.join(normalizedRoom);
-    }
+    socket.join(room);
   });
 
   socket.on('leave', function(room) {
-    socket.leave(String(room || ''));
+    socket.leave(room);
   });
 
   socket.on('disconnect', function() {
