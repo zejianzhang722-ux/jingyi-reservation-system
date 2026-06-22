@@ -125,15 +125,22 @@ async function main() {
   expectStatus(second, 200, 'second credential issue')
   assert(second.json.data.credential !== first.json.data.credential, 'refresh must rotate the credential')
 
+  const validCredential = second.json.data.credential
   expectStatus(await api('/checkin', {
     method: 'POST',
     headers: jsonAuthHeaders(owner.token),
-    body: JSON.stringify({ reservationId: 1 })
-  }), 400, 'credential-free check-in')
+    body: JSON.stringify({ reservationId: 1, credential: validCredential })
+  }), 403, 'student cannot self-consume displayed credential')
 
   expectStatus(await api('/checkin', {
     method: 'POST',
-    headers: jsonAuthHeaders(owner.token),
+    headers: jsonAuthHeaders(admin.token),
+    body: JSON.stringify({ reservationId: 1 })
+  }), 400, 'credential-free administrator check-in')
+
+  expectStatus(await api('/checkin', {
+    method: 'POST',
+    headers: jsonAuthHeaders(admin.token),
     body: JSON.stringify({ reservationId: 1, code: 'JYTEST001' })
   }), 400, 'legacy static reservation code')
 
@@ -143,7 +150,6 @@ async function main() {
     body: JSON.stringify({ reservationId: 1, credential: first.json.data.credential })
   }), 409, 'credential invalidated by refresh')
 
-  const validCredential = second.json.data.credential
   const tampered = validCredential.slice(0, -1) + (validCredential.endsWith('A') ? 'B' : 'A')
   expectStatus(await api('/checkin', {
     method: 'POST',
