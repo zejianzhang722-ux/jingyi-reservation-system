@@ -4,13 +4,24 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const credentialService = require('../services/checkinCredentialService');
 
+const ensureProductionDatabase = function() {
+  if (process.env.NODE_ENV === 'production' && db.isMock()) {
+    const err = new Error('动态签到数据库暂不可用');
+    err.httpStatus = 503;
+    throw err;
+  }
+};
+
 const issue = async function(req, res) {
   try {
+    ensureProductionDatabase();
     const reservationId = Number(req.params.id);
     const [reservations] = await db.query(
       'SELECT id, user_id, room_id, date, start_time, end_time, status FROM reservations WHERE id = ?',
       [reservationId]
     );
+    // 查询过程中数据库连接也可能触发旧版自动 Mock 回退，因此再次检查。
+    ensureProductionDatabase();
 
     if (!reservations || reservations.length === 0) {
       return response.error(res, '预约不存在', 404);
@@ -52,8 +63,12 @@ const issue = async function(req, res) {
     });
   } catch (err) {
     logger.error('生成动态签到凭证异常:', err);
-    return response.error(res, '生成动态签到凭证失败', err.httpStatus || 500);
+    return response.error(
+      res,
+      err.httpStatus === 503 ? err.message : '生成动态签到凭证失败',
+      err.httpStatus || 500
+    );
   }
 };
 
-module.exports = { issue };
+module.exports = { issue, ensureProductionDatabase };
