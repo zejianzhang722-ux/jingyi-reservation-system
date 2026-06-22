@@ -22,6 +22,16 @@ class CredentialError extends Error {
   }
 }
 
+const ensureCredentialStoreAvailable = function() {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    typeof redis.isMock === 'function' &&
+    redis.isMock()
+  ) {
+    throw new CredentialError('动态签到服务暂不可用，请联系管理员', 503);
+  }
+};
+
 const toBase64Url = function(value) {
   return Buffer.from(value).toString('base64')
     .replace(/=/g, '')
@@ -119,6 +129,7 @@ const validatePayload = function(payload, reservation) {
 };
 
 const issue = async function(reservation) {
+  ensureCredentialStoreAvailable();
   const ttl = CREDENTIAL_TTL_SECONDS;
   const now = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomBytes(18).toString('hex');
@@ -181,6 +192,7 @@ const atomicGetAndDelete = async function(key) {
 };
 
 const consume = async function(input, reservation) {
+  ensureCredentialStoreAvailable();
   const parsed = parseInput(input);
   const payload = parsed.payload;
   validatePayload(payload, reservation);
@@ -224,5 +236,6 @@ module.exports = {
   consume,
   parseInput,
   validatePayload,
+  ensureCredentialStoreAvailable,
   CREDENTIAL_TTL_SECONDS
 };
