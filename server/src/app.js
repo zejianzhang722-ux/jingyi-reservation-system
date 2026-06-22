@@ -19,8 +19,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
+    origin: config.corsOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
   }
 });
 
@@ -38,8 +39,8 @@ var corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(helmet());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan('combined', { stream: { write: function(msg) { logger.info(msg.trim()); } } }));
 app.use(checkTokenBlacklist);
 app.use(apiLimiter);
@@ -48,24 +49,61 @@ const uploadsDir = path.join(__dirname, '..', config.upload.dir);
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+  dotfiles: 'deny',
+  fallthrough: false,
+  setHeaders: function(res) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
 
 app.use('/api/v1', routes);
 
+app.use('/api', function(req, res) {
+  res.status(404).json({ code: 404, message: '接口不存在', data: null });
+});
+
 app.use(function(err, req, res, next) {
   logger.error('未捕获异常:', err);
-  res.json({ code: 500, message: err.message || '服务器内部错误', data: null });
+  if (res.headersSent) return next(err);
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.status(500).json({
+    code: 500,
+    message: isProduction ? '服务器内部错误' : (err.message || '服务器内部错误'),
+    data: null
+  });
+});
+
+io.use(function(socket, next) {
+  const token = socket.handshake && socket.handshake.auth && socket.handshake.auth.token;
+  if (!token) return next(new Error('unauthorized'));
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, config.jwt.secret);
+    if (decoded.tokenType === 'refresh' || decoded.typ === 'refresh') {
+      return next(new Error('unauthorized'));
+    }
+    socket.user = decoded;
+    next();
+  } catch (err) {
+    next(new Error('unauthorized'));
+  }
 });
 
 io.on('connection', function(socket) {
   logger.info('WebSocket客户端连接: ' + socket.id);
 
   socket.on('join', function(room) {
-    socket.join(room);
+    const normalizedRoom = String(room || '');
+    const ownUserRoom = 'user:' + socket.user.id;
+    const isAdmin = ['admin', 'super_admin', 'counselor'].includes(socket.user.role);
+    if (normalizedRoom === ownUserRoom || (isAdmin && normalizedRoom.startsWith('admin:'))) {
+      socket.join(normalizedRoom);
+    }
   });
 
   socket.on('leave', function(room) {
-    socket.leave(room);
+    socket.leave(String(room || ''));
   });
 
   socket.on('disconnect', function() {
