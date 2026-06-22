@@ -189,8 +189,14 @@ async function main() {
     expectStatus(await api('/checkin/manual', {
       method: 'POST',
       headers: jsonAuthHeaders(admin.token),
-      body: JSON.stringify({ reservationId: 1, userId: 1 })
+      body: JSON.stringify({ reservationId: 1, userId: 999999 })
     }), 200, 'admin manual checkin')
+    const currentAfterManualCheckin = await api('/checkin/current/1', { headers: authHeaders(admin.token) })
+    expectStatus(currentAfterManualCheckin, 200, 'admin manual checkin keeps reservation owner')
+    const manualRecord = (currentAfterManualCheckin.json.data || []).find(function(item) {
+      return Number(item.reservation_id) === 1
+    })
+    assert(manualRecord && Number(manualRecord.user_id) === 1, 'manual checkin should record reservation owner, not request userId')
     expectStatus(await api('/checkin/checkout', {
       method: 'POST',
       headers: jsonAuthHeaders(student.token),
