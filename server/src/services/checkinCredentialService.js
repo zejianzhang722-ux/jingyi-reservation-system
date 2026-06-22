@@ -4,6 +4,15 @@ const redis = require('../config/redis');
 
 const PREFIX = 'JY1';
 const CLOCK_SKEW_SECONDS = 15;
+const CREDENTIAL_SECRET = process.env.CHECKIN_CREDENTIAL_SECRET || config.jwt.secret;
+const CREDENTIAL_TTL_SECONDS = Math.max(
+  30,
+  Math.min(90, Number(process.env.CHECKIN_CREDENTIAL_TTL_SECONDS) || 60)
+);
+const REFRESH_BEFORE_SECONDS = Math.max(
+  10,
+  Math.min(30, Number(process.env.CHECKIN_CREDENTIAL_REFRESH_BEFORE_SECONDS) || 15)
+);
 
 class CredentialError extends Error {
   constructor(message, status) {
@@ -28,7 +37,7 @@ const fromBase64Url = function(value) {
 
 const sign = function(encodedPayload) {
   return toBase64Url(
-    crypto.createHmac('sha256', config.checkinCredential.secret)
+    crypto.createHmac('sha256', CREDENTIAL_SECRET)
       .update(encodedPayload)
       .digest()
   );
@@ -110,7 +119,7 @@ const validatePayload = function(payload, reservation) {
 };
 
 const issue = async function(reservation) {
-  const ttl = config.checkinCredential.ttlSeconds;
+  const ttl = CREDENTIAL_TTL_SECONDS;
   const now = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomBytes(18).toString('hex');
   const payload = {
@@ -140,7 +149,7 @@ const issue = async function(reservation) {
     payload,
     expiresAt: new Date((now + ttl) * 1000).toISOString(),
     expiresIn: ttl,
-    refreshAfter: Math.max(10, ttl - config.checkinCredential.refreshBeforeSeconds),
+    refreshAfter: Math.max(10, ttl - REFRESH_BEFORE_SECONDS),
     reference: 'JY' + nonce.slice(0, 10).toUpperCase()
   };
 };
@@ -208,5 +217,6 @@ module.exports = {
   issue,
   consume,
   parseInput,
-  validatePayload
+  validatePayload,
+  CREDENTIAL_TTL_SECONDS
 };
