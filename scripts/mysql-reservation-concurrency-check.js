@@ -22,18 +22,29 @@ async function main() {
   const [slotTables] = await db.query("SHOW TABLES LIKE 'reservation_slots'")
   assert(slotTables.length > 0, 'reservation_slots table is required before running MySQL consistency checks')
 
+  const testUserA = 101
+  const testUserB = 102
   const target = new Date()
   target.setDate(target.getDate() + 2)
   const date = formatDate(target)
   const purposePrefix = 'mysql-concurrency-check:' + Date.now()
 
   async function cleanup() {
-    await db.query("DELETE FROM reservation_slots WHERE reservation_id IN (SELECT id FROM reservations WHERE purpose LIKE ?)", [purposePrefix + '%'])
-    await db.query("DELETE FROM reservation_waitlist WHERE date = ? AND start_time IN ('17:00','18:00')", [date])
-    await db.query("DELETE FROM reservations WHERE purpose LIKE ?", [purposePrefix + '%'])
+    await db.query('DELETE FROM reservation_slots WHERE reservation_id IN (SELECT id FROM reservations WHERE user_id IN (?, ?))', [testUserA, testUserB])
+    await db.query('DELETE FROM reservation_waitlist WHERE user_id IN (?, ?)', [testUserA, testUserB])
+    await db.query('DELETE FROM reservations WHERE user_id IN (?, ?)', [testUserA, testUserB])
+    await db.query('DELETE FROM users WHERE id IN (?, ?)', [testUserA, testUserB])
   }
 
   await cleanup()
+  await db.query(
+    "INSERT INTO users (id, openid, student_id, student_no, card_no, real_name, role, credit_score, status) VALUES " +
+    "(?, ?, ?, ?, ?, ?, 'student', 100, 'active'), (?, ?, ?, ?, ?, ?, 'student', 100, 'active')",
+    [
+      testUserA, 'ci_openid_' + testUserA, 'CI' + testUserA, 'CI' + testUserA, 'CARD' + testUserA, 'CI用户A',
+      testUserB, 'ci_openid_' + testUserB, 'CI' + testUserB, 'CI' + testUserB, 'CARD' + testUserB, 'CI用户B'
+    ]
+  )
 
   try {
     const base = {
@@ -47,8 +58,8 @@ async function main() {
     }
 
     const attempts = await Promise.allSettled([
-      reservationCommandService.createReservation(Object.assign({ userId: 1, idempotencyKey: purposePrefix + ':a' }, base)),
-      reservationCommandService.createReservation(Object.assign({ userId: 2, idempotencyKey: purposePrefix + ':b' }, base))
+      reservationCommandService.createReservation(Object.assign({ userId: testUserA, idempotencyKey: purposePrefix + ':a' }, base)),
+      reservationCommandService.createReservation(Object.assign({ userId: testUserB, idempotencyKey: purposePrefix + ':b' }, base))
     ])
 
     const fulfilled = attempts.filter(function(item) { return item.status === 'fulfilled' })
@@ -59,7 +70,7 @@ async function main() {
 
     const sameKey = purposePrefix + ':same-key'
     const idemInput = Object.assign({}, base, {
-      userId: 1,
+      userId: testUserA,
       idempotencyKey: sameKey,
       startTime: '20:00',
       endTime: '21:00',
@@ -83,7 +94,7 @@ async function main() {
     let durationError = null
     try {
       await reservationCommandService.createReservation({
-        userId: 2,
+        userId: testUserB,
         roomId: 8,
         date,
         startTime: '08:00',
@@ -98,7 +109,7 @@ async function main() {
     assert(durationError && durationError.code === 'MAX_DURATION_EXCEEDED', '181 minutes must exceed a 180-minute room limit')
 
     const exactDuration = await reservationCommandService.createReservation({
-      userId: 2,
+      userId: testUserB,
       roomId: 8,
       date,
       startTime: '08:00',
@@ -110,7 +121,7 @@ async function main() {
     assert(exactDuration && exactDuration.id, 'exactly 180 minutes must be allowed')
 
     const source = await reservationCommandService.createReservation({
-      userId: 1,
+      userId: testUserA,
       roomId: 8,
       date,
       startTime: '17:00',
@@ -121,13 +132,13 @@ async function main() {
     })
     const [waitlistInsert] = await db.query(
       "INSERT INTO reservation_waitlist (user_id, room_id, seat_id, date, start_time, end_time, status, created_at) VALUES (?, ?, NULL, ?, ?, ?, 'waiting', NOW())",
-      [2, 8, date, '17:00', '18:00']
+      [testUserB, 8, date, '17:00', '18:00']
     )
 
     const lifecycleResult = await reservationLifecycleService.releaseAndPromote({
       reservationId: source.id,
       nextStatus: 'cancelled',
-      actorUserId: 1,
+      actorUserId: testUserA,
       actorRole: 'student',
       allowedCurrentStatuses: ['approved']
     })
@@ -144,7 +155,7 @@ async function main() {
     await reservationLifecycleService.releaseAndPromote({
       reservationId: repeated.id,
       nextStatus: 'cancelled',
-      actorUserId: 1,
+      actorUserId: testUserA,
       actorRole: 'student',
       allowedCurrentStatuses: ['approved']
     })
