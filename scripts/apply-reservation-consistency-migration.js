@@ -117,6 +117,16 @@ async function ensureSchema(connection, database) {
   }
 }
 
+async function removeInactiveSlots(connection) {
+  const placeholders = ACTIVE_STATUSES.map(function() { return '?' }).join(',')
+  const [result] = await connection.execute(
+    "DELETE rs FROM reservation_slots rs JOIN reservations r ON r.id = rs.reservation_id " +
+    "WHERE r.status NOT IN (" + placeholders + ")",
+    ACTIVE_STATUSES
+  )
+  return Number(result.affectedRows || 0)
+}
+
 async function backfillSlots(connection) {
   const placeholders = ACTIVE_STATUSES.map(function() { return '?' }).join(',')
   const [reservations] = await connection.execute(
@@ -131,11 +141,27 @@ async function backfillSlots(connection) {
     const end = toMinutes(reservation.end_time)
     if (end <= start) throw new Error('Reservation has non-positive duration: ' + reservation.id)
 
+    const [invalidOwnership] = await connection.execute(
+      "SELECT id, room_id, seat_scope, date, slot_minute FROM reservation_slots " +
+      "WHERE reservation_id = ? AND (room_id <> ? OR seat_scope <> ? OR date <> ?)",
+      [reservation.id, reservation.room_id, reservation.seat_scope, reservation.date]
+    )
+    if (invalidOwnership.length) {
+      throw new Error('Reservation slots have invalid ownership metadata: ' + JSON.stringify(invalidOwnership.slice(0, 20)))
+    }
+
     const [existingRows] = await connection.execute(
       'SELECT slot_minute FROM reservation_slots WHERE reservation_id = ?',
       [reservation.id]
     )
     const existing = new Set(existingRows.map(function(row) { return Number(row.slot_minute) }))
+    const unexpected = Array.from(existing).filter(function(minute) {
+      return minute < start || minute >= end
+    })
+    if (unexpected.length) {
+      throw new Error('Reservation has slots outside its time range: ' + reservation.id + ' -> ' + unexpected.slice(0, 20).join(','))
+    }
+
     const missing = []
     for (let minute = start; minute < end; minute += 1) {
       if (!existing.has(minute)) missing.push(minute)
@@ -166,7 +192,7 @@ async function backfillSlots(connection) {
 
 async function verifyBackfill(connection) {
   const placeholders = ACTIVE_STATUSES.map(function() { return '?' }).join(',')
-  const [rows] = await connection.execute(
+  const [countRows] = await connection.execute(
     "SELECT r.id, TIMESTAMPDIFF(MINUTE, STR_TO_DATE(r.start_time, '%H:%i:%s'), " +
     "STR_TO_DATE(r.end_time, '%H:%i:%s')) AS expected_slots, COUNT(rs.id) AS actual_slots " +
     "FROM reservations r LEFT JOIN reservation_slots rs ON rs.reservation_id = r.id " +
@@ -174,7 +200,22 @@ async function verifyBackfill(connection) {
     "HAVING actual_slots <> expected_slots LIMIT 20",
     ACTIVE_STATUSES
   )
-  if (rows.length) throw new Error('Reservation slot backfill verification failed: ' + JSON.stringify(rows))
+  if (countRows.length) {
+    throw new Error('Reservation slot count verification failed: ' + JSON.stringify(countRows))
+  }
+
+  const [ownershipRows] = await connection.execute(
+    "SELECT rs.id, rs.reservation_id, rs.room_id, rs.seat_scope, rs.date, rs.slot_minute " +
+    "FROM reservation_slots rs JOIN reservations r ON r.id = rs.reservation_id " +
+    "WHERE r.status IN (" + placeholders + ") AND (" +
+    "rs.room_id <> r.room_id OR rs.seat_scope <> COALESCE(r.seat_id, 0) OR rs.date <> r.date OR " +
+    "rs.slot_minute < TIME_TO_SEC(STR_TO_DATE(r.start_time, '%H:%i:%s')) / 60 OR " +
+    "rs.slot_minute >= TIME_TO_SEC(STR_TO_DATE(r.end_time, '%H:%i:%s')) / 60) LIMIT 20",
+    ACTIVE_STATUSES
+  )
+  if (ownershipRows.length) {
+    throw new Error('Reservation slot ownership verification failed: ' + JSON.stringify(ownershipRows))
+  }
 }
 
 async function main() {
@@ -196,13 +237,15 @@ async function main() {
 
     await assertNoActiveOverlaps(connection)
     await ensureSchema(connection, database)
-    const inserted = await backfillSlots(connection)
+    const removedInactiveSlots = await removeInactiveSlots(connection)
+    const insertedSlots = await backfillSlots(connection)
     await verifyBackfill(connection)
 
     console.log(JSON.stringify({
       migration: 'reservation-consistency',
       database,
-      insertedSlots: inserted,
+      insertedSlots,
+      removedInactiveSlots,
       status: 'ready'
     }, null, 2))
   } finally {
