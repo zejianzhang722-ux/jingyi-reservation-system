@@ -36,7 +36,7 @@ async function stopServer(child) {
 }
 
 async function waitForHealth(child) {
-  const deadline = Date.now() + 15000
+  const deadline = Date.now() + Number(process.env.SECURITY_HEALTH_TIMEOUT_MS || 45000)
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error('server exited early:\n' + child.output())
@@ -116,6 +116,16 @@ async function main() {
     const admin = await loginAdmin('admin', 'admin123')
     const counselor = await loginAdmin('counselor', 'counselor123')
     const superAdmin = await loginAdmin('superadmin', 'super123')
+
+    for (let i = 0; i < 12; i++) {
+      const repeatedStudentLogin = await api('/auth/login/student', {
+        method: 'POST',
+        body: JSON.stringify(i % 2 === 0
+          ? { studentNo: '2024001001', cardNo: '200001' }
+          : { studentNo: '2024001002', cardNo: '200002' })
+      })
+      expectStatus(repeatedStudentLogin, 200, 'repeated valid student login should not be rate limited')
+    }
 
     expectStatus(await api('/user/profile', { headers: authHeaders(student.token) }), 200, 'access token business request')
     expectStatus(await api('/user/profile', { headers: authHeaders(student.refreshToken) }), 401, 'refresh token rejected on business request')
