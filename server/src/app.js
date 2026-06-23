@@ -97,8 +97,12 @@ app.set('io', io);
 const startServer = async function() {
   try {
     const dbState = await db.ready();
+    const redisState = await redis.ready();
     if (process.env.NODE_ENV === 'production' && dbState.mode !== 'mysql') {
       throw new Error('生产环境必须连接真实MySQL数据库');
+    }
+    if (process.env.NODE_ENV === 'production' && redisState.mode !== 'redis') {
+      throw new Error('生产环境必须连接真实Redis服务');
     }
 
     if (process.env.ENABLE_SCHEDULER === 'true') {
