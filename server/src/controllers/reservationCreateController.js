@@ -13,6 +13,16 @@ const normalizeTime = function(body, prefix) {
   return String(Math.floor(Number(hour))).padStart(2, '0') + ':' + String(Number(minute || 0)).padStart(2, '0');
 };
 
+const participantValue = function(body) {
+  if (body.participants !== undefined && body.participants !== null && body.participants !== '') {
+    return Number(body.participants);
+  }
+  if (body.participantCount !== undefined && body.participantCount !== null && body.participantCount !== '') {
+    return Number(body.participantCount);
+  }
+  return 1;
+};
+
 const create = async function(req, res) {
   try {
     const startTime = normalizeTime(req.body, 'start');
@@ -30,7 +40,7 @@ const create = async function(req, res) {
       startTime,
       endTime,
       purpose: String(req.body.purpose || req.body.purposeCategory || '').trim(),
-      participants: Number(req.body.participants || req.body.participantCount || 1),
+      participants: participantValue(req.body),
       idempotencyKey
     });
 
@@ -62,4 +72,4 @@ const create = async function(req, res) {
   }
 };
 
-module.exports = { create };
+module.exports = { create, participantValue };
