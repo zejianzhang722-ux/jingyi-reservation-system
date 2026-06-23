@@ -34,8 +34,8 @@ async function collect(connection, database) {
 
   const [invalidTimes] = await connection.execute(
     "SELECT id, room_id, date, start_time, end_time, status FROM reservations " +
-    "WHERE start_time NOT REGEXP '^[0-2]?[0-9]:[0-5][0-9](:[0-5][0-9])?$' " +
-    "OR end_time NOT REGEXP '^[0-2]?[0-9]:[0-5][0-9](:[0-5][0-9])?$' " +
+    "WHERE start_time NOT REGEXP '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' " +
+    "OR end_time NOT REGEXP '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' " +
     "OR TIME_TO_SEC(STR_TO_DATE(end_time, '%H:%i:%s')) <= TIME_TO_SEC(STR_TO_DATE(start_time, '%H:%i:%s'))"
   )
   report.blockers.invalidTimes = invalidTimes
