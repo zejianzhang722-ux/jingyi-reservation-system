@@ -16,9 +16,8 @@ const { checkTokenBlacklist } = require('./middleware/auth');
 const { initScheduler } = require('./services/schedulerService');
 
 const app = express();
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -28,39 +27,40 @@ const io = new Server(server, {
   }
 });
 
-var corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || config.corsOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS origin not allowed: ' + origin));
-    }
+const corsOptions = {
+  origin: function(origin, callback) {
+    if (!origin || config.corsOrigins.indexOf(origin) !== -1) callback(null, true);
+    else callback(new Error('CORS origin not allowed: ' + origin));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key']
 };
+
 app.use(cors(corsOptions));
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan('combined', { stream: { write: function(msg) { logger.info(msg.trim()); } } }));
+
+app.use(function(req, res, next) {
+  if (process.env.NODE_ENV === 'production' && (db.isMock() || redis.isMock())) {
+    return res.status(503).json({ code: 503, message: '核心数据服务暂不可用', data: null });
+  }
+  next();
+});
+
 app.use(checkTokenBlacklist);
 app.use(apiLimiter);
 
 const uploadsDir = path.join(__dirname, '..', config.upload.dir);
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir, {
   dotfiles: 'deny',
-  setHeaders: function(res) {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-  }
+  setHeaders: function(res) { res.setHeader('X-Content-Type-Options', 'nosniff'); }
 }));
 
 app.use('/api/v1', routes);
-
 app.use('/api', function(req, res) {
   res.status(404).json({ code: 404, message: '接口不存在', data: null });
 });
@@ -78,40 +78,38 @@ app.use(function(err, req, res, next) {
 
 io.on('connection', function(socket) {
   logger.info('WebSocket客户端连接: ' + socket.id);
-
-  socket.on('join', function(room) {
-    socket.join(room);
-  });
-
-  socket.on('leave', function(room) {
-    socket.leave(room);
-  });
-
-  socket.on('disconnect', function() {
-    logger.info('WebSocket客户端断开: ' + socket.id);
-  });
+  socket.on('join', function(room) { socket.join(room); });
+  socket.on('leave', function(room) { socket.leave(room); });
+  socket.on('disconnect', function() { logger.info('WebSocket客户端断开: ' + socket.id); });
 });
-
 app.set('io', io);
 
-if (process.env.ENABLE_SCHEDULER === 'true') {
-  initScheduler();
-} else {
-  logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
+async function start() {
+  await db.initialize();
+  await redis.ping();
+  if (process.env.NODE_ENV === 'production' && (db.isMock() || redis.isMock())) {
+    throw new Error('生产环境禁止使用Mock数据库或Mock Redis');
+  }
+
+  if (process.env.ENABLE_SCHEDULER === 'true') initScheduler();
+  else logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
+
+  return new Promise(function(resolve) {
+    server.listen(config.port, function() {
+      const dbMode = db.isMock() ? '显式Mock' : 'MySQL';
+      const redisMode = redis.isMock() ? '显式Mock' : 'Redis';
+      logger.info('服务已启动，端口: ' + config.port + '，数据库: ' + dbMode + '，缓存: ' + redisMode);
+      resolve(server);
+    });
+  });
 }
 
-setTimeout(function() {
-  server.listen(config.port, function() {
-    var dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
-    var redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
-    console.log('========================================');
-    console.log('  敬一书院预约管理系统服务已启动');
-    console.log('  端口: ' + config.port);
-    console.log('  数据库运行模式: ' + dbMode);
-    console.log('  Redis运行模式: ' + redisMode);
-    console.log('========================================');
-    logger.info('敬一书院预约管理系统服务已启动，端口: ' + config.port + '，数据库: ' + dbMode + '，Redis: ' + redisMode);
-  });
-}, 2000);
+const startupPromise = start().catch(function(err) {
+  logger.error('服务启动失败:', err);
+  if (require.main === module) {
+    setTimeout(function() { process.exit(1); }, 20);
+  }
+  throw err;
+});
 
-module.exports = { app, server, io };
+module.exports = { app, server, io, start, startupPromise };
