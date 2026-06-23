@@ -10,6 +10,7 @@ const PURPOSE_REQUIRED_TYPES = [
   'media_room', 'media', 'competition_room', 'competition',
   'roadshow_space', 'roadshow'
 ];
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 const httpError = function(status, message, code) {
   const err = new Error(message);
@@ -41,6 +42,16 @@ const normalizeDate = function(value) {
   throw httpError(400, '预约日期格式无效');
 };
 
+const normalizeIdempotencyKey = function(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const key = String(value).trim();
+  if (!key) return null;
+  if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+    throw httpError(400, '幂等键不能超过' + MAX_IDEMPOTENCY_KEY_LENGTH + '个字符', 'IDEMPOTENCY_KEY_TOO_LONG');
+  }
+  return key;
+};
+
 const normalizeInput = function(input) {
   return {
     userId: Number(input.userId),
@@ -51,7 +62,7 @@ const normalizeInput = function(input) {
     endTime: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
     participants: Number(input.participants || 1),
-    idempotencyKey: input.idempotencyKey ? String(input.idempotencyKey).trim() : null,
+    idempotencyKey: normalizeIdempotencyKey(input.idempotencyKey),
     forcedStatus: input.forcedStatus || null
   };
 };
@@ -163,12 +174,10 @@ const createReservationWithinTransaction = async function(connection, rawInput) 
   const input = normalizeInput(rawInput);
   const requestHash = buildRequestFingerprint(input);
 
+  // 所有创建入口首先锁定用户行，同一用户的每日限额检查因此被串行化。
   const [users] = await connection.execute('SELECT * FROM users WHERE id = ? FOR UPDATE', [input.userId]);
-  const [rooms] = await connection.execute('SELECT * FROM rooms WHERE id = ? FOR UPDATE', [input.roomId]);
-  const [seats] = input.seatId
-    ? await connection.execute('SELECT * FROM seats WHERE id = ? FOR UPDATE', [input.seatId])
-    : [[]];
 
+  // 幂等记录在房间锁之前读取，避免“房间锁 -> 预约行锁”与修改流程形成反向锁序。
   if (input.idempotencyKey) {
     const [existingRows] = await connection.execute(
       'SELECT * FROM reservations WHERE user_id = ? AND idempotency_key = ? FOR UPDATE',
@@ -182,10 +191,16 @@ const createReservationWithinTransaction = async function(connection, rawInput) 
     }
   }
 
+  const [rooms] = await connection.execute('SELECT * FROM rooms WHERE id = ? FOR UPDATE', [input.roomId]);
+  const [seats] = input.seatId
+    ? await connection.execute('SELECT * FROM seats WHERE id = ? FOR UPDATE', [input.seatId])
+    : [[]];
+
   validateReservationInput(input, users[0], rooms[0], seats[0] || null);
 
+  // 用户行锁已阻止同一用户并发创建；这里只需一致性读取，避免与取消/修改的预约行锁产生死锁环。
   const [dailyRows] = await connection.execute(
-    "SELECT id FROM reservations WHERE user_id = ? AND date = ? AND status IN ('approved','pending','counselor_pending','checked_in') FOR UPDATE",
+    "SELECT id FROM reservations WHERE user_id = ? AND date = ? AND status IN ('approved','pending','counselor_pending','checked_in')",
     [input.userId, input.date]
   );
   if (dailyRows.length >= 3) throw httpError(400, '每日最多预约3次');
@@ -277,7 +292,9 @@ const createReservation = async function(rawInput) {
 
 module.exports = {
   ACTIVE_STATUSES,
+  MAX_IDEMPOTENCY_KEY_LENGTH,
   normalizeDate,
+  normalizeIdempotencyKey,
   normalizeInput,
   getSlotMinutes,
   buildRequestFingerprint,
