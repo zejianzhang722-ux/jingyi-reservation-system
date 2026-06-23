@@ -64,8 +64,8 @@ jobs:
       - name: Initialize MySQL consistency database
         shell: bash
         run: |
-          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/schema.sql | mysql -h 127.0.0.1 -uroot -pci_password
-          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/seed.sql | mysql -h 127.0.0.1 -uroot -pci_password
+          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/schema.sql | docker exec -i ${{ job.services.mysql.id }} mysql -uroot -pci_password
+          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/seed.sql | docker exec -i ${{ job.services.mysql.id }} mysql -uroot -pci_password
       - name: Run MySQL reservation concurrency regression
         env:
           NODE_ENV: test
