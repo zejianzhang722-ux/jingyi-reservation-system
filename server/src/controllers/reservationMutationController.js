@@ -4,7 +4,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const config = require('../config');
 const helpers = require('../utils/helpers');
-const reservationService = require('../services/reservationService');
+const reservationCommandService = require('../services/reservationCommandService');
 const mutationService = require('../services/reservationMutationService');
 
 const update = async function(req, res) {
@@ -50,7 +50,7 @@ const rebook = async function(req, res) {
 
     const headerKey = req.get('Idempotency-Key') || req.get('X-Idempotency-Key');
     const fallbackKey = 'rebook:' + old.id + ':' + nextDate + ':' + req.user.id;
-    const created = await reservationService.createReservation({
+    const created = await reservationCommandService.createReservation({
       userId: old.user_id,
       roomId: old.room_id,
       seatId: old.seat_id || null,
