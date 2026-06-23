@@ -23,39 +23,52 @@ const readinessError = function(message, details) {
   return err;
 };
 
+const valueOf = function(row, lowerName, upperName) {
+  if (!row) return undefined;
+  if (row[lowerName] !== undefined) return row[lowerName];
+  return row[upperName];
+};
+
 const checkReservationSchema = async function() {
   if (db.isMock()) {
     return { mode: 'mock', ready: true, missing: [], invalid: [] };
   }
 
   const [databaseRows] = await db.query('SELECT DATABASE() AS database_name');
-  const databaseName = databaseRows[0] && databaseRows[0].database_name;
+  const databaseName = valueOf(databaseRows[0], 'database_name', 'DATABASE_NAME');
   if (!databaseName) throw readinessError('无法确认当前MySQL数据库');
 
   const [columnRows] = await db.query(
-    "SELECT column_name FROM information_schema.columns " +
+    "SELECT column_name AS reservation_column FROM information_schema.columns " +
     "WHERE table_schema = ? AND table_name = 'reservations' AND column_name IN (?, ?)",
     [databaseName].concat(requiredReservationColumns)
   );
-  const presentColumns = columnRows.map(function(row) { return row.column_name; });
+  const presentColumns = columnRows.map(function(row) {
+    return valueOf(row, 'reservation_column', 'RESERVATION_COLUMN');
+  });
 
   const [tableRows] = await db.query(
-    "SELECT table_name FROM information_schema.tables " +
+    "SELECT table_name AS reservation_table FROM information_schema.tables " +
     "WHERE table_schema = ? AND table_name = 'reservation_slots'",
     [databaseName]
   );
 
   const indexNames = Object.keys(requiredIndexDefinitions);
   const [indexRows] = await db.query(
-    "SELECT table_name, index_name, non_unique, " +
-    "GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS index_columns " +
+    "SELECT table_name AS indexed_table, index_name AS reservation_index, non_unique AS is_non_unique, " +
+    "GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS indexed_columns " +
     "FROM information_schema.statistics WHERE table_schema = ? AND index_name IN (?, ?) " +
     "GROUP BY table_name, index_name, non_unique",
     [databaseName].concat(indexNames)
   );
   const indexMap = {};
   indexRows.forEach(function(row) {
-    indexMap[row.index_name] = row;
+    const indexName = valueOf(row, 'reservation_index', 'RESERVATION_INDEX');
+    indexMap[indexName] = {
+      table: valueOf(row, 'indexed_table', 'INDEXED_TABLE'),
+      columns: valueOf(row, 'indexed_columns', 'INDEXED_COLUMNS'),
+      nonUnique: valueOf(row, 'is_non_unique', 'IS_NON_UNIQUE')
+    };
   });
 
   const missing = [];
@@ -72,13 +85,13 @@ const checkReservationSchema = async function() {
       missing.push('index:' + indexName);
       return;
     }
-    if (actual.table_name !== expected.table) {
-      invalid.push('index:' + indexName + ':table=' + actual.table_name);
+    if (actual.table !== expected.table) {
+      invalid.push('index:' + indexName + ':table=' + actual.table);
     }
-    if (actual.index_columns !== expected.columns) {
-      invalid.push('index:' + indexName + ':columns=' + actual.index_columns);
+    if (actual.columns !== expected.columns) {
+      invalid.push('index:' + indexName + ':columns=' + actual.columns);
     }
-    if (expected.unique && Number(actual.non_unique) !== 0) {
+    if (expected.unique && Number(actual.nonUnique) !== 0) {
       invalid.push('index:' + indexName + ':not_unique');
     }
   });
