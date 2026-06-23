@@ -6,6 +6,16 @@ function formatDate(date) {
     String(date.getDate()).padStart(2, '0')
 }
 
+async function expectError(action, predicate, message) {
+  let caught = null
+  try {
+    await action()
+  } catch (err) {
+    caught = err
+  }
+  assert(caught && predicate(caught), message)
+}
+
 async function main() {
   const dbName = process.env.MYSQL_DATABASE || ''
   if (!/(test|ci|local|dev|stage)/i.test(dbName)) {
@@ -57,6 +67,35 @@ async function main() {
   )
 
   try {
+    await expectError(function() {
+      return reservationCommandService.createReservation({
+        userId: testUserA,
+        roomId: 1,
+        date,
+        startTime: '12:00',
+        endTime: '13:00',
+        participants: 1,
+        idempotencyKey: purposePrefix + ':study-no-seat'
+      })
+    }, function(err) {
+      return err.httpStatus === 400 && err.code === 'SEAT_REQUIRED'
+    }, 'study-room reservation without a seat must be rejected')
+
+    await expectError(function() {
+      return reservationCommandService.createReservation({
+        userId: testUserA,
+        roomId: 8,
+        date,
+        startTime: '13:00',
+        endTime: '14:00',
+        purpose: purposePrefix + ':zero-participants',
+        participants: 0,
+        idempotencyKey: purposePrefix + ':zero-participants'
+      })
+    }, function(err) {
+      return err.httpStatus === 400
+    }, 'explicit zero participants must not be normalized to one')
+
     const base = {
       roomId: 8,
       seatId: null,
@@ -93,30 +132,24 @@ async function main() {
     assert(idemAttempts.every(function(item) { return item.status === 'fulfilled' }), 'same idempotency request should not fail under concurrency')
     assert.strictEqual(Number(idemAttempts[0].value.id), Number(idemAttempts[1].value.id), 'same idempotency key should return one reservation')
 
-    let changedPayloadError = null
-    try {
-      await reservationCommandService.createReservation(Object.assign({}, idemInput, { participants: 5 }))
-    } catch (err) {
-      changedPayloadError = err
-    }
-    assert(changedPayloadError && changedPayloadError.httpStatus === 409, 'same key with changed payload should return 409')
+    await expectError(function() {
+      return reservationCommandService.createReservation(Object.assign({}, idemInput, { participants: 5 }))
+    }, function(err) {
+      return err.httpStatus === 409
+    }, 'same key with changed payload should return 409')
 
-    let longKeyError = null
-    try {
-      await reservationCommandService.createReservation(Object.assign({}, idemInput, {
+    await expectError(function() {
+      return reservationCommandService.createReservation(Object.assign({}, idemInput, {
         idempotencyKey: 'x'.repeat(129),
         startTime: '21:00',
         endTime: '22:00'
       }))
-    } catch (err) {
-      longKeyError = err
-    }
-    assert(longKeyError && longKeyError.code === 'IDEMPOTENCY_KEY_TOO_LONG', 'idempotency keys longer than 128 characters must return a validation error')
-    assert.strictEqual(longKeyError.httpStatus, 400, 'overlong idempotency keys must return HTTP 400 semantics')
+    }, function(err) {
+      return err.code === 'IDEMPOTENCY_KEY_TOO_LONG' && err.httpStatus === 400
+    }, 'idempotency keys longer than 128 characters must return a validation error')
 
-    let durationError = null
-    try {
-      await reservationCommandService.createReservation({
+    await expectError(function() {
+      return reservationCommandService.createReservation({
         userId: testUserB,
         roomId: 8,
         date,
@@ -126,10 +159,9 @@ async function main() {
         participants: 4,
         idempotencyKey: purposePrefix + ':duration-over'
       })
-    } catch (err) {
-      durationError = err
-    }
-    assert(durationError && durationError.code === 'MAX_DURATION_EXCEEDED', '181 minutes must exceed a 180-minute room limit')
+    }, function(err) {
+      return err.code === 'MAX_DURATION_EXCEEDED'
+    }, '181 minutes must exceed a 180-minute room limit')
 
     const exactDuration = await reservationCommandService.createReservation({
       userId: testUserB,
