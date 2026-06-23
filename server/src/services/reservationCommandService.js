@@ -190,12 +190,6 @@ const createReservationWithinTransaction = async function(connection, rawInput) 
   );
   if (dailyRows.length >= 3) throw httpError(400, '每日最多预约3次');
 
-  const [activeRows] = await connection.execute(
-    "SELECT id FROM reservations WHERE user_id = ? AND date >= CURDATE() AND status IN ('approved','pending','counselor_pending','checked_in') FOR UPDATE",
-    [input.userId]
-  );
-  if (activeRows.length >= 5) throw httpError(400, '同时最多5个有效预约');
-
   const reservationCode = helpers.generateReservationCode();
   const status = statusForRoom(rooms[0], input.forcedStatus);
   const [result] = await connection.execute(
@@ -252,14 +246,6 @@ const validateMockInput = function(input) {
       ACTIVE_STATUSES.includes(row.status);
   }).length;
   if (dailyCount >= 3) throw httpError(400, '每日最多预约3次');
-
-  const today = helpers.formatDate(new Date());
-  const activeCount = tables.reservations.filter(function(row) {
-    return Number(row.user_id) === input.userId &&
-      normalizeDate(row.date) >= today &&
-      ACTIVE_STATUSES.includes(row.status);
-  }).length;
-  if (activeCount >= 5) throw httpError(400, '同时最多5个有效预约');
 };
 
 const createReservation = async function(rawInput) {
