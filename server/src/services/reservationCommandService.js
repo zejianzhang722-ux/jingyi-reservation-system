@@ -20,6 +20,14 @@ const httpError = function(status, message, code) {
   return err;
 };
 
+const isDatabaseConcurrencyError = function(err) {
+  if (!err) return false;
+  return err.code === 'ER_LOCK_DEADLOCK' ||
+    err.code === 'ER_LOCK_WAIT_TIMEOUT' ||
+    Number(err.errno) === 1213 ||
+    Number(err.errno) === 1205;
+};
+
 const normalizeTime = function(value) {
   const match = String(value || '').match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
   if (!match) throw httpError(400, '预约时间格式无效');
@@ -183,10 +191,8 @@ const createReservationWithinTransaction = async function(connection, rawInput) 
   const input = normalizeInput(rawInput);
   const requestHash = buildRequestFingerprint(input);
 
-  // 所有创建入口首先锁定用户行，同一用户的每日限额检查因此被串行化。
   const [users] = await connection.execute('SELECT * FROM users WHERE id = ? FOR UPDATE', [input.userId]);
 
-  // 幂等记录在房间锁之前读取，避免“房间锁 -> 预约行锁”与修改流程形成反向锁序。
   if (input.idempotencyKey) {
     const [existingRows] = await connection.execute(
       'SELECT * FROM reservations WHERE user_id = ? AND idempotency_key = ? FOR UPDATE',
@@ -207,7 +213,6 @@ const createReservationWithinTransaction = async function(connection, rawInput) 
 
   validateReservationInput(input, users[0], rooms[0], seats[0] || null);
 
-  // 用户行锁已阻止同一用户并发创建；这里只需一致性读取，避免与取消/修改的预约行锁产生死锁环。
   const [dailyRows] = await connection.execute(
     "SELECT id FROM reservations WHERE user_id = ? AND date = ? AND status IN ('approved','pending','counselor_pending','checked_in')",
     [input.userId, input.date]
@@ -288,10 +293,13 @@ const createReservation = async function(rawInput) {
     return created;
   } catch (err) {
     try { await connection.rollback(); } catch (rollbackErr) {}
-    if (err && (err.code === 'ER_DUP_ENTRY' || err.errno === 1062)) {
+    if (err && (err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062)) {
       const existing = await readExistingIdempotentReservation(input);
       if (existing) return existing;
       throw httpError(409, '该时间段已有预约，存在冲突', 'SLOT_CONFLICT');
+    }
+    if (isDatabaseConcurrencyError(err)) {
+      throw httpError(409, '预约请求发生并发冲突，请重试', 'CONCURRENT_WRITE_CONFLICT');
     }
     throw err;
   } finally {
@@ -312,5 +320,6 @@ module.exports = {
   validateReservationInput,
   createReservationWithinTransaction,
   createReservation,
+  isDatabaseConcurrencyError,
   httpError
 };
