@@ -14,7 +14,8 @@ async function main() {
   }
 
   const db = require('../server/src/config/database')
-  const reservationService = require('../server/src/services/reservationService')
+  const reservationCommandService = require('../server/src/services/reservationCommandService')
+  const reservationLifecycleService = require('../server/src/services/reservationLifecycleService')
   const ready = await db.ready()
   assert(ready && ready.mode === 'mysql', 'MySQL must be available for concurrency checks')
 
@@ -28,6 +29,7 @@ async function main() {
 
   async function cleanup() {
     await db.query("DELETE FROM reservation_slots WHERE reservation_id IN (SELECT id FROM reservations WHERE purpose LIKE ?)", [purposePrefix + '%'])
+    await db.query("DELETE FROM reservation_waitlist WHERE date = ? AND start_time IN ('17:00','18:00')", [date])
     await db.query("DELETE FROM reservations WHERE purpose LIKE ?", [purposePrefix + '%'])
   }
 
@@ -45,8 +47,8 @@ async function main() {
     }
 
     const attempts = await Promise.allSettled([
-      reservationService.createReservation(Object.assign({ userId: 1, idempotencyKey: purposePrefix + ':a' }, base)),
-      reservationService.createReservation(Object.assign({ userId: 2, idempotencyKey: purposePrefix + ':b' }, base))
+      reservationCommandService.createReservation(Object.assign({ userId: 1, idempotencyKey: purposePrefix + ':a' }, base)),
+      reservationCommandService.createReservation(Object.assign({ userId: 2, idempotencyKey: purposePrefix + ':b' }, base))
     ])
 
     const fulfilled = attempts.filter(function(item) { return item.status === 'fulfilled' })
@@ -64,26 +66,87 @@ async function main() {
       purpose: purposePrefix + ':idem'
     })
     const idemAttempts = await Promise.allSettled([
-      reservationService.createReservation(idemInput),
-      reservationService.createReservation(idemInput)
+      reservationCommandService.createReservation(idemInput),
+      reservationCommandService.createReservation(idemInput)
     ])
     assert(idemAttempts.every(function(item) { return item.status === 'fulfilled' }), 'same idempotency request should not fail under concurrency')
     assert.strictEqual(Number(idemAttempts[0].value.id), Number(idemAttempts[1].value.id), 'same idempotency key should return one reservation')
 
     let changedPayloadError = null
     try {
-      await reservationService.createReservation(Object.assign({}, idemInput, { participants: 5 }))
+      await reservationCommandService.createReservation(Object.assign({}, idemInput, { participants: 5 }))
     } catch (err) {
       changedPayloadError = err
     }
     assert(changedPayloadError && changedPayloadError.httpStatus === 409, 'same key with changed payload should return 409')
 
+    let durationError = null
+    try {
+      await reservationCommandService.createReservation({
+        userId: 2,
+        roomId: 8,
+        date,
+        startTime: '08:00',
+        endTime: '11:01',
+        purpose: purposePrefix + ':duration-over',
+        participants: 4,
+        idempotencyKey: purposePrefix + ':duration-over'
+      })
+    } catch (err) {
+      durationError = err
+    }
+    assert(durationError && durationError.code === 'MAX_DURATION_EXCEEDED', '181 minutes must exceed a 180-minute room limit')
+
+    const exactDuration = await reservationCommandService.createReservation({
+      userId: 2,
+      roomId: 8,
+      date,
+      startTime: '08:00',
+      endTime: '11:00',
+      purpose: purposePrefix + ':duration-exact',
+      participants: 4,
+      idempotencyKey: purposePrefix + ':duration-exact'
+    })
+    assert(exactDuration && exactDuration.id, 'exactly 180 minutes must be allowed')
+
+    const source = await reservationCommandService.createReservation({
+      userId: 1,
+      roomId: 8,
+      date,
+      startTime: '17:00',
+      endTime: '18:00',
+      purpose: purposePrefix + ':waitlist-source',
+      participants: 4,
+      idempotencyKey: purposePrefix + ':waitlist-source'
+    })
+    const [waitlistInsert] = await db.query(
+      "INSERT INTO reservation_waitlist (user_id, room_id, seat_id, date, start_time, end_time, status, created_at) VALUES (?, ?, NULL, ?, ?, ?, 'waiting', NOW())",
+      [2, 8, date, '17:00', '18:00']
+    )
+
+    const lifecycleResult = await reservationLifecycleService.releaseAndPromote({
+      reservationId: source.id,
+      nextStatus: 'cancelled',
+      actorUserId: 1,
+      actorRole: 'student',
+      allowedCurrentStatuses: ['approved']
+    })
+    assert(lifecycleResult.promotedReservation && lifecycleResult.promotedReservation.id, 'release must promote the first waitlist entry')
+
+    const [convertedRows] = await db.query('SELECT status FROM reservation_waitlist WHERE id = ?', [waitlistInsert.insertId])
+    assert.strictEqual(convertedRows[0].status, 'converted', 'waitlist entry and promoted reservation must commit together')
+    const [promotedSlots] = await db.query('SELECT id FROM reservation_slots WHERE reservation_id = ?', [lifecycleResult.promotedReservation.id])
+    assert.strictEqual(promotedSlots.length, 60, 'promoted reservation must own all minute slots')
+    const [releasedSlots] = await db.query('SELECT id FROM reservation_slots WHERE reservation_id = ?', [source.id])
+    assert.strictEqual(releasedSlots.length, 0, 'released reservation must have no slots')
+
     const repeated = idemAttempts[0].value
-    await reservationService.releaseReservationAndPromoteWaitlist({
+    await reservationLifecycleService.releaseAndPromote({
       reservationId: repeated.id,
       nextStatus: 'cancelled',
       actorUserId: 1,
-      actorRole: 'student'
+      actorRole: 'student',
+      allowedCurrentStatuses: ['approved']
     })
     const [remainingSlots] = await db.query('SELECT id FROM reservation_slots WHERE reservation_id = ?', [repeated.id])
     assert.strictEqual(remainingSlots.length, 0, 'released reservation should have no slots')
