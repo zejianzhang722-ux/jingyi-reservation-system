@@ -5,6 +5,7 @@ const helpers = require('../utils/helpers');
 const config = require('../config');
 
 const ACTIVE_STATUSES = ['approved', 'pending', 'counselor_pending', 'checked_in'];
+const SEAT_REQUIRED_TYPES = ['study_room', 'study'];
 const PURPOSE_REQUIRED_TYPES = [
   'seminar_room', 'shared_space', 'seminar', 'discussion',
   'media_room', 'media', 'competition_room', 'competition',
@@ -20,6 +21,11 @@ const createHttpError = function(status, message, code) {
 
 const normalizeSeatScope = function(seatId) {
   return seatId ? Number(seatId) : 0;
+};
+
+const normalizeParticipants = function(value) {
+  if (value === undefined || value === null || value === '') return 1;
+  return Number(value);
 };
 
 const normalizeTime = function(value) {
@@ -53,7 +59,7 @@ const buildRequestFingerprint = function(input) {
     startTime: normalizeTime(input.startTime),
     endTime: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
-    participants: Number(input.participants || 1)
+    participants: normalizeParticipants(input.participants)
   };
   return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 };
@@ -67,7 +73,7 @@ const mapReservationRow = function(row, idempotent) {
     endTime: row.end_time,
     seatId: row.seat_id || null,
     purpose: row.purpose || '',
-    participants: Number(row.participants || 1),
+    participants: normalizeParticipants(row.participants),
     reservationCode: row.reservation_code,
     status: row.status,
     roomName: row.room_name || row.name || '',
@@ -94,6 +100,9 @@ const validateMockReservationInput = function(input, user, room, seat) {
   }
   if (!room) throw createHttpError(404, '功能房不存在');
   if (room.status !== 'open') throw createHttpError(400, '该功能房当前不可预约');
+  if (SEAT_REQUIRED_TYPES.includes(room.type || '') && !input.seatId) {
+    throw createHttpError(400, '自习室预约必须选择座位', 'SEAT_REQUIRED');
+  }
   if (input.seatId && (!seat || Number(seat.room_id) !== Number(input.roomId) || seat.status !== 'available')) {
     throw createHttpError(400, '座位不存在、不可用或不属于该功能房');
   }
@@ -206,7 +215,7 @@ const createReservationInMock = async function(input) {
     start_time: normalizeTime(input.startTime),
     end_time: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
-    participants: Number(input.participants || 1),
+    participants: normalizeParticipants(input.participants),
     status: getStatusForRoom(room),
     reservation_code: helpers.generateReservationCode(),
     idempotency_key: input.idempotencyKey || null,
@@ -243,7 +252,7 @@ const createReservation = async function(input) {
     startTime: normalizeTime(input.startTime),
     endTime: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
-    participants: Number(input.participants || 1),
+    participants: normalizeParticipants(input.participants),
     idempotencyKey: input.idempotencyKey ? String(input.idempotencyKey).trim() : null
   });
 
@@ -380,6 +389,8 @@ const sendReservationReminders = async function() {
 
 module.exports = {
   ACTIVE_STATUSES,
+  SEAT_REQUIRED_TYPES,
+  normalizeParticipants,
   createReservation,
   createReservationInMock,
   joinWaitlist,
