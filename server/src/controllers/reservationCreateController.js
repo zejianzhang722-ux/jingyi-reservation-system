@@ -1,7 +1,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
-const reservationService = require('../services/reservationService');
+const reservationCommandService = require('../services/reservationCommandService');
 const notificationService = require('../services/notificationService');
 
 const normalizeTime = function(body, prefix) {
@@ -22,7 +22,7 @@ const create = async function(req, res) {
     }
 
     const idempotencyKey = req.get('Idempotency-Key') || req.get('X-Idempotency-Key') || null;
-    const created = await reservationService.createReservation({
+    const created = await reservationCommandService.createReservation({
       userId: req.user.id,
       roomId: req.body.roomId,
       seatId: req.body.seatId || null,
