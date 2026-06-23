@@ -1,0 +1,96 @@
+const db = require('../config/database');
+const redis = require('../config/redis');
+
+const requiredReservationColumns = ['idempotency_key', 'request_hash'];
+const requiredReservationIndexes = [
+  'uk_reservation_user_idempotency',
+  'uk_room_seat_date_minute'
+];
+
+const readinessError = function(message, details) {
+  const err = new Error(message);
+  err.code = 'DATA_READINESS_FAILED';
+  err.httpStatus = 503;
+  err.details = details || null;
+  return err;
+};
+
+const checkReservationSchema = async function() {
+  if (db.isMock()) {
+    return { mode: 'mock', ready: true, missing: [] };
+  }
+
+  const [databaseRows] = await db.query('SELECT DATABASE() AS database_name');
+  const databaseName = databaseRows[0] && databaseRows[0].database_name;
+  if (!databaseName) throw readinessError('无法确认当前MySQL数据库');
+
+  const [columnRows] = await db.query(
+    "SELECT column_name FROM information_schema.columns " +
+    "WHERE table_schema = ? AND table_name = 'reservations' AND column_name IN (?, ?)",
+    [databaseName].concat(requiredReservationColumns)
+  );
+  const presentColumns = columnRows.map(function(row) { return row.column_name; });
+
+  const [tableRows] = await db.query(
+    "SELECT table_name FROM information_schema.tables " +
+    "WHERE table_schema = ? AND table_name = 'reservation_slots'",
+    [databaseName]
+  );
+
+  const [indexRows] = await db.query(
+    "SELECT DISTINCT index_name, table_name FROM information_schema.statistics " +
+    "WHERE table_schema = ? AND ((table_name = 'reservations' AND index_name = ?) " +
+    "OR (table_name = 'reservation_slots' AND index_name = ?))",
+    [databaseName].concat(requiredReservationIndexes)
+  );
+  const presentIndexes = indexRows.map(function(row) { return row.index_name; });
+
+  const missing = [];
+  requiredReservationColumns.forEach(function(column) {
+    if (!presentColumns.includes(column)) missing.push('reservations.' + column);
+  });
+  if (!tableRows.length) missing.push('table:reservation_slots');
+  requiredReservationIndexes.forEach(function(index) {
+    if (!presentIndexes.includes(index)) missing.push('index:' + index);
+  });
+
+  return {
+    mode: 'mysql',
+    database: databaseName,
+    ready: missing.length === 0,
+    missing
+  };
+};
+
+const checkDataReadiness = async function() {
+  const dbState = await db.ready();
+  const redisState = await redis.ready();
+  const schemaState = await checkReservationSchema();
+
+  if (process.env.NODE_ENV === 'production') {
+    if (dbState.mode !== 'mysql') {
+      throw readinessError('生产环境必须连接真实MySQL数据库', { dbState });
+    }
+    if (redisState.mode !== 'redis') {
+      throw readinessError('生产环境必须连接真实Redis服务', { redisState });
+    }
+    if (!schemaState.ready) {
+      throw readinessError('预约一致性数据库迁移尚未完成', schemaState);
+    }
+  }
+
+  return {
+    ready: schemaState.ready,
+    database: dbState,
+    redis: redisState,
+    schema: schemaState
+  };
+};
+
+module.exports = {
+  requiredReservationColumns,
+  requiredReservationIndexes,
+  checkReservationSchema,
+  checkDataReadiness,
+  readinessError
+};
