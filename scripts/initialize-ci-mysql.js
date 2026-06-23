@@ -2,6 +2,47 @@ const fs = require('fs')
 const path = require('path')
 const mysql = require('../server/node_modules/mysql2/promise')
 
+function splitStatements(sql) {
+  return sql
+    .replace(/^\uFEFF/, '')
+    .split(';')
+    .map(function(statement) { return statement.trim() })
+    .filter(Boolean)
+}
+
+function statementLabel(statement) {
+  const match = statement.match(/^(CREATE TABLE|INSERT INTO|ALTER TABLE|USE|CREATE DATABASE)\s+(?:IF NOT EXISTS\s+)?`?([\w-]+)?/i)
+  return match ? match[1].toUpperCase() + ' ' + (match[2] || '') : statement.slice(0, 80)
+}
+
+async function executeStatements(connection, sql, allowDeferredForeignKeys) {
+  const deferred = []
+  const statements = splitStatements(sql)
+
+  for (const statement of statements) {
+    try {
+      await connection.query(statement)
+    } catch (err) {
+      const missingParent = err && (err.errno === 1824 || err.code === 'ER_FK_CANNOT_OPEN_PARENT')
+      if (allowDeferredForeignKeys && missingParent && /^CREATE TABLE/i.test(statement)) {
+        deferred.push(statement)
+        continue
+      }
+      err.message = statementLabel(statement) + ': ' + err.message
+      throw err
+    }
+  }
+
+  for (const statement of deferred) {
+    try {
+      await connection.query(statement)
+    } catch (err) {
+      err.message = statementLabel(statement) + ' (deferred): ' + err.message
+      throw err
+    }
+  }
+}
+
 async function main() {
   const database = process.env.MYSQL_DATABASE || 'jingyi_reservation_ci'
   if (!/(test|ci|local|dev|stage)/i.test(database)) {
@@ -12,8 +53,7 @@ async function main() {
     host: process.env.MYSQL_HOST || '127.0.0.1',
     port: Number(process.env.MYSQL_PORT || 3306),
     user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || '',
-    multipleStatements: true
+    password: process.env.MYSQL_PASSWORD || ''
   })
 
   try {
@@ -24,8 +64,8 @@ async function main() {
     }
 
     await connection.query('DROP DATABASE IF EXISTS `' + database.replace(/`/g, '') + '`')
-    await connection.query(replaceDatabase(fs.readFileSync(schemaPath, 'utf8')))
-    await connection.query(replaceDatabase(fs.readFileSync(seedPath, 'utf8')))
+    await executeStatements(connection, replaceDatabase(fs.readFileSync(schemaPath, 'utf8')), true)
+    await executeStatements(connection, replaceDatabase(fs.readFileSync(seedPath, 'utf8')), false)
 
     const [tables] = await connection.query(
       'SELECT table_name FROM information_schema.tables WHERE table_schema = ?',
