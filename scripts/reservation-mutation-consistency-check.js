@@ -84,8 +84,20 @@ async function main() {
   assert.strictEqual(Math.min.apply(null, preservedSlots.map(function(slot) { return Number(slot.slot_minute) })), 19 * 60, 'failed edit must not partially change slot state')
 
   const routeSource = fs.readFileSync(path.join(__dirname, '../server/src/routes/reservation.js'), 'utf8')
+  const controllerSource = fs.readFileSync(path.join(__dirname, '../server/src/controllers/reservationController.js'), 'utf8')
+  const serviceSource = fs.readFileSync(path.join(__dirname, '../server/src/services/reservationService.js'), 'utf8')
+  const commandSource = fs.readFileSync(path.join(__dirname, '../server/src/services/reservationCommandService.js'), 'utf8')
+
   assert(/reservationMutationController\.update/.test(routeSource), 'update route must use slot-safe mutation controller')
   assert(/reservationMutationController\.rebook/.test(routeSource), 'rebook route must use transactional create flow')
+  assert(/reservationLifecycleController\.cancel/.test(routeSource), 'cancel route must use atomic lifecycle controller')
+  assert(!/INSERT INTO reservations/i.test(controllerSource), 'read controller must not contain direct reservation inserts')
+  assert(!/UPDATE reservations SET/i.test(controllerSource), 'read controller must not contain direct reservation mutations')
+  assert(!/releaseReservationAndPromoteWaitlist/.test(controllerSource), 'obsolete lifecycle bypass must not return to the read controller')
+  assert(/require\('\.\/reservationCommandService'\)\.createReservation/.test(serviceSource), 'legacy service entry point must delegate MySQL writes to command service')
+  assert(!/const createReservationInMysql/.test(serviceSource), 'reservation service must not keep a second MySQL writer')
+  assert(/MAX_IDEMPOTENCY_KEY_LENGTH = 128/.test(commandSource), 'command service must enforce the database idempotency key width')
+  assert(!/status IN \('approved','pending','counselor_pending','checked_in'\) FOR UPDATE/.test(commandSource), 'daily limit read must not reintroduce reverse reservation-row locking')
 
   console.log('reservation-mutation-consistency-check passed')
 }
