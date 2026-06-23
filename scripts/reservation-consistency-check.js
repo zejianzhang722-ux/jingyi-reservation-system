@@ -21,6 +21,16 @@ function activeSlotCount(reservationId) {
   }).length
 }
 
+async function expectError(action, predicate, message) {
+  let caught = null
+  try {
+    await action()
+  } catch (err) {
+    caught = err
+  }
+  assert(caught && predicate(caught), message)
+}
+
 async function main() {
   await db.ready()
   assert.strictEqual(db.isMock(), true, 'mock consistency regression must use isolated mock data')
@@ -28,6 +38,37 @@ async function main() {
   const target = new Date()
   target.setDate(target.getDate() + 3)
   const date = formatDate(target)
+  const prefix = 'local-consistency-' + Date.now()
+
+  await expectError(function() {
+    return reservationService.createReservation({
+      userId: 1,
+      roomId: 1,
+      date,
+      startTime: '12:00',
+      endTime: '13:00',
+      participants: 1,
+      idempotencyKey: prefix + ':study-no-seat'
+    })
+  }, function(err) {
+    return err.httpStatus === 400 && err.code === 'SEAT_REQUIRED'
+  }, '自习室未选择座位必须返回400')
+
+  await expectError(function() {
+    return reservationService.createReservation({
+      userId: 1,
+      roomId: 8,
+      date,
+      startTime: '13:00',
+      endTime: '14:00',
+      purpose: '人数校验',
+      participants: 0,
+      idempotencyKey: prefix + ':zero-participants'
+    })
+  }, function(err) {
+    return err.httpStatus === 400
+  }, '显式参与人数0不得被自动改写为1')
+
   const baseRequest = {
     userId: 1,
     roomId: 8,
@@ -37,7 +78,7 @@ async function main() {
     endTime: '19:00',
     purpose: '项目研讨',
     participants: 4,
-    idempotencyKey: 'local-consistency-' + Date.now()
+    idempotencyKey: prefix + ':create'
   }
 
   const first = await reservationService.createReservation(baseRequest)
@@ -48,25 +89,21 @@ async function main() {
   assert.strictEqual(Number(repeated.id), Number(first.id), '相同幂等键和相同参数应返回原预约')
   assert.strictEqual(repeated.idempotent, true, '重复幂等请求应标记为幂等返回')
 
-  let idempotencyConflict = null
-  try {
-    await reservationService.createReservation(Object.assign({}, baseRequest, { participants: 5 }))
-  } catch (err) {
-    idempotencyConflict = err
-  }
-  assert(idempotencyConflict && idempotencyConflict.httpStatus === 409, '相同幂等键不同参数应返回409')
+  await expectError(function() {
+    return reservationService.createReservation(Object.assign({}, baseRequest, { participants: 5 }))
+  }, function(err) {
+    return err.httpStatus === 409
+  }, '相同幂等键不同参数应返回409')
 
-  let slotConflict = null
-  try {
-    await reservationService.createReservation(Object.assign({}, baseRequest, {
-      idempotencyKey: 'local-consistency-conflict-' + Date.now(),
+  await expectError(function() {
+    return reservationService.createReservation(Object.assign({}, baseRequest, {
+      idempotencyKey: prefix + ':slot-conflict',
       userId: 2,
       purpose: '冲突测试'
     }))
-  } catch (err) {
-    slotConflict = err
-  }
-  assert(slotConflict && slotConflict.httpStatus === 409, '相同房间时间槽冲突应返回409')
+  }, function(err) {
+    return err.httpStatus === 409
+  }, '相同房间时间槽冲突应返回409')
 
   await reservationService.joinWaitlist({
     userId: 2,
