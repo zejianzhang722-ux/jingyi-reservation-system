@@ -1,5 +1,9 @@
-const assert = require('assert')
+process.env.NODE_ENV = 'test'
+process.env.ALLOW_MOCK_DB = 'true'
+process.env.MYSQL_HOST = '127.0.0.1'
+process.env.MYSQL_PORT = '1'
 
+const assert = require('assert')
 const db = require('../server/src/config/database')
 const reservationService = require('../server/src/services/reservationService')
 const reservationLifecycleService = require('../server/src/services/reservationLifecycleService')
@@ -88,7 +92,9 @@ async function main() {
   console.log('reservation-consistency-check passed')
 }
 
-main().catch(function(err) {
+main().then(function() {
+  process.exit(0)
+}).catch(function(err) {
   console.error(err && err.stack ? err.stack : err)
   process.exit(1)
 })
