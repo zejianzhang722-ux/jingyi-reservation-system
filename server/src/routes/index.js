@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-var roleAuth = require('../middleware/roleAuth');
+const roleAuth = require('../middleware/roleAuth');
+const dataReadinessService = require('../services/dataReadinessService');
 
 router.use('/auth', require('./auth'));
 router.use('/user', require('./user'));
@@ -20,6 +21,30 @@ router.use('/feedback', require('./feedback'));
 
 router.get('/health', function(req, res) {
   res.json({ code: 200, message: 'success', data: { status: 'ok', timestamp: new Date().toISOString() } });
+});
+
+router.get('/ready', async function(req, res) {
+  try {
+    const readiness = await dataReadinessService.checkDataReadiness();
+    if (!readiness.ready) {
+      return res.status(503).json({
+        code: 503,
+        message: '服务依赖或数据库结构尚未就绪',
+        data: readiness
+      });
+    }
+    return res.json({
+      code: 200,
+      message: 'success',
+      data: Object.assign({ status: 'ready', timestamp: new Date().toISOString() }, readiness)
+    });
+  } catch (err) {
+    return res.status(503).json({
+      code: 503,
+      message: err.message || '服务依赖尚未就绪',
+      data: err.details || null
+    });
+  }
 });
 
 module.exports = router;
