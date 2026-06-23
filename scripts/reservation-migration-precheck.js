@@ -34,11 +34,13 @@ async function collect(connection, database) {
 
   const [invalidTimes] = await connection.execute(
     "SELECT id, room_id, date, start_time, end_time, status FROM reservations " +
-    "WHERE start_time NOT REGEXP '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' " +
+    "WHERE status IN (" + activePlaceholders + ") AND (" +
+    "start_time NOT REGEXP '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' " +
     "OR end_time NOT REGEXP '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' " +
-    "OR TIME_TO_SEC(STR_TO_DATE(end_time, '%H:%i:%s')) <= TIME_TO_SEC(STR_TO_DATE(start_time, '%H:%i:%s'))"
+    "OR TIME_TO_SEC(STR_TO_DATE(end_time, '%H:%i:%s')) <= TIME_TO_SEC(STR_TO_DATE(start_time, '%H:%i:%s')))",
+    ACTIVE_STATUSES
   )
-  report.blockers.invalidTimes = invalidTimes
+  report.blockers.invalidActiveTimes = invalidTimes
 
   const [overlaps] = await connection.execute(
     "SELECT a.id AS reservation_a, b.id AS reservation_b, a.room_id, COALESCE(a.seat_id, 0) AS seat_scope, " +
@@ -54,13 +56,23 @@ async function collect(connection, database) {
   report.blockers.activeOverlaps = overlaps
 
   const [durationViolations] = await connection.execute(
-    "SELECT r.id, r.room_id, r.date, r.start_time, r.end_time, rm.max_duration, " +
+    "SELECT r.id, r.room_id, r.date, r.start_time, r.end_time, r.status, rm.max_duration, " +
     "TIMESTAMPDIFF(MINUTE, STR_TO_DATE(r.start_time, '%H:%i:%s'), STR_TO_DATE(r.end_time, '%H:%i:%s')) AS duration_minutes " +
     "FROM reservations r JOIN rooms rm ON rm.id = r.room_id " +
-    "WHERE rm.max_duration > 0 AND " +
-    "TIMESTAMPDIFF(MINUTE, STR_TO_DATE(r.start_time, '%H:%i:%s'), STR_TO_DATE(r.end_time, '%H:%i:%s')) > rm.max_duration"
+    "WHERE r.status IN (" + activePlaceholders + ") AND rm.max_duration > 0 AND " +
+    "TIMESTAMPDIFF(MINUTE, STR_TO_DATE(r.start_time, '%H:%i:%s'), STR_TO_DATE(r.end_time, '%H:%i:%s')) > rm.max_duration",
+    ACTIVE_STATUSES
   )
-  report.blockers.durationViolations = durationViolations
+  report.blockers.activeDurationViolations = durationViolations
+
+  const [seatViolations] = await connection.execute(
+    "SELECT r.id, r.user_id, r.room_id, r.date, r.start_time, r.end_time, r.status, rm.type " +
+    "FROM reservations r JOIN rooms rm ON rm.id = r.room_id " +
+    "WHERE r.status IN (" + activePlaceholders + ") " +
+    "AND rm.type IN ('study_room', 'study') AND r.seat_id IS NULL",
+    ACTIVE_STATUSES
+  )
+  report.blockers.activeStudyReservationsWithoutSeat = seatViolations
 
   const hasIdempotencyKey = await columnExists(connection, database, 'reservations', 'idempotency_key')
   if (hasIdempotencyKey) {
