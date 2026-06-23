@@ -1,0 +1,31 @@
+name: Reservation mutation checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Check mutation files
+        run: |
+          node --check server/src/services/reservationMutationService.js
+          node --check server/src/controllers/reservationMutationController.js
+          node --check scripts/reservation-mutation-consistency-check.js
+      - name: Run mutation consistency regression
+        run: node scripts/reservation-mutation-consistency-check.js
