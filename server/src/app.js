@@ -14,6 +14,7 @@ const routes = require('./routes');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
 const { initScheduler } = require('./services/schedulerService');
+const dataReadinessService = require('./services/dataReadinessService');
 
 const app = express();
 if (process.env.NODE_ENV === 'production') {
@@ -96,14 +97,7 @@ app.set('io', io);
 
 const startServer = async function() {
   try {
-    const dbState = await db.ready();
-    const redisState = await redis.ready();
-    if (process.env.NODE_ENV === 'production' && dbState.mode !== 'mysql') {
-      throw new Error('生产环境必须连接真实MySQL数据库');
-    }
-    if (process.env.NODE_ENV === 'production' && redisState.mode !== 'redis') {
-      throw new Error('生产环境必须连接真实Redis服务');
-    }
+    const readiness = await dataReadinessService.checkDataReadiness();
 
     if (process.env.ENABLE_SCHEDULER === 'true') {
       initScheduler();
@@ -114,13 +108,18 @@ const startServer = async function() {
     server.listen(config.port, function() {
       var dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
       var redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
+      var schemaMode = readiness.schema.ready ? '已就绪' : '未完成迁移';
       console.log('========================================');
       console.log('  敬一书院预约管理系统服务已启动');
       console.log('  端口: ' + config.port);
       console.log('  数据库运行模式: ' + dbMode);
       console.log('  Redis运行模式: ' + redisMode);
+      console.log('  预约一致性结构: ' + schemaMode);
       console.log('========================================');
-      logger.info('敬一书院预约管理系统服务已启动，端口: ' + config.port + '，数据库: ' + dbMode + '，Redis: ' + redisMode);
+      logger.info(
+        '敬一书院预约管理系统服务已启动，端口: ' + config.port +
+        '，数据库: ' + dbMode + '，Redis: ' + redisMode + '，预约结构: ' + schemaMode
+      );
     });
   } catch (err) {
     logger.error('服务启动失败:', err);
