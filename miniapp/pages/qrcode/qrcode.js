@@ -8,14 +8,31 @@ Page({
     qrCodeUrl: '',
     loading: true,
     countdown: '',
+    credentialCountdown: '',
+    credentialReference: '',
+    credentialError: '',
+    refreshing: false,
     isExpired: false
   },
 
   onLoad: function (options) {
+    this._pageVisible = true
     var id = options.id
     if (id) {
       this.loadReservation(id, options)
     }
+  },
+
+  onShow: function () {
+    this._pageVisible = true
+    if (this.data.reservation && !this.data.isExpired && !this.data.loading) {
+      this.loadVoucherCode(this.data.reservation.id)
+    }
+  },
+
+  onHide: function () {
+    this._pageVisible = false
+    this.clearCredentialTimers()
   },
 
   normalizeSeatName: function (data) {
@@ -41,35 +58,94 @@ Page({
       seatName: this.normalizeSeatName(data),
       status: data.status || '',
       userName: data.real_name || data.userName || data.nickname || '',
-      qrCodeUrl: data.qrCodeUrl || data.qr_code_url || data.qrcode || '',
-      voucherCode: data.voucherCode || data.voucher_code || data.reservation_code || ''
+      qrCodeUrl: '',
+      voucherCode: ''
     }
+  },
+
+  clearCredentialTimers: function () {
+    if (this._credentialTimer) {
+      clearInterval(this._credentialTimer)
+      this._credentialTimer = null
+    }
+    if (this._refreshTimer) {
+      clearTimeout(this._refreshTimer)
+      this._refreshTimer = null
+    }
+  },
+
+  scheduleCredentialRefresh: function (expiresAt, refreshAfter) {
+    var that = this
+    this.clearCredentialTimers()
+    var expiry = new Date(expiresAt).getTime()
+
+    function updateCountdown() {
+      var diff = expiry - Date.now()
+      if (diff <= 0) {
+        that.setData({ credentialCountdown: '正在刷新' })
+        return
+      }
+      that.setData({ credentialCountdown: Math.max(1, Math.ceil(diff / 1000)) + '秒' })
+    }
+
+    updateCountdown()
+    this._credentialTimer = setInterval(updateCountdown, 1000)
+    this._refreshTimer = setTimeout(function () {
+      if (that._pageVisible && that.data.reservation && !that.data.isExpired) {
+        that.loadVoucherCode(that.data.reservation.id)
+      }
+    }, Math.max(5, Number(refreshAfter) || 45) * 1000)
   },
 
   loadVoucherCode: function (id) {
     var that = this
+    if (this._refreshing || !id || this.data.isExpired) return
+    this._refreshing = true
+    this.setData({ refreshing: true, credentialError: '' })
+
     request.get('/reservation/' + id + '/qrcode', {}, { silent: true }).then(function (data) {
+      var expiresAt = data.expiresAt || new Date(Date.now() + (Number(data.expiresIn) || 60) * 1000).toISOString()
       that.setData({
         qrCodeUrl: data.qrcode || data.qrCodeUrl || '',
         'reservation.qrCodeUrl': data.qrcode || data.qrCodeUrl || '',
-        'reservation.voucherCode': data.code || data.voucherCode || that.data.reservation.voucherCode || ''
+        'reservation.voucherCode': data.code || data.voucherCode || '',
+        credentialReference: data.code || data.voucherCode || '',
+        credentialError: '',
+        refreshing: false
       })
-    }).catch(function () {})
+      that.scheduleCredentialRefresh(expiresAt, data.refreshAfter)
+    }).catch(function (err) {
+      var message = err && err.message ? err.message : '动态凭证加载失败'
+      that.setData({
+        qrCodeUrl: '',
+        credentialError: message,
+        refreshing: false,
+        credentialCountdown: ''
+      })
+      that.clearCredentialTimers()
+      that._refreshTimer = setTimeout(function () {
+        if (that._pageVisible && that.data.reservation && !that.data.isExpired) {
+          that.loadVoucherCode(that.data.reservation.id)
+        }
+      }, 5000)
+    }).then(function () {
+      that._refreshing = false
+    })
   },
 
   loadReservation: function (id, options) {
     var that = this
     request.get('/reservation/' + id).then(function (data) {
       var reservation = that.transformReservation(data)
-      var isExpired = reservation.status === 'completed' || reservation.status === 'cancelled'
+      var isExpired = reservation.status === 'completed' || reservation.status === 'cancelled' || reservation.status === 'checked_in'
       that.setData({
         reservation: reservation,
-        qrCodeUrl: reservation.qrCodeUrl || '',
+        qrCodeUrl: '',
         isExpired: isExpired,
         loading: false
       })
-      that.loadVoucherCode(id)
       if (!isExpired) {
+        that.loadVoucherCode(id)
         that.startCountdown(reservation)
       }
     }).catch(function () {
@@ -84,11 +160,12 @@ Page({
         status: options.status || 'approved',
         userName: options.userName || '当前用户',
         qrCodeUrl: '',
-        voucherCode: options.voucherCode || ('JY' + Date.now().toString().slice(-8) + id)
+        voucherCode: ''
       }
       that.setData({
         reservation: fallback,
         qrCodeUrl: '',
+        credentialError: '无法读取预约信息，请检查网络后重试',
         isExpired: false,
         loading: false
       })
@@ -103,15 +180,18 @@ Page({
 
     if (now >= endTime) {
       this.setData({ isExpired: true, countdown: '已过期' })
+      this.clearCredentialTimers()
       return
     }
 
+    if (this._timer) clearInterval(this._timer)
     this._timer = setInterval(function () {
-      var now = new Date()
-      var diff = endTime.getTime() - now.getTime()
+      var current = new Date()
+      var diff = endTime.getTime() - current.getTime()
       if (diff <= 0) {
         clearInterval(that._timer)
-        that.setData({ isExpired: true, countdown: '已过期' })
+        that.clearCredentialTimers()
+        that.setData({ isExpired: true, countdown: '已过期', qrCodeUrl: '' })
         return
       }
       var hours = Math.floor(diff / (1000 * 60 * 60))
@@ -124,14 +204,14 @@ Page({
   },
 
   onUnload: function () {
-    if (this._timer) {
-      clearInterval(this._timer)
-    }
+    this._pageVisible = false
+    if (this._timer) clearInterval(this._timer)
+    this.clearCredentialTimers()
   },
 
   onRefreshQRCode: function () {
-    if (this.data.reservation) {
-      this.loadReservation(this.data.reservation.id)
+    if (this.data.reservation && !this.data.isExpired) {
+      this.loadVoucherCode(this.data.reservation.id)
     }
   }
 })

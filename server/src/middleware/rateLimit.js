@@ -21,6 +21,35 @@ const authLimiter = rateLimit({
   }
 });
 
+const studentLoginAccountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: function(req) {
+    const studentNo = req.body && req.body.studentNo ? String(req.body.studentNo).trim() : 'missing';
+    return 'student-account:' + req.ip + ':' + studentNo;
+  },
+  handler: function(req, res) {
+    return response.error(res, '登录请求过于频繁，请稍后再试', 429);
+  }
+});
+
+const studentLoginIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: function(req) {
+    return 'student-ip:' + req.ip;
+  },
+  handler: function(req, res) {
+    return response.error(res, '登录请求过于频繁，请稍后再试', 429);
+  }
+});
+
 // Token 刷新是正常会话维护，不应与登录失败共享同一个计数器，
 // 否则多个页面并发刷新会误伤后续登录。
 const refreshLimiter = rateLimit({
@@ -56,6 +85,8 @@ const checkinLimiter = rateLimit({
 module.exports = {
   apiLimiter,
   authLimiter,
+  studentLoginAccountLimiter,
+  studentLoginIpLimiter,
   refreshLimiter,
   reservationLimiter,
   checkinLimiter

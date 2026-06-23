@@ -38,6 +38,10 @@ jobs:
           done
       - name: Run security regression checks
         run: npm run check:security
+      - name: Run dynamic credential unit regression
+        run: node scripts/checkin-credential-check.js
+      - name: Run dynamic QR endpoint regression
+        run: node scripts/checkin-credential-runtime-check.js
       - name: Run request refresh regression
         run: npm run check:request-refresh
       - name: Run administrator miniapp regression

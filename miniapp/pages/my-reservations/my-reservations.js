@@ -132,11 +132,10 @@ Page({
   },
 
   onCheckIn: function (e) {
-    var that = this
     var id = e.currentTarget.dataset.id
-    request.post('/checkin', { reservationId: id }).then(function () {
-      wx.showToast({ title: '签到成功', icon: 'success' })
-      that.loadReservations()
+    if (!id) return
+    wx.navigateTo({
+      url: '/pages/qrcode/qrcode?id=' + id
     })
   },
 

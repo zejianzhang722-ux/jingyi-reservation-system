@@ -2,6 +2,13 @@
 .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 30rpx 0; }
 .admin-title { font-size: 40rpx; font-weight: 700; color: #1a1a2e; }
 .admin-role { font-size: 24rpx; color: #fff; background: linear-gradient(135deg, #0077ff, #00d4ff); padding: 6rpx 20rpx; border-radius: 20rpx; }
+.scan-checkin-card { display: flex; align-items: center; gap: 20rpx; margin-bottom: 24rpx; padding: 28rpx 30rpx; border-radius: 20rpx; background: linear-gradient(135deg, #0b63ce, #27b8ff); box-shadow: 0 12rpx 28rpx rgba(0, 102, 204, 0.2); }
+.scan-checkin-icon { width: 72rpx; height: 72rpx; flex-shrink: 0; border: 4rpx solid rgba(255,255,255,0.95); border-radius: 16rpx; box-sizing: border-box; position: relative; }
+.scan-checkin-icon::before { content: ''; position: absolute; left: 14rpx; right: 14rpx; top: 32rpx; height: 4rpx; border-radius: 4rpx; background: #fff; box-shadow: 0 -16rpx 0 rgba(255,255,255,0.65), 0 16rpx 0 rgba(255,255,255,0.65); }
+.scan-checkin-content { flex: 1; min-width: 0; }
+.scan-checkin-title { display: block; color: #fff; font-size: 32rpx; font-weight: 700; }
+.scan-checkin-desc { display: block; margin-top: 6rpx; color: rgba(255,255,255,0.82); font-size: 23rpx; }
+.scan-checkin-status { color: #0b63ce; background: #fff; padding: 10rpx 18rpx; border-radius: 24rpx; font-size: 23rpx; font-weight: 600; }
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20rpx; margin-bottom: 40rpx; }
 .stat-card { background: #fff; border-radius: 16rpx; padding: 30rpx; text-align: center; box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04); }
 .stat-value { display: block; font-size: 48rpx; font-weight: 700; color: #0077ff; }

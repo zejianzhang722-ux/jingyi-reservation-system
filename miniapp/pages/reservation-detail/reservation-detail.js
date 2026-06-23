@@ -113,14 +113,7 @@ Page({
             wx.showToast({ title: '已取消', icon: 'success' })
             that.loadReservation(that.data.reservation.id)
           }).catch(function () {
-            wx.showToast({ title: '已取消', icon: 'success' })
-            that.setData({
-              'reservation.status': 'cancelled',
-              statusText: '已取消',
-              statusClass: 'status-cancelled',
-              canCancel: false,
-              canCheckIn: false
-            })
+            wx.showToast({ title: '取消失败', icon: 'none' })
           })
         }
       }
@@ -128,20 +121,7 @@ Page({
   },
 
   onCheckIn: function () {
-    var that = this
-    request.post('/checkin', { reservationId: this.data.reservation.id }).then(function () {
-      wx.showToast({ title: '签到成功', icon: 'success' })
-      that.loadReservation(that.data.reservation.id)
-    }).catch(function () {
-      wx.showToast({ title: '签到成功', icon: 'success' })
-      that.setData({
-        'reservation.status': 'using',
-        statusText: '使用中',
-        statusClass: 'status-using',
-        canCancel: false,
-        canCheckIn: false
-      })
-    })
+    this.onViewQRCode()
   },
 
   onViewQRCode: function () {

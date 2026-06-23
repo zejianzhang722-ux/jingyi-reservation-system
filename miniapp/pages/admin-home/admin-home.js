@@ -8,7 +8,8 @@ Page({
     feedbackCount: 0,
     activeRooms: 0,
     pendingList: [],
-    roleName: '管理员'
+    roleName: '管理员',
+    scanning: false
   },
   ensureAdmin: function () {
     if (!auth.isLoggedIn() || !auth.isAdmin()) {
@@ -56,6 +57,51 @@ Page({
       that.setData({ pendingList: list.slice(0, 10) })
     }).catch(function () {
       that.setData({ pendingList: [] })
+    })
+  },
+  showScanError: function (message) {
+    wx.showToast({
+      title: message || '扫码签到失败',
+      icon: 'none',
+      duration: 2500
+    })
+  },
+  onScanCheckin: function () {
+    var that = this
+    if (this.data.scanning) return
+    this.setData({ scanning: true })
+    wx.scanCode({
+      onlyFromCamera: true,
+      scanType: ['qrCode'],
+      success: function (scanResult) {
+        var payload = null
+        try {
+          payload = JSON.parse(scanResult.result || '')
+        } catch (err) {
+          that.showScanError('该二维码不是有效的签到凭证')
+          return
+        }
+        if (!payload || payload.type !== 'jingyi-checkin' || !payload.reservationId || !payload.credential) {
+          that.showScanError('动态签到凭证格式无效')
+          return
+        }
+        request.post('/checkin', {
+          reservationId: payload.reservationId,
+          credential: payload.credential
+        }).then(function () {
+          wx.showToast({ title: '签到成功', icon: 'success' })
+          that.loadStats()
+        }).catch(function (err) {
+          that.showScanError(err && err.message ? err.message : '签到失败，请刷新二维码后重试')
+        })
+      },
+      fail: function (err) {
+        if (err && String(err.errMsg || '').indexOf('cancel') !== -1) return
+        that.showScanError('无法完成扫码，请检查相机权限')
+      },
+      complete: function () {
+        that.setData({ scanning: false })
+      }
     })
   },
   onApprove: function (e) {

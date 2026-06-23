@@ -66,7 +66,14 @@ const auditRules = [
 
 const checkinRules = [
   body('reservationId').isInt({ min: 1 }).withMessage('预约ID无效'),
-  body('code').optional().isLength({ min: 1, max: 20 }).withMessage('签到码无效'),
+  body('credential').optional().isString().isLength({ min: 20, max: 4096 }).withMessage('动态签到凭证无效'),
+  body('code').optional().isString().isLength({ min: 20, max: 4096 }).withMessage('动态签到凭证无效'),
+  body().custom(function(value) {
+    if (!value || (!value.credential && !value.code)) {
+      throw new Error('请提供动态签到凭证');
+    }
+    return true;
+  }),
   validate
 ];
 

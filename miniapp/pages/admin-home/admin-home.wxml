@@ -3,6 +3,16 @@
     <text class="admin-title">管理控制台</text>
     <text class="admin-role">{{roleName}}</text>
   </view>
+
+  <view class="scan-checkin-card" bindtap="onScanCheckin">
+    <view class="scan-checkin-icon"></view>
+    <view class="scan-checkin-content">
+      <text class="scan-checkin-title">扫码签到</text>
+      <text class="scan-checkin-desc">扫描学生出示的动态二维码</text>
+    </view>
+    <text class="scan-checkin-status">{{scanning ? '扫描中' : '开始扫码'}}</text>
+  </view>
+
   <view class="stats-grid">
     <view class="stat-card">
       <text class="stat-value">{{pendingCount}}</text>
