@@ -16,6 +16,7 @@ async function main() {
   const db = require('../server/src/config/database')
   const reservationCommandService = require('../server/src/services/reservationCommandService')
   const reservationLifecycleService = require('../server/src/services/reservationLifecycleService')
+  const reservationService = require('../server/src/services/reservationService')
   const ready = await db.ready()
   assert(ready && ready.mode === 'mysql', 'MySQL must be available for concurrency checks')
 
@@ -24,25 +25,34 @@ async function main() {
 
   const testUserA = 101
   const testUserB = 102
+  const testUserC = 103
+  const testUsers = [testUserA, testUserB, testUserC]
   const target = new Date()
   target.setDate(target.getDate() + 2)
   const date = formatDate(target)
   const purposePrefix = 'mysql-concurrency-check:' + Date.now()
 
   async function cleanup() {
-    await db.query('DELETE FROM reservation_slots WHERE reservation_id IN (SELECT id FROM reservations WHERE user_id IN (?, ?))', [testUserA, testUserB])
-    await db.query('DELETE FROM reservation_waitlist WHERE user_id IN (?, ?)', [testUserA, testUserB])
-    await db.query('DELETE FROM reservations WHERE user_id IN (?, ?)', [testUserA, testUserB])
-    await db.query('DELETE FROM users WHERE id IN (?, ?)', [testUserA, testUserB])
+    const placeholders = testUsers.map(function() { return '?' }).join(',')
+    await db.query(
+      'DELETE FROM reservation_slots WHERE reservation_id IN (SELECT id FROM reservations WHERE user_id IN (' + placeholders + '))',
+      testUsers
+    )
+    await db.query('DELETE FROM reservation_waitlist WHERE user_id IN (' + placeholders + ')', testUsers)
+    await db.query('DELETE FROM reservations WHERE user_id IN (' + placeholders + ')', testUsers)
+    await db.query('DELETE FROM users WHERE id IN (' + placeholders + ')', testUsers)
   }
 
   await cleanup()
   await db.query(
     "INSERT INTO users (id, openid, student_id, student_no, card_no, real_name, role, credit_score, status) VALUES " +
-    "(?, ?, ?, ?, ?, ?, 'student', 100, 'active'), (?, ?, ?, ?, ?, ?, 'student', 100, 'active')",
+    "(?, ?, ?, ?, ?, ?, 'student', 100, 'active'), " +
+    "(?, ?, ?, ?, ?, ?, 'student', 100, 'active'), " +
+    "(?, ?, ?, ?, ?, ?, 'student', 100, 'active')",
     [
       testUserA, 'ci_openid_' + testUserA, 'CI' + testUserA, 'CI' + testUserA, 'CARD' + testUserA, 'CI用户A',
-      testUserB, 'ci_openid_' + testUserB, 'CI' + testUserB, 'CI' + testUserB, 'CARD' + testUserB, 'CI用户B'
+      testUserB, 'ci_openid_' + testUserB, 'CI' + testUserB, 'CI' + testUserB, 'CARD' + testUserB, 'CI用户B',
+      testUserC, 'ci_openid_' + testUserC, 'CI' + testUserC, 'CI' + testUserC, 'CARD' + testUserC, 'CI用户C'
     ]
   )
 
@@ -91,6 +101,19 @@ async function main() {
     }
     assert(changedPayloadError && changedPayloadError.httpStatus === 409, 'same key with changed payload should return 409')
 
+    let longKeyError = null
+    try {
+      await reservationCommandService.createReservation(Object.assign({}, idemInput, {
+        idempotencyKey: 'x'.repeat(129),
+        startTime: '21:00',
+        endTime: '22:00'
+      }))
+    } catch (err) {
+      longKeyError = err
+    }
+    assert(longKeyError && longKeyError.code === 'IDEMPOTENCY_KEY_TOO_LONG', 'idempotency keys longer than 128 characters must return a validation error')
+    assert.strictEqual(longKeyError.httpStatus, 400, 'overlong idempotency keys must return HTTP 400 semantics')
+
     let durationError = null
     try {
       await reservationCommandService.createReservation({
@@ -119,6 +142,19 @@ async function main() {
       idempotencyKey: purposePrefix + ':duration-exact'
     })
     assert(exactDuration && exactDuration.id, 'exactly 180 minutes must be allowed')
+
+    const delegated = await reservationService.createReservation({
+      userId: testUserC,
+      roomId: 8,
+      date,
+      startTime: '14:00',
+      endTime: '15:00',
+      purpose: purposePrefix + ':delegated',
+      participants: 4,
+      idempotencyKey: purposePrefix + ':delegated'
+    })
+    const [delegatedSlots] = await db.query('SELECT id FROM reservation_slots WHERE reservation_id = ?', [delegated.id])
+    assert.strictEqual(delegatedSlots.length, 60, 'legacy service entry point must delegate to the strict transactional writer')
 
     const source = await reservationCommandService.createReservation({
       userId: testUserA,
