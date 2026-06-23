@@ -1,54 +1,84 @@
 const config = require('./index');
+const runtimeMode = require('./runtimeMode');
+const state = require('./databaseMode');
 
-let pool;
-let useMock = false;
+let pool = null;
+let initPromise = null;
 
-try {
-  const mysql = require('mysql2/promise');
-  pool = mysql.createPool(config.mysql);
-
-  pool.getConnection()
-    .then(function(connection) {
-      connection.release();
-      useMock = false;
-      console.log('[数据库] MySQL连接成功');
-    })
-    .catch(function(err) {
-      console.warn('[数据库] MySQL连接失败，切换到模拟数据模式:', err.message);
-      useMock = true;
-      pool = null;
-    });
-} catch (e) {
-  console.warn('[数据库] mysql2模块不可用，切换到模拟数据模式');
-  useMock = true;
-  pool = null;
+function serviceError(message, cause) {
+  const err = new Error(message);
+  err.code = 'DATABASE_UNAVAILABLE';
+  err.httpStatus = 503;
+  if (cause) err.cause = cause;
+  return err;
 }
 
-var query = function(sql, params) {
-  if (useMock) {
-    return require('./mock-db').query(sql, params);
-  }
-  return pool.execute(sql, params).catch(function(err) {
-    console.warn('[数据库] MySQL查询失败，回退到模拟数据:', err.message);
-    useMock = true;
-    pool = null;
-    return require('./mock-db').query(sql, params);
-  });
-};
+async function initialize() {
+  if (state.get() === 'mysql' || state.get() === 'mock') return state.get();
+  if (state.get() === 'failed') throw serviceError('数据库服务不可用');
+  if (initPromise) return initPromise;
 
-var getConnection = function() {
-  if (useMock) {
-    return Promise.resolve({ release: function() {} });
+  initPromise = (async function() {
+    try {
+      const mysql = require('mysql2/promise');
+      pool = mysql.createPool(config.mysql);
+      const connection = await pool.getConnection();
+      await connection.ping();
+      connection.release();
+      state.set('mysql');
+      return 'mysql';
+    } catch (err) {
+      pool = null;
+      if (runtimeMode.mockAllowed) {
+        state.set('mock');
+        console.warn('[数据库] 使用显式Mock模式:', err.message);
+        return 'mock';
+      }
+      state.set('failed');
+      throw serviceError('MySQL连接失败，当前环境禁止Mock回退', err);
+    }
+  })();
+
+  try {
+    return await initPromise;
+  } finally {
+    initPromise = null;
   }
-  return pool.getConnection().catch(function(err) {
-    useMock = true;
-    pool = null;
-    return { release: function() {} };
-  });
-};
+}
+
+async function query(sql, params) {
+  await initialize();
+  if (state.get() === 'mock') return require('./mock-db').query(sql, params);
+  try {
+    return await pool.execute(sql, params);
+  } catch (err) {
+    throw serviceError('数据库查询失败', err);
+  }
+}
+
+async function getConnection() {
+  await initialize();
+  if (state.get() === 'mock') return require('./mock-connection').create();
+  try {
+    return await pool.getConnection();
+  } catch (err) {
+    throw serviceError('无法获取数据库事务连接', err);
+  }
+}
+
+async function close() {
+  if (pool && typeof pool.end === 'function') await pool.end();
+  pool = null;
+  state.set('uninitialized');
+}
 
 module.exports = {
-  query: query,
-  getConnection: getConnection,
-  isMock: function() { return useMock; }
+  initialize,
+  query,
+  getConnection,
+  close,
+  isMock: function() { return state.get() === 'mock'; },
+  isReady: function() { return state.get() === 'mysql' || state.get() === 'mock'; },
+  getMode: state.get,
+  serviceError
 };
