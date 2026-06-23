@@ -62,10 +62,13 @@ jobs:
       - name: Run mock reservation consistency regression
         run: node scripts/reservation-consistency-check.js
       - name: Initialize MySQL consistency database
-        shell: bash
-        run: |
-          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/schema.sql | docker exec -i ${{ job.services.mysql.id }} mysql -uroot -pci_password
-          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/seed.sql | docker exec -i ${{ job.services.mysql.id }} mysql -uroot -pci_password
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/initialize-ci-mysql.js
       - name: Run MySQL reservation concurrency regression
         env:
           NODE_ENV: test
