@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const helpers = require('../utils/helpers');
+const commandService = require('./reservationCommandService');
 
 const EDITABLE_STATUSES = ['approved', 'pending', 'counselor_pending'];
 const SEAT_REQUIRED_TYPES = ['study_room', 'study'];
@@ -193,8 +194,11 @@ const updateInMysql = async function(options) {
     });
   } catch (err) {
     try { await connection.rollback(); } catch (rollbackError) {}
-    if (err && (err.code === 'ER_DUP_ENTRY' || err.errno === 1062)) {
+    if (err && (err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062)) {
       throw httpError(409, '修改后的时间段存在冲突', 'SLOT_CONFLICT');
+    }
+    if (commandService.isDatabaseConcurrencyError(err)) {
+      throw httpError(409, '预约修改发生并发冲突，请重试', 'CONCURRENT_WRITE_CONFLICT');
     }
     throw err;
   } finally {
