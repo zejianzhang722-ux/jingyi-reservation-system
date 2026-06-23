@@ -86,7 +86,14 @@ jobs:
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_reservation_ci
-        run: node scripts/mysql-reservation-concurrency-check.js
+        run: node scripts/mysql-reservation-concurrency-check.js > mysql-concurrency.log 2>&1
+      - name: Upload MySQL regression log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-concurrency-log
+          path: mysql-concurrency.log
+          if-no-files-found: ignore
       - name: Run server integration check
         run: npm run test:integration
         working-directory: server
