@@ -3,7 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
 const wechatService = require('../services/wechatService');
-const reservationService = require('../services/reservationService');
+const lifecycleService = require('../services/reservationLifecycleService');
 
 const allowedStatusesForRole = function(role) {
   if (role === 'super_admin') return ['pending', 'counselor_pending'];
@@ -155,10 +155,10 @@ const reject = async function(req, res) {
     const reservation = reservations[0];
     if (!ensureApprovalScope(req, res, reservation)) return;
 
-    await reservationService.releaseReservationAndPromoteWaitlist({
+    await lifecycleService.releaseAndPromote({
       reservationId: id,
       nextStatus: 'rejected',
-      reason: reason,
+      reason,
       auditedBy: req.user.id,
       allowedCurrentStatuses: [reservation.status]
     });
