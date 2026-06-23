@@ -3,6 +3,7 @@ const router = express.Router();
 const reservationController = require('../controllers/reservationController');
 const reservationCreateController = require('../controllers/reservationCreateController');
 const reservationMutationController = require('../controllers/reservationMutationController');
+const reservationLifecycleController = require('../controllers/reservationLifecycleController');
 const reservationApprovalController = require('../controllers/reservationApprovalController');
 const checkinCredentialController = require('../controllers/checkinCredentialController');
 const { auth, requireAdmin } = require('../middleware/auth');
@@ -16,7 +17,7 @@ router.get('/pending-count', auth, requireAdmin, reservationApprovalController.p
 router.put('/:id/approve', auth, requireAdmin, auditRules, reservationApprovalController.approve);
 router.put('/:id/reject', auth, requireAdmin, auditRules, reservationApprovalController.reject);
 router.get('/:id', auth, reservationIdRules, reservationController.detail);
-router.delete('/:id', auth, reservationIdRules, reservationController.cancel);
+router.delete('/:id', auth, reservationIdRules, reservationLifecycleController.cancel);
 router.put('/:id', auth, reservationIdRules, reservationMutationController.update);
 router.get('/:id/qrcode', auth, reservationIdRules, checkinCredentialController.issue);
 router.post('/:id/rebook', auth, reservationIdRules, reservationMutationController.rebook);
