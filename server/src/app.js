@@ -38,7 +38,7 @@ var corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Idempotency-Key']
 };
 app.use(cors(corsOptions));
 app.use(helmet());
@@ -94,24 +94,39 @@ io.on('connection', function(socket) {
 
 app.set('io', io);
 
-if (process.env.ENABLE_SCHEDULER === 'true') {
-  initScheduler();
-} else {
-  logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
-}
+const startServer = async function() {
+  try {
+    const dbState = await db.ready();
+    if (process.env.NODE_ENV === 'production' && dbState.mode !== 'mysql') {
+      throw new Error('生产环境必须连接真实MySQL数据库');
+    }
 
-setTimeout(function() {
-  server.listen(config.port, function() {
-    var dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
-    var redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
-    console.log('========================================');
-    console.log('  敬一书院预约管理系统服务已启动');
-    console.log('  端口: ' + config.port);
-    console.log('  数据库运行模式: ' + dbMode);
-    console.log('  Redis运行模式: ' + redisMode);
-    console.log('========================================');
-    logger.info('敬一书院预约管理系统服务已启动，端口: ' + config.port + '，数据库: ' + dbMode + '，Redis: ' + redisMode);
-  });
-}, 2000);
+    if (process.env.ENABLE_SCHEDULER === 'true') {
+      initScheduler();
+    } else {
+      logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
+    }
 
-module.exports = { app, server, io };
+    server.listen(config.port, function() {
+      var dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
+      var redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
+      console.log('========================================');
+      console.log('  敬一书院预约管理系统服务已启动');
+      console.log('  端口: ' + config.port);
+      console.log('  数据库运行模式: ' + dbMode);
+      console.log('  Redis运行模式: ' + redisMode);
+      console.log('========================================');
+      logger.info('敬一书院预约管理系统服务已启动，端口: ' + config.port + '，数据库: ' + dbMode + '，Redis: ' + redisMode);
+    });
+  } catch (err) {
+    logger.error('服务启动失败:', err);
+    if (process.env.NODE_ENV === 'production') {
+      process.exitCode = 1;
+      setTimeout(function() { process.exit(1); }, 50);
+    }
+  }
+};
+
+startServer();
+
+module.exports = { app, server, io, startServer };
