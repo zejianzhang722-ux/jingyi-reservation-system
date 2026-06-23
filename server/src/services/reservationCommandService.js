@@ -5,6 +5,7 @@ const helpers = require('../utils/helpers');
 const legacyReservationService = require('./reservationService');
 
 const ACTIVE_STATUSES = ['approved', 'pending', 'counselor_pending', 'checked_in'];
+const SEAT_REQUIRED_TYPES = ['study_room', 'study'];
 const PURPOSE_REQUIRED_TYPES = [
   'seminar_room', 'shared_space', 'seminar', 'discussion',
   'media_room', 'media', 'competition_room', 'competition',
@@ -52,6 +53,11 @@ const normalizeIdempotencyKey = function(value) {
   return key;
 };
 
+const normalizeParticipants = function(value) {
+  if (value === undefined || value === null || value === '') return 1;
+  return Number(value);
+};
+
 const normalizeInput = function(input) {
   return {
     userId: Number(input.userId),
@@ -61,7 +67,7 @@ const normalizeInput = function(input) {
     startTime: normalizeTime(input.startTime),
     endTime: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
-    participants: Number(input.participants || 1),
+    participants: normalizeParticipants(input.participants),
     idempotencyKey: normalizeIdempotencyKey(input.idempotencyKey),
     forcedStatus: input.forcedStatus || null
   };
@@ -112,6 +118,9 @@ const validateReservationInput = function(input, user, room, seat) {
   }
   if (!room) throw httpError(404, '功能房不存在');
   if (room.status !== 'open') throw httpError(400, '该功能房当前不可预约');
+  if (SEAT_REQUIRED_TYPES.includes(room.type || '') && !input.seatId) {
+    throw httpError(400, '自习室预约必须选择座位', 'SEAT_REQUIRED');
+  }
   if (input.seatId && (!seat || Number(seat.room_id) !== input.roomId || seat.status !== 'available')) {
     throw httpError(400, '座位不存在、不可用或不属于该功能房');
   }
@@ -150,7 +159,7 @@ const mapReservation = function(row, idempotent) {
     endTime: row.end_time,
     seatId: row.seat_id || null,
     purpose: row.purpose || '',
-    participants: Number(row.participants || 1),
+    participants: normalizeParticipants(row.participants),
     reservationCode: row.reservation_code,
     status: row.status,
     idempotent: !!idempotent
@@ -292,9 +301,11 @@ const createReservation = async function(rawInput) {
 
 module.exports = {
   ACTIVE_STATUSES,
+  SEAT_REQUIRED_TYPES,
   MAX_IDEMPOTENCY_KEY_LENGTH,
   normalizeDate,
   normalizeIdempotencyKey,
+  normalizeParticipants,
   normalizeInput,
   getSlotMinutes,
   buildRequestFingerprint,
