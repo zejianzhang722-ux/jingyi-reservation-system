@@ -11,7 +11,20 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,6 +59,23 @@ jobs:
         run: npm run check:request-refresh
       - name: Run administrator miniapp regression
         run: npm run check:admin-miniapp
+      - name: Run mock reservation consistency regression
+        run: node scripts/reservation-consistency-check.js
+      - name: Initialize MySQL consistency database
+        shell: bash
+        run: |
+          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/schema.sql | mysql -h 127.0.0.1 -uroot -pci_password
+          sed 's/jingyi_reservation/jingyi_reservation_ci/g' server/sql/seed.sql | mysql -h 127.0.0.1 -uroot -pci_password
+      - name: Run MySQL reservation concurrency regression
+        env:
+          NODE_ENV: test
+          ALLOW_MOCK_DB: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/mysql-reservation-concurrency-check.js
       - name: Run server integration check
         run: npm run test:integration
         working-directory: server
