@@ -29,12 +29,24 @@ const normalizeTime = function(value) {
   return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
 };
 
+const normalizeDate = function(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return helpers.formatDate(value);
+  }
+  const text = String(value || '').trim();
+  const direct = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct) return direct[1];
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return helpers.formatDate(parsed);
+  throw httpError(400, '预约日期格式无效');
+};
+
 const normalizeInput = function(input) {
   return {
     userId: Number(input.userId),
     roomId: Number(input.roomId),
     seatId: input.seatId ? Number(input.seatId) : null,
-    date: String(input.date || ''),
+    date: normalizeDate(input.date),
     startTime: normalizeTime(input.startTime),
     endTime: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
@@ -122,7 +134,7 @@ const mapReservation = function(row, idempotent) {
   return {
     id: row.id,
     roomId: row.room_id,
-    date: row.date,
+    date: normalizeDate(row.date),
     startTime: row.start_time,
     endTime: row.end_time,
     seatId: row.seat_id || null,
@@ -233,6 +245,21 @@ const validateMockInput = function(input) {
     ? tables.seats.find(function(row) { return Number(row.id) === input.seatId; })
     : null;
   validateReservationInput(input, user, room, seat);
+
+  const dailyCount = tables.reservations.filter(function(row) {
+    return Number(row.user_id) === input.userId &&
+      normalizeDate(row.date) === input.date &&
+      ACTIVE_STATUSES.includes(row.status);
+  }).length;
+  if (dailyCount >= 3) throw httpError(400, '每日最多预约3次');
+
+  const today = helpers.formatDate(new Date());
+  const activeCount = tables.reservations.filter(function(row) {
+    return Number(row.user_id) === input.userId &&
+      normalizeDate(row.date) >= today &&
+      ACTIVE_STATUSES.includes(row.status);
+  }).length;
+  if (activeCount >= 5) throw httpError(400, '同时最多5个有效预约');
 };
 
 const createReservation = async function(rawInput) {
@@ -264,6 +291,7 @@ const createReservation = async function(rawInput) {
 
 module.exports = {
   ACTIVE_STATUSES,
+  normalizeDate,
   normalizeInput,
   getSlotMinutes,
   buildRequestFingerprint,
