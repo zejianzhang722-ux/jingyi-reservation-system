@@ -43,8 +43,17 @@ async function executeStatements(connection, sql, allowDeferredForeignKeys) {
   }
 }
 
+function toLegacyReservationSchema(sql) {
+  return sql
+    .replace(/^\s*idempotency_key VARCHAR\(128\) DEFAULT NULL,\s*$/m, '')
+    .replace(/^\s*request_hash CHAR\(64\) DEFAULT NULL,\s*$/m, '')
+    .replace(/^\s*UNIQUE KEY uk_reservation_user_idempotency \(user_id, idempotency_key\)\s*$/m, '')
+    .replace(/\nCREATE TABLE reservation_slots \([\s\S]*?\n\) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n/m, '\n')
+}
+
 async function main() {
   const database = process.env.MYSQL_DATABASE || 'jingyi_reservation_ci'
+  const initializeLegacySchema = process.env.INITIALIZE_LEGACY_RESERVATION_SCHEMA === 'true'
   if (!/(test|ci|local|dev|stage)/i.test(database)) {
     throw new Error('Refusing to initialize a database without a safe test name')
   }
@@ -63,19 +72,29 @@ async function main() {
       return sql.replace(/jingyi_reservation/g, database)
     }
 
+    let schemaSql = replaceDatabase(fs.readFileSync(schemaPath, 'utf8'))
+    if (initializeLegacySchema) schemaSql = toLegacyReservationSchema(schemaSql)
+
     await connection.query('DROP DATABASE IF EXISTS `' + database.replace(/`/g, '') + '`')
-    await executeStatements(connection, replaceDatabase(fs.readFileSync(schemaPath, 'utf8')), true)
+    await executeStatements(connection, schemaSql, true)
     await executeStatements(connection, replaceDatabase(fs.readFileSync(seedPath, 'utf8')), false)
 
     const [tables] = await connection.query(
       'SELECT table_name FROM information_schema.tables WHERE table_schema = ?',
       [database]
     )
-    if (!tables.some(function(row) { return row.TABLE_NAME === 'reservation_slots' || row.table_name === 'reservation_slots' })) {
+    const hasReservationSlots = tables.some(function(row) {
+      return row.TABLE_NAME === 'reservation_slots' || row.table_name === 'reservation_slots'
+    })
+    if (initializeLegacySchema && hasReservationSlots) {
+      throw new Error('legacy CI schema must not contain reservation_slots before migration')
+    }
+    if (!initializeLegacySchema && !hasReservationSlots) {
       throw new Error('reservation_slots table was not created')
     }
 
-    console.log('initialize-ci-mysql passed: ' + database)
+    const mode = initializeLegacySchema ? 'legacy-reservation-schema' : 'current-schema'
+    console.log('initialize-ci-mysql passed: ' + database + ' (' + mode + ')')
   } finally {
     await connection.end()
   }
