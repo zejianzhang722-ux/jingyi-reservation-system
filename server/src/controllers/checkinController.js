@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const config = require('../config');
 const creditService = require('../services/creditService');
 const credentialService = require('../services/checkinCredentialService');
+const reservationService = require('../services/reservationService');
 const helpers = require('../utils/helpers');
 
 const ensureProductionDatabase = function() {
@@ -237,7 +238,10 @@ const patrol = async function(req, res) {
     }
 
     if (status === 'absent') {
-      await db.query("UPDATE reservations SET status = 'noshow' WHERE id = ?", [reservationId]);
+      await reservationService.releaseReservationAndPromoteWaitlist({
+        reservationId: reservationId,
+        nextStatus: 'noshow'
+      });
       await creditService.addCredit(reservations[0].user_id, config.credit.noshowPenalty, 'noshow', '巡查发现爽约');
     }
 

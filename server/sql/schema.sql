@@ -89,6 +89,8 @@ CREATE TABLE reservations (
   participants INT DEFAULT 1,
   status ENUM('pending', 'counselor_pending', 'approved', 'rejected', 'cancelled', 'checked_in', 'completed', 'noshow') DEFAULT 'pending',
   reservation_code VARCHAR(30) DEFAULT NULL UNIQUE,
+  idempotency_key VARCHAR(128) DEFAULT NULL,
+  request_hash CHAR(64) DEFAULT NULL,
   reject_reason VARCHAR(500) DEFAULT '',
   audited_by INT DEFAULT NULL,
   audited_at DATETIME DEFAULT NULL,
@@ -100,7 +102,23 @@ CREATE TABLE reservations (
   FOREIGN KEY (seat_id) REFERENCES seats(id) ON DELETE SET NULL,
   INDEX idx_date_status (date, status),
   INDEX idx_user_date (user_id, date),
-  INDEX idx_room_date (room_id, date)
+  INDEX idx_room_date (room_id, date),
+  UNIQUE KEY uk_reservation_user_idempotency (user_id, idempotency_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE reservation_slots (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  reservation_id INT NOT NULL,
+  room_id INT NOT NULL,
+  seat_scope INT NOT NULL DEFAULT 0,
+  date DATE NOT NULL,
+  slot_minute SMALLINT UNSIGNED NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE CASCADE,
+  FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_room_seat_date_minute (room_id, seat_scope, date, slot_minute),
+  INDEX idx_reservation_slots_reservation (reservation_id),
+  INDEX idx_reservation_slots_lookup (room_id, date, seat_scope)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE checkins (

@@ -24,115 +24,38 @@ const create = async function(req, res) {
       return response.error(res, '请提供预约时间段', 400);
     }
 
-    const [users] = await db.query('SELECT credit_score, status FROM users WHERE id = ?', [userId]);
-    if (users.length === 0) {
-      return response.error(res, '用户不存在', 404);
-    }
-    const user = users[0];
-
-    if (user.status === 'banned' || user.status === 'restricted') {
-      return response.error(res, '账号已被限制预约', 403);
-    }
-    if (user.credit_score < config.credit.restrictThreshold) {
-      return response.error(res, '信用分过低，无法预约', 403);
-    }
-
-    if (!helpers.isDateInRange(date, config.reservation.advanceDays)) {
-      return response.error(res, '预约日期不在允许范围内（今天至' + config.reservation.advanceDays + '天后）', 400);
-    }
-
-    const [rooms] = await db.query('SELECT * FROM rooms WHERE id = ?', [roomId]);
-    if (rooms.length === 0) {
-      return response.error(res, '功能房不存在', 404);
-    }
-    const room = rooms[0];
-
-    if (room.status !== 'open') {
-      return response.error(res, '该功能房当前不可预约', 400);
-    }
-
     const finalPurpose = (purpose || purposeCategory || '').trim();
     const finalParticipants = Number(participants || participantCount || 0);
-    const roomType = room.type || '';
-    const needsPurposeAndParticipants = ['seminar_room', 'shared_space', 'seminar', 'discussion', 'media_room', 'media', 'competition_room', 'competition', 'roadshow_space', 'roadshow'].includes(roomType);
-    if (needsPurposeAndParticipants) {
-      if (!finalPurpose) {
-        return response.error(res, '请填写用途分类', 400);
-      }
-      if (!Number.isInteger(finalParticipants) || finalParticipants <= 0) {
-        return response.error(res, '请填写有效参与人数', 400);
-      }
-      if (room.capacity && finalParticipants > Number(room.capacity)) {
-        return response.error(res, '参与人数不能超过功能房容量', 400);
-      }
-    }
-
-    if (room.open_start_time && room.open_end_time) {
-      if (finalStartTime < room.open_start_time || finalEndTime > room.open_end_time) {
-        return response.error(res, '预约时间不在功能房开放时间内（' + room.open_start_time + '-' + room.open_end_time + '）', 400);
-      }
-    }
-
-    const duration = helpers.calculateDuration(finalStartTime, finalEndTime);
-    if (duration <= 0) {
-      return response.error(res, '结束时间必须大于开始时间', 400);
-    }
-    if (room.max_duration && duration > room.max_duration * 60) {
-      return response.error(res, '单次预约时长不能超过' + room.max_duration + '分钟', 400);
-    }
-
-    const conflict = await reservationService.checkConflict(roomId, date, finalStartTime, finalEndTime, seatId);
-    if (conflict) {
-      return response.error(res, '该时间段已有预约，存在冲突', 409);
-    }
-
-    const [todayCount] = await db.query(
-      "SELECT COUNT(*) as count FROM reservations WHERE user_id = ? AND date = ? AND status IN ('approved', 'pending', 'counselor_pending', 'checked_in')",
-      [userId, date]
-    );
-    if (todayCount[0].count >= 3) {
-      return response.error(res, '每日最多预约3次', 400);
-    }
-
-    const reservationCode = helpers.generateReservationCode();
-
-    let status = 'approved';
-    if (room.need_audit) {
-      status = 'pending';
-    }
-    if (room.need_counselor_audit) {
-      status = 'counselor_pending';
-    }
-
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const [result] = await db.query(
-      'INSERT INTO reservations (user_id, room_id, seat_id, date, start_time, end_time, purpose, participants, status, reservation_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, roomId, seatId || null, date, finalStartTime, finalEndTime, finalPurpose, finalParticipants || 1, status, reservationCode, now]
-    );
-
-    if (status === 'approved') {
-      await notificationService.createNotification(userId, 'reservation_approved', '预约成功', '您在' + room.name + '的预约已通过', { reservationId: result.insertId });
-    } else if (status === 'pending') {
-      await notificationService.createNotification(userId, 'reservation_pending', '预约待审核', '您在' + room.name + '的预约正在审核中', { reservationId: result.insertId });
-    } else if (status === 'counselor_pending') {
-      await notificationService.createNotification(userId, 'reservation_pending', '预约待辅导员审批', '您在' + room.name + '的预约需要辅导员审批', { reservationId: result.insertId });
-    }
-
-    return response.success(res, {
-      id: result.insertId,
+    const idempotencyKey = req.get('Idempotency-Key') || req.get('X-Idempotency-Key') || null;
+    const created = await reservationService.createReservation({
+      userId: userId,
       roomId: roomId,
+      seatId: seatId || null,
       date: date,
       startTime: finalStartTime,
       endTime: finalEndTime,
-      seatId: seatId || null,
       purpose: finalPurpose,
       participants: finalParticipants || 1,
-      reservationCode: reservationCode,
-      status: status
-    }, '预约创建成功');
+      idempotencyKey: idempotencyKey
+    });
+
+    const [rooms] = await db.query('SELECT name FROM rooms WHERE id = ?', [roomId]);
+    const roomName = rooms.length > 0 ? rooms[0].name : (created.roomName || '');
+
+    if (!created.idempotent) {
+      if (created.status === 'approved') {
+        await notificationService.createNotification(userId, 'reservation_approved', '预约成功', '您在' + roomName + '的预约已通过', { reservationId: created.id });
+      } else if (created.status === 'pending') {
+        await notificationService.createNotification(userId, 'reservation_pending', '预约待审核', '您在' + roomName + '的预约正在审核中', { reservationId: created.id });
+      } else if (created.status === 'counselor_pending') {
+        await notificationService.createNotification(userId, 'reservation_pending', '预约待辅导员审批', '您在' + roomName + '的预约需要辅导员审批', { reservationId: created.id });
+      }
+    }
+
+    return response.success(res, created, created.idempotent ? '预约已存在' : '预约创建成功');
   } catch (err) {
     logger.error('创建预约异常:', err);
-    return response.error(res, err.message);
+    return response.error(res, err.message, err.httpStatus || 500);
   }
 };
 
@@ -238,16 +161,19 @@ const cancel = async function(req, res) {
       return response.error(res, '预约开始前' + config.reservation.cancelBeforeHours + '小时内不可取消', 400);
     }
 
-    await db.query("UPDATE reservations SET status = 'cancelled', cancelled_at = NOW() WHERE id = ?", [reservationId]);
-
-    await reservationService.processWaitlist(reservation.room_id, reservation.date, reservation.start_time, reservation.end_time, reservation.seat_id);
+    await reservationService.releaseReservationAndPromoteWaitlist({
+      reservationId: reservationId,
+      nextStatus: 'cancelled',
+      actorUserId: req.user.id,
+      actorRole: req.user.role
+    });
 
     await notificationService.createNotification(reservation.user_id, 'reservation_cancelled', '预约已取消', '您在' + reservation.date + '的预约已取消', { reservationId: reservationId });
 
     return response.success(res, null, '取消成功');
   } catch (err) {
     logger.error('取消预约异常:', err);
-    return response.error(res, err.message);
+    return response.error(res, err.message, err.httpStatus || 500);
   }
 };
 
@@ -371,26 +297,22 @@ const checkConflict = async function(req, res) {
 
 const joinWaitlist = async function(req, res) {
   try {
-    const { roomId, date, startTime, endTime } = req.body;
+    const { roomId, date, startTime, endTime, seatId } = req.body;
     const userId = req.user.id;
 
-    const [existing] = await db.query(
-      'SELECT id FROM reservation_waitlist WHERE user_id = ? AND room_id = ? AND date = ? AND start_time = ? AND end_time = ? AND status = ?',
-      [userId, roomId, date, startTime, endTime, 'waiting']
-    );
-    if (existing.length > 0) {
-      return response.error(res, '已在候补队列中', 400);
-    }
+    const result = await reservationService.joinWaitlist({
+      userId: userId,
+      roomId: roomId,
+      seatId: seatId || null,
+      date: date,
+      startTime: startTime,
+      endTime: endTime
+    });
 
-    const [result] = await db.query(
-      'INSERT INTO reservation_waitlist (user_id, room_id, date, start_time, end_time, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
-      [userId, roomId, date, startTime, endTime, 'waiting']
-    );
-
-    return response.success(res, { id: result.insertId }, '已加入候补队列');
+    return response.success(res, { id: result.id }, '已加入候补队列');
   } catch (err) {
     logger.error('加入候补异常:', err);
-    return response.error(res, err.message);
+    return response.error(res, err.message, err.httpStatus || 500);
   }
 };
 

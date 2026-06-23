@@ -172,6 +172,7 @@ const batchAudit = async function(req, res) {
           'WHERE id = ? AND status = ?',
           [req.user.id, reason, reservation.id, reservation.status]
         );
+        await runQuery('DELETE FROM reservation_slots WHERE reservation_id = ?', [reservation.id]);
       }
 
       if (!updateResult || updateResult.affectedRows === 0) {
