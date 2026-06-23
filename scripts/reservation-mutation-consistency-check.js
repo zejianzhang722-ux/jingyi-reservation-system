@@ -79,9 +79,35 @@ async function main() {
     conflict = err
   }
   assert(conflict && conflict.httpStatus === 409, 'conflicting edit must return 409')
+
+  let invalidTime = null
+  try {
+    await mutationService.updateReservation({
+      reservationId: first.id,
+      actor: { id: 1, role: 'student' },
+      startTime: '24:00',
+      endTime: '25:00'
+    })
+  } catch (err) {
+    invalidTime = err
+  }
+  assert(invalidTime && invalidTime.httpStatus === 400, 'invalid edited time must return 400')
+
+  let blankPurpose = null
+  try {
+    await mutationService.updateReservation({
+      reservationId: first.id,
+      actor: { id: 1, role: 'student' },
+      purpose: ''
+    })
+  } catch (err) {
+    blankPurpose = err
+  }
+  assert(blankPurpose && blankPurpose.httpStatus === 400, 'seminar room purpose must remain required after edits')
+
   const preservedSlots = slotsFor(first.id)
-  assert.strictEqual(preservedSlots.length, 60, 'failed edit must preserve original slots')
-  assert.strictEqual(Math.min.apply(null, preservedSlots.map(function(slot) { return Number(slot.slot_minute) })), 19 * 60, 'failed edit must not partially change slot state')
+  assert.strictEqual(preservedSlots.length, 60, 'failed edits must preserve original slots')
+  assert.strictEqual(Math.min.apply(null, preservedSlots.map(function(slot) { return Number(slot.slot_minute) })), 19 * 60, 'failed edits must not partially change slot state')
 
   const routeSource = fs.readFileSync(path.join(__dirname, '../server/src/routes/reservation.js'), 'utf8')
   const controllerSource = fs.readFileSync(path.join(__dirname, '../server/src/controllers/reservationController.js'), 'utf8')
