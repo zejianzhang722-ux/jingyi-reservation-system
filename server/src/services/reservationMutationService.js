@@ -2,6 +2,7 @@ const db = require('../config/database');
 const helpers = require('../utils/helpers');
 
 const EDITABLE_STATUSES = ['approved', 'pending', 'counselor_pending'];
+const SEAT_REQUIRED_TYPES = ['study_room', 'study'];
 const PURPOSE_REQUIRED_TYPES = [
   'seminar_room', 'shared_space', 'seminar', 'discussion',
   'media_room', 'media', 'competition_room', 'competition',
@@ -54,6 +55,9 @@ const authorize = function(reservation, actor) {
 const validateResource = function(room, seat, input) {
   if (!room) throw httpError(404, '功能房不存在');
   if (room.status !== 'open') throw httpError(400, '该功能房当前不可预约');
+  if (SEAT_REQUIRED_TYPES.includes(room.type || '') && !input.seatId) {
+    throw httpError(400, '自习室预约必须选择座位', 'SEAT_REQUIRED');
+  }
   if (input.seatId && (!seat || Number(seat.room_id) !== Number(room.id) || seat.status !== 'available')) {
     throw httpError(400, '座位不可用或不属于当前功能房');
   }
@@ -207,5 +211,6 @@ module.exports = {
   updateReservation,
   normalizeTime,
   slotMinutes,
-  EDITABLE_STATUSES
+  EDITABLE_STATUSES,
+  SEAT_REQUIRED_TYPES
 };
