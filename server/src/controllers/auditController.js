@@ -102,6 +102,27 @@ const notifyBatchResult = async function(reservation, action, reason) {
   }
 };
 
+const notifyPromotion = async function(promotion) {
+  if (!promotion || !promotion.entry || !promotion.promoted) return;
+  try {
+    await notificationService.createNotification(
+      promotion.entry.user_id,
+      'waitlist_converted',
+      '候补已转为预约',
+      promotion.promoted.status === 'approved'
+        ? '您的候补已自动转为正式预约'
+        : '您的候补已转为预约，请留意后续审核状态',
+      {
+        reservationId: promotion.promoted.id,
+        roomId: promotion.promoted.roomId,
+        date: promotion.promoted.date
+      }
+    );
+  } catch (err) {
+    logger.error('批量拒绝候补转正通知失败:', err);
+  }
+};
+
 const createHttpError = function(status, message) {
   const err = new Error(message);
   err.httpStatus = status;
@@ -116,6 +137,7 @@ const batchAudit = async function(req, res) {
   let connection = null;
   let transactional = false;
   let reservations = [];
+  const promotions = [];
 
   try {
     if (allowedStatuses.length === 0) {
@@ -173,6 +195,10 @@ const batchAudit = async function(req, res) {
           [req.user.id, reason, reservation.id, reservation.status]
         );
         await runQuery('DELETE FROM reservation_slots WHERE reservation_id = ?', [reservation.id]);
+        if (transactional) {
+          const promotion = await reservationLifecycleService.promoteWithinTransaction(connection, reservation);
+          if (promotion) promotions.push(promotion);
+        }
       }
 
       if (!updateResult || updateResult.affectedRows === 0) {
@@ -197,7 +223,7 @@ const batchAudit = async function(req, res) {
     }
   }
 
-  if (action === 'reject') {
+  if (action === 'reject' && !transactional) {
     for (const reservation of reservations) {
       try {
         await reservationLifecycleService.promoteReleasedReservation(reservation);
@@ -205,13 +231,20 @@ const batchAudit = async function(req, res) {
         logger.error('批量拒绝后的候补转正失败，预约ID=' + reservation.id + ':', err);
       }
     }
+  } else {
+    for (const promotion of promotions) {
+      await notifyPromotion(promotion);
+    }
   }
 
   for (const reservation of reservations) {
     await notifyBatchResult(reservation, action, reason);
   }
 
-  return response.success(res, { processed: reservations.length }, '批量审核完成');
+  return response.success(res, {
+    processed: reservations.length,
+    promoted: promotions.length
+  }, '批量审核完成');
 };
 
 const counselorPending = async function(req, res) {
