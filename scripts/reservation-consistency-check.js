@@ -2,6 +2,7 @@ const assert = require('assert')
 
 const db = require('../server/src/config/database')
 const reservationService = require('../server/src/services/reservationService')
+const reservationLifecycleService = require('../server/src/services/reservationLifecycleService')
 
 function formatDate(date) {
   return date.getFullYear() + '-' +
@@ -17,6 +18,9 @@ function activeSlotCount(reservationId) {
 }
 
 async function main() {
+  await db.ready()
+  assert.strictEqual(db.isMock(), true, 'mock consistency regression must use isolated mock data')
+
   const target = new Date()
   target.setDate(target.getDate() + 3)
   const date = formatDate(target)
@@ -69,11 +73,12 @@ async function main() {
     endTime: baseRequest.endTime
   })
 
-  const releaseResult = await reservationService.releaseReservationAndPromoteWaitlist({
+  const releaseResult = await reservationLifecycleService.releaseAndPromote({
     reservationId: first.id,
     nextStatus: 'cancelled',
     actorUserId: 1,
-    actorRole: 'student'
+    actorRole: 'student',
+    allowedCurrentStatuses: ['approved']
   })
 
   assert.strictEqual(activeSlotCount(first.id), 0, '取消预约后应释放时间槽')
