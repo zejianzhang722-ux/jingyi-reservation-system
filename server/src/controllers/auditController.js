@@ -130,7 +130,8 @@ const createHttpError = function(status, message) {
 };
 
 const batchAudit = async function(req, res) {
-  const ids = Array.from(new Set((req.body.ids || []).map(Number)));
+  // 所有批量事务按预约ID升序加锁，降低并发批次之间形成反向锁序的概率。
+  const ids = Array.from(new Set((req.body.ids || []).map(Number))).sort(function(a, b) { return a - b; });
   const action = req.body.action;
   const reason = String(req.body.reason || '').trim();
   const allowedStatuses = allowedStatusesForRole(req.user && req.user.role);
