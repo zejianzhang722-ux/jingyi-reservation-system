@@ -5,13 +5,15 @@ process.env.ALLOW_MOCK_REDIS = 'false'
 const assert = require('assert')
 const db = require('../server/src/config/database')
 const redis = require('../server/src/config/redis')
+const dataReadinessService = require('../server/src/services/dataReadinessService')
 
 async function main() {
-  const dbState = await db.ready()
-  const redisState = await redis.ready()
+  const readiness = await dataReadinessService.checkDataReadiness()
 
-  assert.strictEqual(dbState.mode, 'mysql', 'production readiness must use MySQL')
-  assert.strictEqual(redisState.mode, 'redis', 'production readiness must use Redis')
+  assert.strictEqual(readiness.database.mode, 'mysql', 'production readiness must use MySQL')
+  assert.strictEqual(readiness.redis.mode, 'redis', 'production readiness must use Redis')
+  assert.strictEqual(readiness.schema.ready, true, 'reservation consistency schema must be complete')
+  assert.deepStrictEqual(readiness.schema.missing, [], 'reservation consistency schema must have no missing objects')
   assert.strictEqual(db.isMock(), false, 'production database must never use mock mode')
   assert.strictEqual(redis.isMock(), false, 'production Redis must never use in-memory mock mode')
 
