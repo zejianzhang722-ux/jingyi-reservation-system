@@ -109,6 +109,32 @@ async function main() {
   assert.strictEqual(preservedSlots.length, 60, 'failed edits must preserve original slots')
   assert.strictEqual(Math.min.apply(null, preservedSlots.map(function(slot) { return Number(slot.slot_minute) })), 19 * 60, 'failed edits must not partially change slot state')
 
+  const studyReservation = await reservationService.createReservation({
+    userId: 1,
+    roomId: 1,
+    seatId: 1,
+    date,
+    startTime: '15:00',
+    endTime: '16:00',
+    participants: 1,
+    idempotencyKey: prefix + ':study-seat'
+  })
+  const originalStudySlots = slotsFor(studyReservation.id)
+  assert.strictEqual(originalStudySlots.length, 60, 'study-room reservation must own its selected seat slots')
+
+  let removedSeat = null
+  try {
+    await mutationService.updateReservation({
+      reservationId: studyReservation.id,
+      actor: { id: 1, role: 'student' },
+      seatId: null
+    })
+  } catch (err) {
+    removedSeat = err
+  }
+  assert(removedSeat && removedSeat.code === 'SEAT_REQUIRED', 'study-room edit must not clear the required seat')
+  assert.strictEqual(slotsFor(studyReservation.id).length, 60, 'rejected seat removal must preserve original study-room slots')
+
   const routeSource = fs.readFileSync(path.join(__dirname, '../server/src/routes/reservation.js'), 'utf8')
   const controllerSource = fs.readFileSync(path.join(__dirname, '../server/src/controllers/reservationController.js'), 'utf8')
   const serviceSource = fs.readFileSync(path.join(__dirname, '../server/src/services/reservationService.js'), 'utf8')
@@ -123,6 +149,7 @@ async function main() {
   assert(/require\('\.\/reservationCommandService'\)\.createReservation/.test(serviceSource), 'legacy service entry point must delegate MySQL writes to command service')
   assert(!/const createReservationInMysql/.test(serviceSource), 'reservation service must not keep a second MySQL writer')
   assert(/MAX_IDEMPOTENCY_KEY_LENGTH = 128/.test(commandSource), 'command service must enforce the database idempotency key width')
+  assert(/SEAT_REQUIRED_TYPES/.test(commandSource), 'command service must enforce study-room seat selection')
   assert(!/status IN \('approved','pending','counselor_pending','checked_in'\) FOR UPDATE/.test(commandSource), 'daily limit read must not reintroduce reverse reservation-row locking')
 
   console.log('reservation-mutation-consistency-check passed')
