@@ -111,8 +111,8 @@ async function main() {
   try {
     await waitForHealth(server)
 
-    const student = await loginStudent('2024001001', '200001')
-    const student2 = await loginStudent('2024001002', '200002')
+    let student = await loginStudent('2024001001', '200001')
+    let student2 = await loginStudent('2024001002', '200002')
     const admin = await loginAdmin('admin', 'admin123')
     const counselor = await loginAdmin('counselor', 'counselor123')
     const superAdmin = await loginAdmin('superadmin', 'super123')
@@ -126,6 +126,8 @@ async function main() {
       })
       expectStatus(repeatedStudentLogin, 200, 'repeated valid student login should not be rate limited')
     }
+    student = await loginStudent('2024001001', '200001')
+    student2 = await loginStudent('2024001002', '200002')
 
     expectStatus(await api('/user/profile', { headers: authHeaders(student.token) }), 200, 'access token business request')
     expectStatus(await api('/user/profile', { headers: authHeaders(student.refreshToken) }), 401, 'refresh token rejected on business request')

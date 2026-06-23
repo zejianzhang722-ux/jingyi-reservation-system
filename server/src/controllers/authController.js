@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
@@ -38,8 +39,16 @@ const generateTokens = function(user) {
     openid: user.openid || null,
     role: user.role
   };
-  const token = jwt.sign(payload, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
-  const refreshToken = jwt.sign(payload, config.jwt.secret, { expiresIn: config.jwt.refreshExpiresIn });
+  const token = jwt.sign(
+    Object.assign({}, payload, { tokenType: 'access' }),
+    config.jwt.secret,
+    { expiresIn: config.jwt.expiresIn, jwtid: crypto.randomBytes(16).toString('hex') }
+  );
+  const refreshToken = jwt.sign(
+    Object.assign({}, payload, { tokenType: 'refresh' }),
+    config.jwt.secret,
+    { expiresIn: config.jwt.refreshExpiresIn, jwtid: crypto.randomBytes(16).toString('hex') }
+  );
   return { token, refreshToken };
 };
 
@@ -132,6 +141,7 @@ const wechatLogin = async function(req, res) {
     try {
       await redis.set('token:' + user.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
     } catch(e) {}
+    const creditScore = await getCalculatedCreditScore(user);
 
     return response.success(res, {
       token: tokens.token,
@@ -192,8 +202,6 @@ const adminLogin = async function(req, res) {
       await redis.set('token:admin:' + admin.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
     } catch(e) {}
     await db.query('UPDATE admins SET last_login_at = NOW() WHERE id = ?', [admin.id]);
-
-    const creditScore = await getCalculatedCreditScore(user);
 
     return response.success(res, {
       token: tokens.token,
