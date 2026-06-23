@@ -94,7 +94,9 @@ async function main() {
   }
 }
 
-main().catch(function(err) {
+main().then(function() {
+  process.exit(0)
+}).catch(function(err) {
   console.error(err && err.stack ? err.stack : err)
   process.exit(1)
 })
