@@ -47,7 +47,10 @@ function toLegacyReservationSchema(sql) {
   return sql
     .replace(/^\s*idempotency_key VARCHAR\(128\) DEFAULT NULL,\s*$/m, '')
     .replace(/^\s*request_hash CHAR\(64\) DEFAULT NULL,\s*$/m, '')
-    .replace(/^\s*UNIQUE KEY uk_reservation_user_idempotency \(user_id, idempotency_key\)\s*$/m, '')
+    .replace(
+      /^\s*INDEX idx_room_date \(room_id, date\),\s*\n\s*UNIQUE KEY uk_reservation_user_idempotency \(user_id, idempotency_key\)\s*$/m,
+      '  INDEX idx_room_date (room_id, date)'
+    )
     .replace(/\nCREATE TABLE reservation_slots \([\s\S]*?\n\) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n/m, '\n')
 }
 
@@ -91,6 +94,17 @@ async function main() {
     }
     if (!initializeLegacySchema && !hasReservationSlots) {
       throw new Error('reservation_slots table was not created')
+    }
+
+    const [reservationColumns] = await connection.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = 'reservations'",
+      [database]
+    )
+    const columnNames = reservationColumns.map(function(row) {
+      return row.COLUMN_NAME || row.column_name
+    })
+    if (initializeLegacySchema && (columnNames.includes('idempotency_key') || columnNames.includes('request_hash'))) {
+      throw new Error('legacy CI schema must not contain consistency columns before migration')
     }
 
     const mode = initializeLegacySchema ? 'legacy-reservation-schema' : 'current-schema'
