@@ -1,28 +1,30 @@
 const config = require('./index');
 
 let useMock = false;
+let redis = null;
+let initializationError = null;
+const isProduction = process.env.NODE_ENV === 'production';
+const allowMock = !isProduction && process.env.ALLOW_MOCK_REDIS !== 'false';
 const mockStore = new Map();
 const mockExpiry = new Map();
 
 function createMockRedis() {
-  var checkExpiry = function(key) {
-    if (mockExpiry.has(key)) {
-      if (Date.now() > mockExpiry.get(key)) {
-        mockStore.delete(key);
-        mockExpiry.delete(key);
-        return true;
-      }
+  const checkExpiry = function(key) {
+    if (mockExpiry.has(key) && Date.now() > mockExpiry.get(key)) {
+      mockStore.delete(key);
+      mockExpiry.delete(key);
+      return true;
     }
     return false;
   };
 
-  var getExSeconds = function(exArg) {
-    if (typeof exArg === 'number') return exArg;
-    if (Array.isArray(exArg)) {
-      for (var i = 0; i < exArg.length - 1; i++) {
-        if (String(exArg[i]).toUpperCase() === 'EX') return Number(exArg[i + 1]);
-        if (String(exArg[i]).toUpperCase() === 'PX') return Number(exArg[i + 1]) / 1000;
-      }
+  const getExSeconds = function(args) {
+    for (let index = 0; index < args.length; index++) {
+      const current = args[index];
+      if (Array.isArray(current)) return getExSeconds(current);
+      if (typeof current === 'string' && current.toUpperCase() === 'EX') return Number(args[index + 1]);
+      if (typeof current === 'string' && current.toUpperCase() === 'PX') return Number(args[index + 1]) / 1000;
+      if (typeof current === 'number') return current;
     }
     return null;
   };
@@ -33,46 +35,25 @@ function createMockRedis() {
       return Promise.resolve(mockStore.get(key) || null);
     },
     set: function(key, value) {
-      var exSeconds = null;
-      for (var i = 2; i < arguments.length; i++) {
-        var arg = arguments[i];
-        if (Array.isArray(arg)) {
-          exSeconds = getExSeconds(arg);
-          break;
-        }
-        if (typeof arg === 'string' && arg.toUpperCase() === 'EX' && i + 1 < arguments.length) {
-          exSeconds = Number(arguments[i + 1]);
-          break;
-        }
-        if (typeof arg === 'number') {
-          exSeconds = arg;
-          break;
-        }
-      }
+      const args = Array.prototype.slice.call(arguments, 2);
+      const exSeconds = getExSeconds(args);
       mockStore.set(key, value);
-      if (exSeconds) {
-        mockExpiry.set(key, Date.now() + exSeconds * 1000);
-      } else {
-        mockExpiry.delete(key);
-      }
+      if (exSeconds) mockExpiry.set(key, Date.now() + exSeconds * 1000);
+      else mockExpiry.delete(key);
       return Promise.resolve('OK');
     },
-    del: function(key) {
-      if (Array.isArray(key)) {
-        var count = 0;
-        key.forEach(function(k) {
-          if (mockStore.delete(k)) count++;
-          mockExpiry.delete(k);
-        });
-        return Promise.resolve(count);
-      }
-      var existed = mockStore.delete(key);
-      mockExpiry.delete(key);
-      return Promise.resolve(existed ? 1 : 0);
+    del: function() {
+      const keys = Array.prototype.slice.call(arguments).flat();
+      let count = 0;
+      keys.forEach(function(key) {
+        if (mockStore.delete(key)) count++;
+        mockExpiry.delete(key);
+      });
+      return Promise.resolve(count);
     },
     expire: function(key, seconds) {
       if (!mockStore.has(key)) return Promise.resolve(0);
-      mockExpiry.set(key, Date.now() + seconds * 1000);
+      mockExpiry.set(key, Date.now() + Number(seconds) * 1000);
       return Promise.resolve(1);
     },
     exists: function(key) {
@@ -80,87 +61,75 @@ function createMockRedis() {
       return Promise.resolve(mockStore.has(key) ? 1 : 0);
     },
     keys: function(pattern) {
-      var regex = new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-      var result = [];
-      mockStore.forEach(function(val, key) {
-        if (!checkExpiry(key) && regex.test(key)) {
-          result.push(key);
-        }
+      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+      const result = [];
+      mockStore.forEach(function(value, key) {
+        if (!checkExpiry(key) && regex.test(key)) result.push(key);
       });
       return Promise.resolve(result);
     },
-    scan: function(cursor, matchOpt, pattern, countOpt, count) {
-      var allKeys = [];
-      mockStore.forEach(function(val, key) {
+    scan: function(cursor, matchOption, pattern, countOption, count) {
+      const allKeys = [];
+      mockStore.forEach(function(value, key) {
         if (!checkExpiry(key)) allKeys.push(key);
       });
-      var regex = new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-      var matched = allKeys.filter(function(k) { return regex.test(k); });
-      var countNum = count || 10;
-      var start = cursor * countNum;
-      var end = start + countNum;
-      var resultKeys = matched.slice(start, end);
-      var nextCursor = end >= matched.length ? 0 : cursor + 1;
-      return Promise.resolve([String(nextCursor), resultKeys]);
+      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+      const matched = allKeys.filter(function(key) { return regex.test(key); });
+      const countNumber = Number(count) || 10;
+      const start = Number(cursor) * countNumber;
+      const end = start + countNumber;
+      return Promise.resolve([String(end >= matched.length ? 0 : Number(cursor) + 1), matched.slice(start, end)]);
     },
     ttl: function(key) {
       if (!mockStore.has(key)) return Promise.resolve(-2);
       if (!mockExpiry.has(key)) return Promise.resolve(-1);
-      var remaining = Math.floor((mockExpiry.get(key) - Date.now()) / 1000);
+      const remaining = Math.floor((mockExpiry.get(key) - Date.now()) / 1000);
       return Promise.resolve(remaining > 0 ? remaining : -2);
     },
     hset: function(key) {
-      var args = Array.prototype.slice.call(arguments, 1);
-      if (!mockStore.has(key)) mockStore.set(key, {});
-      var hash = mockStore.get(key);
-      if (typeof hash !== 'object' || hash === null) {
-        hash = {};
-        mockStore.set(key, hash);
-      }
-      for (var i = 0; i < args.length - 1; i += 2) {
-        hash[args[i]] = args[i + 1];
-      }
+      const args = Array.prototype.slice.call(arguments, 1);
+      let hash = mockStore.get(key);
+      if (!hash || typeof hash !== 'object' || Array.isArray(hash)) hash = {};
+      for (let index = 0; index < args.length - 1; index += 2) hash[args[index]] = args[index + 1];
+      mockStore.set(key, hash);
       return Promise.resolve(1);
     },
     hget: function(key, field) {
       checkExpiry(key);
-      var hash = mockStore.get(key);
-      if (!hash || typeof hash !== 'object') return Promise.resolve(null);
+      const hash = mockStore.get(key);
+      if (!hash || typeof hash !== 'object' || Array.isArray(hash)) return Promise.resolve(null);
       return Promise.resolve(hash[field] !== undefined ? hash[field] : null);
     },
     hdel: function(key, field) {
-      var hash = mockStore.get(key);
-      if (!hash || typeof hash !== 'object') return Promise.resolve(0);
-      var existed = hash[field] !== undefined;
+      const hash = mockStore.get(key);
+      if (!hash || typeof hash !== 'object' || Array.isArray(hash)) return Promise.resolve(0);
+      const existed = hash[field] !== undefined;
       delete hash[field];
       return Promise.resolve(existed ? 1 : 0);
     },
     sadd: function(key) {
-      var members = Array.prototype.slice.call(arguments, 1);
-      if (!mockStore.has(key)) mockStore.set(key, []);
-      var set = mockStore.get(key);
-      if (!Array.isArray(set)) {
-        set = [];
-        mockStore.set(key, set);
-      }
-      var added = 0;
-      members.forEach(function(m) {
-        if (set.indexOf(m) === -1) {
-          set.push(m);
+      const members = Array.prototype.slice.call(arguments, 1);
+      let values = mockStore.get(key);
+      if (!Array.isArray(values)) values = [];
+      let added = 0;
+      members.forEach(function(member) {
+        if (!values.includes(member)) {
+          values.push(member);
           added++;
         }
       });
+      mockStore.set(key, values);
       return Promise.resolve(added);
     },
     srem: function(key) {
-      var members = Array.prototype.slice.call(arguments, 1);
-      var set = mockStore.get(key);
-      if (!set || !Array.isArray(set)) return Promise.resolve(0);
-      var removed = 0;
-      members.forEach(function(m) {
-        var idx = set.indexOf(m);
-        if (idx !== -1) {
-          set.splice(idx, 1);
+      const members = Array.prototype.slice.call(arguments, 1);
+      const values = mockStore.get(key);
+      if (!Array.isArray(values)) return Promise.resolve(0);
+      let removed = 0;
+      members.forEach(function(member) {
+        const index = values.indexOf(member);
+        if (index !== -1) {
+          values.splice(index, 1);
           removed++;
         }
       });
@@ -168,91 +137,112 @@ function createMockRedis() {
     },
     sismember: function(key, member) {
       checkExpiry(key);
-      var set = mockStore.get(key);
-      if (!set || !Array.isArray(set)) return Promise.resolve(0);
-      return Promise.resolve(set.indexOf(member) !== -1 ? 1 : 0);
+      const values = mockStore.get(key);
+      return Promise.resolve(Array.isArray(values) && values.includes(member) ? 1 : 0);
     },
     scard: function(key) {
       checkExpiry(key);
-      var set = mockStore.get(key);
-      if (!set || !Array.isArray(set)) return Promise.resolve(0);
-      return Promise.resolve(set.length);
+      const values = mockStore.get(key);
+      return Promise.resolve(Array.isArray(values) ? values.length : 0);
     },
     smembers: function(key) {
       checkExpiry(key);
-      var set = mockStore.get(key);
-      if (!set || !Array.isArray(set)) return Promise.resolve([]);
-      return Promise.resolve(set.slice());
+      const values = mockStore.get(key);
+      return Promise.resolve(Array.isArray(values) ? values.slice() : []);
     },
     incr: function(key) {
-      var val = Number(mockStore.get(key)) || 0;
-      val++;
-      mockStore.set(key, String(val));
-      return Promise.resolve(val);
+      const value = (Number(mockStore.get(key)) || 0) + 1;
+      mockStore.set(key, String(value));
+      return Promise.resolve(value);
     },
     decr: function(key) {
-      var val = Number(mockStore.get(key)) || 0;
-      val--;
-      mockStore.set(key, String(val));
-      return Promise.resolve(val);
+      const value = (Number(mockStore.get(key)) || 0) - 1;
+      mockStore.set(key, String(value));
+      return Promise.resolve(value);
     },
-    on: function(event, callback) {},
+    on: function() {},
     disconnect: function() {},
     quit: function() { return Promise.resolve('OK'); },
     ping: function() { return Promise.resolve('PONG'); }
   };
 }
 
-var redis;
+const mockRedis = createMockRedis();
+
+const switchToMock = function(err, context) {
+  initializationError = err || initializationError;
+  if (!allowMock) {
+    console.error('[Redis] ' + context + '，生产环境禁止回退到内存模拟模式:', err ? err.message : '未知错误');
+    return false;
+  }
+  if (!useMock) console.warn('[Redis] ' + context + '，仅在非生产环境切换到模拟模式:', err ? err.message : '未知错误');
+  useMock = true;
+  if (redis && typeof redis.disconnect === 'function') redis.disconnect();
+  return true;
+};
 
 try {
-  var Redis = require('ioredis');
+  const Redis = require('ioredis');
   redis = new Redis({
     host: config.redis.host,
     port: config.redis.port,
     password: config.redis.password || undefined,
     db: config.redis.db,
     retryStrategy: function(times) {
-      var delay = Math.min(times * 50, 2000);
-      return delay;
+      if (isProduction && times > 3) return null;
+      return Math.min(times * 50, 2000);
     },
     lazyConnect: true,
     maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
     connectTimeout: 3000
   });
-
   redis.on('connect', function() {
+    initializationError = null;
     console.log('[Redis] 连接成功');
   });
-
   redis.on('error', function(err) {
-    if (!useMock) {
-      console.warn('[Redis] 连接错误，切换到模拟模式:', err.message);
-      useMock = true;
-    }
+    initializationError = err;
+    if (allowMock) switchToMock(err, '连接错误');
+    else console.error('[Redis] 连接错误:', err.message);
   });
-
-  redis.ping().catch(function(err) {
-    console.warn('[Redis] ping失败，切换到模拟模式:', err.message);
-    useMock = true;
-  });
-} catch (e) {
-  console.warn('[Redis] ioredis模块不可用，切换到模拟模式');
-  useMock = true;
+} catch (err) {
+  switchToMock(err, 'ioredis模块不可用');
 }
 
-var mockRedis = createMockRedis();
+const ready = async function() {
+  if (useMock) return { mode: 'mock' };
+  if (!redis) {
+    if (switchToMock(initializationError || new Error('Redis客户端未初始化'), '客户端未初始化')) return { mode: 'mock' };
+    const err = new Error('Redis不可用，生产环境禁止回退到内存模拟模式');
+    err.code = 'REDIS_UNAVAILABLE';
+    throw err;
+  }
 
-module.exports = new Proxy(mockRedis, {
-  get: function(target, prop) {
-    if (useMock) {
-      return target[prop];
-    }
-    if (redis && typeof redis[prop] !== 'undefined') {
-      return redis[prop];
-    }
-    return target[prop];
+  try {
+    if (redis.status === 'wait') await redis.connect();
+    await redis.ping();
+    return { mode: 'redis' };
+  } catch (err) {
+    if (switchToMock(err, '连接失败')) return { mode: 'mock' };
+    const failure = new Error('Redis不可用，生产环境禁止回退到内存模拟模式');
+    failure.code = 'REDIS_UNAVAILABLE';
+    failure.cause = err;
+    throw failure;
+  }
+};
+
+const exported = new Proxy(mockRedis, {
+  get: function(target, property) {
+    if (property === 'isMock') return function() { return useMock; };
+    if (property === 'ready') return ready;
+    if (property === 'allowMock') return allowMock;
+    if (property === 'isProduction') return isProduction;
+    if (useMock) return target[property];
+    if (redis && typeof redis[property] === 'function') return redis[property].bind(redis);
+    if (redis && typeof redis[property] !== 'undefined') return redis[property];
+    return target[property];
   }
 });
 
-module.exports.isMock = function() { return useMock; };
+module.exports = exported;
