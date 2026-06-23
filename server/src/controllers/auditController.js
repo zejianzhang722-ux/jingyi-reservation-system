@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
 const wechatPushService = require('../services/wechatPushService');
+const reservationLifecycleService = require('../services/reservationLifecycleService');
 const reservationApprovalController = require('./reservationApprovalController');
 
 const allowedStatusesForRole = reservationApprovalController.allowedStatusesForRole;
@@ -66,7 +67,6 @@ const pendingList = async function(req, res) {
   }
 };
 
-// 单条审核统一复用预约接口控制器，避免 /audit 与 /reservation 两套权限规则漂移。
 const approve = reservationApprovalController.approve;
 const reject = reservationApprovalController.reject;
 
@@ -197,7 +197,16 @@ const batchAudit = async function(req, res) {
     }
   }
 
-  // 通知属于提交后的副作用，失败不回滚已成功的业务状态。
+  if (action === 'reject') {
+    for (const reservation of reservations) {
+      try {
+        await reservationLifecycleService.promoteReleasedReservation(reservation);
+      } catch (err) {
+        logger.error('批量拒绝后的候补转正失败，预约ID=' + reservation.id + ':', err);
+      }
+    }
+  }
+
   for (const reservation of reservations) {
     await notifyBatchResult(reservation, action, reason);
   }
