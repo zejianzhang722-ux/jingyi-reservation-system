@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const reservationController = require('../controllers/reservationController');
+const reservationCreateController = require('../controllers/reservationCreateController');
 const reservationMutationController = require('../controllers/reservationMutationController');
 const reservationApprovalController = require('../controllers/reservationApprovalController');
 const checkinCredentialController = require('../controllers/checkinCredentialController');
@@ -8,7 +9,7 @@ const { auth, requireAdmin } = require('../middleware/auth');
 const { createReservationRules, reservationIdRules, waitlistRules, paginationRules, auditRules } = require('../middleware/validator');
 const { reservationLimiter } = require('../middleware/rateLimit');
 
-router.post('/', auth, reservationLimiter, createReservationRules, reservationController.create);
+router.post('/', auth, reservationLimiter, createReservationRules, reservationCreateController.create);
 router.get('/', auth, paginationRules, reservationController.list);
 router.get('/pending', auth, requireAdmin, reservationApprovalController.pending);
 router.get('/pending-count', auth, requireAdmin, reservationApprovalController.pendingCount);
