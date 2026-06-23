@@ -2,10 +2,18 @@ const db = require('../config/database');
 const redis = require('../config/redis');
 
 const requiredReservationColumns = ['idempotency_key', 'request_hash'];
-const requiredReservationIndexes = [
-  'uk_reservation_user_idempotency',
-  'uk_room_seat_date_minute'
-];
+const requiredIndexDefinitions = {
+  uk_reservation_user_idempotency: {
+    table: 'reservations',
+    columns: 'user_id,idempotency_key',
+    unique: true
+  },
+  uk_room_seat_date_minute: {
+    table: 'reservation_slots',
+    columns: 'room_id,seat_scope,date,slot_minute',
+    unique: true
+  }
+};
 
 const readinessError = function(message, details) {
   const err = new Error(message);
@@ -17,7 +25,7 @@ const readinessError = function(message, details) {
 
 const checkReservationSchema = async function() {
   if (db.isMock()) {
-    return { mode: 'mock', ready: true, missing: [] };
+    return { mode: 'mock', ready: true, missing: [], invalid: [] };
   }
 
   const [databaseRows] = await db.query('SELECT DATABASE() AS database_name');
@@ -37,28 +45,50 @@ const checkReservationSchema = async function() {
     [databaseName]
   );
 
+  const indexNames = Object.keys(requiredIndexDefinitions);
   const [indexRows] = await db.query(
-    "SELECT DISTINCT index_name, table_name FROM information_schema.statistics " +
-    "WHERE table_schema = ? AND ((table_name = 'reservations' AND index_name = ?) " +
-    "OR (table_name = 'reservation_slots' AND index_name = ?))",
-    [databaseName].concat(requiredReservationIndexes)
+    "SELECT table_name, index_name, non_unique, " +
+    "GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS index_columns " +
+    "FROM information_schema.statistics WHERE table_schema = ? AND index_name IN (?, ?) " +
+    "GROUP BY table_name, index_name, non_unique",
+    [databaseName].concat(indexNames)
   );
-  const presentIndexes = indexRows.map(function(row) { return row.index_name; });
+  const indexMap = {};
+  indexRows.forEach(function(row) {
+    indexMap[row.index_name] = row;
+  });
 
   const missing = [];
+  const invalid = [];
   requiredReservationColumns.forEach(function(column) {
     if (!presentColumns.includes(column)) missing.push('reservations.' + column);
   });
   if (!tableRows.length) missing.push('table:reservation_slots');
-  requiredReservationIndexes.forEach(function(index) {
-    if (!presentIndexes.includes(index)) missing.push('index:' + index);
+
+  indexNames.forEach(function(indexName) {
+    const expected = requiredIndexDefinitions[indexName];
+    const actual = indexMap[indexName];
+    if (!actual) {
+      missing.push('index:' + indexName);
+      return;
+    }
+    if (actual.table_name !== expected.table) {
+      invalid.push('index:' + indexName + ':table=' + actual.table_name);
+    }
+    if (actual.index_columns !== expected.columns) {
+      invalid.push('index:' + indexName + ':columns=' + actual.index_columns);
+    }
+    if (expected.unique && Number(actual.non_unique) !== 0) {
+      invalid.push('index:' + indexName + ':not_unique');
+    }
   });
 
   return {
     mode: 'mysql',
     database: databaseName,
-    ready: missing.length === 0,
-    missing
+    ready: missing.length === 0 && invalid.length === 0,
+    missing,
+    invalid
   };
 };
 
@@ -89,7 +119,7 @@ const checkDataReadiness = async function() {
 
 module.exports = {
   requiredReservationColumns,
-  requiredReservationIndexes,
+  requiredIndexDefinitions,
   checkReservationSchema,
   checkDataReadiness,
   readinessError
