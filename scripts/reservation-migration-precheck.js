@@ -109,6 +109,13 @@ async function collect(connection, database) {
     report.warnings.inactiveReservationSlots = []
   }
 
+  if (process.env.REQUIRE_SLOT_CONSISTENCY === 'true') {
+    report.blockers.activeSlotMismatches = report.warnings.activeSlotMismatches
+    report.blockers.inactiveReservationSlots = report.warnings.inactiveReservationSlots
+    delete report.warnings.activeSlotMismatches
+    delete report.warnings.inactiveReservationSlots
+  }
+
   Object.keys(report.blockers).forEach(function(key) {
     report.summary.blockerCount += report.blockers[key].length
   })
