@@ -86,6 +86,18 @@ async function collect(connection, database) {
     report.blockers.duplicateIdempotencyKeys = []
   }
 
+  if (await tableExists(connection, database, 'reservation_waitlist')) {
+    const [waitlistDuplicates] = await connection.execute(
+      "SELECT user_id, room_id, COALESCE(seat_id, 0) AS seat_scope, date, start_time, end_time, " +
+      "COUNT(*) AS duplicate_count, GROUP_CONCAT(id ORDER BY id) AS waitlist_ids " +
+      "FROM reservation_waitlist WHERE status = 'waiting' " +
+      "GROUP BY user_id, room_id, COALESCE(seat_id, 0), date, start_time, end_time HAVING COUNT(*) > 1"
+    )
+    report.blockers.duplicateActiveWaitlistEntries = waitlistDuplicates
+  } else {
+    report.blockers.duplicateActiveWaitlistEntries = []
+  }
+
   const [missingResources] = await connection.execute(
     "SELECT r.id, r.user_id, r.room_id, r.seat_id, " +
     "CASE WHEN u.id IS NULL THEN 'missing_user' WHEN rm.id IS NULL THEN 'missing_room' " +
