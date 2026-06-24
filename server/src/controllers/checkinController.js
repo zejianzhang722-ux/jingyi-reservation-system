@@ -168,6 +168,9 @@ const checkout = async function(req, res) {
       throw err;
     }
 
+    // completed 不再占用有效时间槽；与签到记录和预约状态在同一事务提交。
+    await runQuery('DELETE FROM reservation_slots WHERE reservation_id = ?', [reservationId]);
+
     checkedOutUserId = checkins[0].user_id;
     if (transactional) await connection.commit();
   } catch (err) {
