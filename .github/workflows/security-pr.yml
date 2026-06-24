@@ -79,6 +79,14 @@ jobs:
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_reservation_ci
         run: node scripts/initialize-ci-mysql.js
+      - name: Seed partial slot migration state
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/seed-partial-reservation-slots.js
       - name: Run migration precheck
         env:
           MYSQL_HOST: 127.0.0.1
