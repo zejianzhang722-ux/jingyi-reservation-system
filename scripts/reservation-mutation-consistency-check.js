@@ -143,6 +143,7 @@ async function main() {
   const controllerSource = fs.readFileSync(path.join(__dirname, '../server/src/controllers/reservationController.js'), 'utf8')
   const serviceSource = fs.readFileSync(path.join(__dirname, '../server/src/services/reservationService.js'), 'utf8')
   const commandSource = fs.readFileSync(path.join(__dirname, '../server/src/services/reservationCommandService.js'), 'utf8')
+  const schemaSource = fs.readFileSync(path.join(__dirname, '../server/sql/schema.sql'), 'utf8')
 
   assert(/reservationMutationController\.update/.test(routeSource), 'update route must use slot-safe mutation controller')
   assert(/reservationMutationController\.rebook/.test(routeSource), 'rebook route must use transactional create flow')
@@ -150,11 +151,15 @@ async function main() {
   assert(!/INSERT INTO reservations/i.test(controllerSource), 'read controller must not contain direct reservation inserts')
   assert(!/UPDATE reservations SET/i.test(controllerSource), 'read controller must not contain direct reservation mutations')
   assert(!/releaseReservationAndPromoteWaitlist/.test(controllerSource), 'obsolete lifecycle bypass must not return to the read controller')
+  assert(/duplicateWaitlist/.test(controllerSource) && /ER_DUP_ENTRY/.test(controllerSource), 'waitlist duplicate races must return a normalized conflict response')
+  assert(/affectedRows === 0/.test(controllerSource), 'leaving an already processed waitlist entry must not report false success')
   assert(/require\('\.\/reservationCommandService'\)\.createReservation/.test(serviceSource), 'legacy service entry point must delegate MySQL writes to command service')
   assert(!/const createReservationInMysql/.test(serviceSource), 'reservation service must not keep a second MySQL writer')
   assert(/MAX_IDEMPOTENCY_KEY_LENGTH = 128/.test(commandSource), 'command service must enforce the database idempotency key width')
   assert(/SEAT_REQUIRED_TYPES/.test(commandSource), 'command service must enforce study-room seat selection')
   assert(!/status IN \('approved','pending','counselor_pending','checked_in'\) FOR UPDATE/.test(commandSource), 'daily limit read must not reintroduce reverse reservation-row locking')
+  assert(/waiting_seat_scope INT GENERATED ALWAYS AS/.test(schemaSource), 'canonical schema must contain the active-waitlist generated scope')
+  assert(/UNIQUE KEY uk_waitlist_user_slot/.test(schemaSource), 'canonical schema must enforce one active waitlist entry per user slot')
 
   console.log('reservation-mutation-consistency-check passed')
 }
