@@ -6,6 +6,29 @@ let initializationError = null;
 const isProduction = process.env.NODE_ENV === 'production';
 const allowMock = !isProduction && process.env.ALLOW_MOCK_DB !== 'false';
 
+const CONNECTION_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EPIPE',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'PROTOCOL_CONNECTION_LOST',
+  'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR',
+  'PROTOCOL_SEQUENCE_TIMEOUT',
+  'ER_CON_COUNT_ERROR',
+  'ER_SERVER_SHUTDOWN'
+]);
+
+const isConnectionFailure = function(err) {
+  if (!err) return false;
+  if (CONNECTION_ERROR_CODES.has(err.code)) return true;
+  const fatal = err.fatal === true;
+  const syscall = String(err.syscall || '').toLowerCase();
+  return fatal && ['connect', 'read', 'write'].includes(syscall);
+};
+
 const switchToMock = function(err, context) {
   initializationError = err || initializationError;
   if (!allowMock) {
@@ -35,14 +58,16 @@ const ready = async function() {
     return { mode: 'mock' };
   }
 
+  let connection = null;
   try {
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
     await connection.ping();
-    connection.release();
     return { mode: 'mysql' };
   } catch (err) {
     switchToMock(err, 'MySQL连接失败');
     return { mode: 'mock' };
+  } finally {
+    if (connection && typeof connection.release === 'function') connection.release();
   }
 };
 
@@ -58,11 +83,13 @@ const query = async function(sql, params) {
   try {
     return await pool.execute(sql, params);
   } catch (err) {
+    // 约束、语法和业务 SQL 错误必须原样返回，不能静默切换到另一套数据源。
+    if (!isConnectionFailure(err)) throw err;
     if (isProduction || !allowMock) {
       err.code = err.code || 'DATABASE_QUERY_FAILED';
       throw err;
     }
-    switchToMock(err, 'MySQL查询失败');
+    switchToMock(err, 'MySQL连接在查询期间中断');
     return require('./mock-db').query(sql, params);
   }
 };
@@ -82,7 +109,7 @@ const getConnection = async function() {
   try {
     return await pool.getConnection();
   } catch (err) {
-    if (isProduction || !allowMock) {
+    if (isProduction || !allowMock || !isConnectionFailure(err)) {
       err.code = err.code || 'DATABASE_CONNECTION_FAILED';
       throw err;
     }
@@ -105,6 +132,7 @@ module.exports = {
   getConnection,
   ready,
   assertTransactional,
+  isConnectionFailure,
   isMock: function() { return useMock; },
   isProduction,
   allowMock
