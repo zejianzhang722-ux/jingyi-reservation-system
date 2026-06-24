@@ -24,25 +24,26 @@ router.get('/health', function(req, res) {
 });
 
 router.get('/ready', async function(req, res) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const timestamp = new Date().toISOString();
   try {
     const readiness = await dataReadinessService.checkDataReadiness();
     if (!readiness.ready) {
       return res.status(503).json({
         code: 503,
         message: '服务依赖或数据库结构尚未就绪',
-        data: readiness
+        data: isProduction ? { status: 'not_ready', timestamp } : readiness
       });
     }
-    return res.json({
-      code: 200,
-      message: 'success',
-      data: Object.assign({ status: 'ready', timestamp: new Date().toISOString() }, readiness)
-    });
+
+    const publicData = { status: 'ready', timestamp };
+    if (!isProduction) publicData.details = readiness;
+    return res.json({ code: 200, message: 'success', data: publicData });
   } catch (err) {
     return res.status(503).json({
       code: 503,
-      message: err.message || '服务依赖尚未就绪',
-      data: err.details || null
+      message: isProduction ? '服务依赖尚未就绪' : (err.message || '服务依赖尚未就绪'),
+      data: isProduction ? { status: 'not_ready', timestamp } : (err.details || null)
     });
   }
 });
