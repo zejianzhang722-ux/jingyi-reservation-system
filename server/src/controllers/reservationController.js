@@ -129,9 +129,12 @@ const joinWaitlist = async function(req, res) {
     });
     return response.success(res, { id: result.id }, '已加入候补队列');
   } catch (err) {
-    if (err && (err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062)) {
-      return response.error(res, '已在候补队列中', 409);
-    }
+    const duplicateWaitlist = err && (
+      err.code === 'ER_DUP_ENTRY' ||
+      Number(err.errno) === 1062 ||
+      err.message === '已在候补队列中'
+    );
+    if (duplicateWaitlist) return response.error(res, '已在候补队列中', 409);
     logger.error('加入候补异常:', err);
     return response.error(res, err.message || '加入候补失败', err.httpStatus || 500);
   }
