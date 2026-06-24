@@ -2,6 +2,7 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const reservationService = require('../services/reservationService');
+const waitlistService = require('../services/waitlistService');
 
 const list = async function(req, res) {
   try {
@@ -119,10 +120,10 @@ const checkConflict = async function(req, res) {
 
 const joinWaitlist = async function(req, res) {
   try {
-    const result = await reservationService.joinWaitlist({
+    const result = await waitlistService.joinWaitlist({
       userId: req.user.id,
       roomId: req.body.roomId,
-      seatId: req.body.seatId || null,
+      seatId: req.body.seatId === undefined ? null : req.body.seatId,
       date: req.body.date,
       startTime: req.body.startTime,
       endTime: req.body.endTime
