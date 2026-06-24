@@ -233,11 +233,15 @@ CREATE TABLE reservation_waitlist (
   start_time VARCHAR(10) NOT NULL,
   end_time VARCHAR(10) NOT NULL,
   status ENUM('waiting', 'converted', 'cancelled', 'expired') DEFAULT 'waiting',
+  waiting_seat_scope INT GENERATED ALWAYS AS (
+    CASE WHEN status = 'waiting' THEN COALESCE(seat_id, 0) ELSE NULL END
+  ) STORED,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
-  INDEX idx_room_date_status (room_id, date, status)
+  INDEX idx_room_date_status (room_id, date, status),
+  UNIQUE KEY uk_waitlist_user_slot (user_id, room_id, waiting_seat_scope, date, start_time, end_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE reservation_groups (
