@@ -69,6 +69,18 @@ async function assertNoIdempotencyDuplicates(connection) {
   }
 }
 
+async function assertNoWaitingDuplicates(connection) {
+  const [rows] = await connection.execute(
+    "SELECT user_id, room_id, COALESCE(seat_id, 0) AS seat_scope, date, start_time, end_time, COUNT(*) AS duplicate_count " +
+    "FROM reservation_waitlist WHERE status = 'waiting' " +
+    "GROUP BY user_id, room_id, COALESCE(seat_id, 0), date, start_time, end_time " +
+    "HAVING COUNT(*) > 1 LIMIT 20"
+  )
+  if (rows.length) {
+    throw new Error('Duplicate active waitlist entries must be resolved before migration: ' + JSON.stringify(rows))
+  }
+}
+
 async function assertNoSlotDuplicates(connection) {
   const [rows] = await connection.execute(
     "SELECT room_id, seat_scope, date, slot_minute, COUNT(*) AS duplicate_count " +
@@ -90,6 +102,16 @@ async function ensureBaseSchema(connection, database) {
   await assertNoIdempotencyDuplicates(connection)
   if (!(await indexExists(connection, database, 'reservations', 'uk_reservation_user_idempotency'))) {
     await connection.query('ALTER TABLE reservations ADD UNIQUE KEY uk_reservation_user_idempotency (user_id, idempotency_key)')
+  }
+
+  if (!(await tableExists(connection, database, 'reservation_waitlist'))) {
+    throw new Error('reservation_waitlist table is required before consistency migration')
+  }
+  if (!(await columnExists(connection, database, 'reservation_waitlist', 'waiting_seat_scope'))) {
+    await connection.query(
+      "ALTER TABLE reservation_waitlist ADD COLUMN waiting_seat_scope INT " +
+      "GENERATED ALWAYS AS (CASE WHEN status = 'waiting' THEN COALESCE(seat_id, 0) ELSE NULL END) STORED AFTER status"
+    )
   }
 
   if (!(await tableExists(connection, database, 'reservation_slots'))) {
@@ -222,6 +244,16 @@ async function ensureSlotUniqueIndex(connection, database) {
   return true
 }
 
+async function ensureWaitlistUniqueIndex(connection, database) {
+  if (await indexExists(connection, database, 'reservation_waitlist', 'uk_waitlist_user_slot')) return false
+  await assertNoWaitingDuplicates(connection)
+  await connection.query(
+    'ALTER TABLE reservation_waitlist ADD UNIQUE KEY uk_waitlist_user_slot ' +
+    '(user_id, room_id, waiting_seat_scope, date, start_time, end_time)'
+  )
+  return true
+}
+
 async function main() {
   const database = process.env.MYSQL_DATABASE || 'jingyi_reservation'
   const connection = await mysql.createConnection({
@@ -245,6 +277,7 @@ async function main() {
     const insertedSlots = await backfillSlots(connection)
     await verifyBackfill(connection)
     const uniqueIndexAdded = await ensureSlotUniqueIndex(connection, database)
+    const waitlistUniqueIndexAdded = await ensureWaitlistUniqueIndex(connection, database)
 
     console.log(JSON.stringify({
       migration: 'reservation-consistency',
@@ -252,6 +285,7 @@ async function main() {
       insertedSlots,
       removedInactiveSlots,
       uniqueIndexAdded,
+      waitlistUniqueIndexAdded,
       status: 'ready'
     }, null, 2))
   } finally {
