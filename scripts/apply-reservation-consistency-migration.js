@@ -79,7 +79,7 @@ async function assertNoSlotDuplicates(connection) {
   }
 }
 
-async function ensureSchema(connection, database) {
+async function ensureBaseSchema(connection, database) {
   if (!(await columnExists(connection, database, 'reservations', 'idempotency_key'))) {
     await connection.query('ALTER TABLE reservations ADD COLUMN idempotency_key VARCHAR(128) DEFAULT NULL AFTER reservation_code')
   }
@@ -93,6 +93,7 @@ async function ensureSchema(connection, database) {
   }
 
   if (!(await tableExists(connection, database, 'reservation_slots'))) {
+    // 唯一索引在历史数据清理与回填验证完成后再添加，保证部分迁移可恢复。
     await connection.query(
       "CREATE TABLE reservation_slots (" +
       "id BIGINT AUTO_INCREMENT PRIMARY KEY," +
@@ -104,15 +105,9 @@ async function ensureSchema(connection, database) {
       "created_at DATETIME DEFAULT CURRENT_TIMESTAMP," +
       "CONSTRAINT fk_reservation_slots_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE CASCADE," +
       "CONSTRAINT fk_reservation_slots_room FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE," +
-      "UNIQUE KEY uk_room_seat_date_minute (room_id, seat_scope, date, slot_minute)," +
       "INDEX idx_reservation_slots_reservation (reservation_id)," +
       "INDEX idx_reservation_slots_lookup (room_id, date, seat_scope)" +
       ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-    )
-  } else if (!(await indexExists(connection, database, 'reservation_slots', 'uk_room_seat_date_minute'))) {
-    await assertNoSlotDuplicates(connection)
-    await connection.query(
-      'ALTER TABLE reservation_slots ADD UNIQUE KEY uk_room_seat_date_minute (room_id, seat_scope, date, slot_minute)'
     )
   }
 }
@@ -218,6 +213,15 @@ async function verifyBackfill(connection) {
   }
 }
 
+async function ensureSlotUniqueIndex(connection, database) {
+  if (await indexExists(connection, database, 'reservation_slots', 'uk_room_seat_date_minute')) return false
+  await assertNoSlotDuplicates(connection)
+  await connection.query(
+    'ALTER TABLE reservation_slots ADD UNIQUE KEY uk_room_seat_date_minute (room_id, seat_scope, date, slot_minute)'
+  )
+  return true
+}
+
 async function main() {
   const database = process.env.MYSQL_DATABASE || 'jingyi_reservation'
   const connection = await mysql.createConnection({
@@ -236,16 +240,18 @@ async function main() {
     lockHeld = true
 
     await assertNoActiveOverlaps(connection)
-    await ensureSchema(connection, database)
+    await ensureBaseSchema(connection, database)
     const removedInactiveSlots = await removeInactiveSlots(connection)
     const insertedSlots = await backfillSlots(connection)
     await verifyBackfill(connection)
+    const uniqueIndexAdded = await ensureSlotUniqueIndex(connection, database)
 
     console.log(JSON.stringify({
       migration: 'reservation-consistency',
       database,
       insertedSlots,
       removedInactiveSlots,
+      uniqueIndexAdded,
       status: 'ready'
     }, null, 2))
   } finally {
