@@ -24,6 +24,10 @@ function slotsFor(reservationId) {
 }
 
 async function main() {
+  assert.strictEqual(db.isConnectionFailure({ code: 'ER_DUP_ENTRY', errno: 1062 }), false, 'constraint errors must not trigger mock fallback')
+  assert.strictEqual(db.isConnectionFailure({ code: 'ER_PARSE_ERROR', errno: 1064 }), false, 'SQL syntax errors must not trigger mock fallback')
+  assert.strictEqual(db.isConnectionFailure({ code: 'ECONNREFUSED', syscall: 'connect', fatal: true }), true, 'connection refusal should allow non-production fallback')
+
   await db.ready()
   assert.strictEqual(db.isMock(), true, 'mutation regression must use isolated mock data')
 
