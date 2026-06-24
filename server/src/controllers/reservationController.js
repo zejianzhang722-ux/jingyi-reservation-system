@@ -129,6 +129,9 @@ const joinWaitlist = async function(req, res) {
     });
     return response.success(res, { id: result.id }, '已加入候补队列');
   } catch (err) {
+    if (err && (err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062)) {
+      return response.error(res, '已在候补队列中', 409);
+    }
     logger.error('加入候补异常:', err);
     return response.error(res, err.message || '加入候补失败', err.httpStatus || 500);
   }
@@ -136,10 +139,13 @@ const joinWaitlist = async function(req, res) {
 
 const leaveWaitlist = async function(req, res) {
   try {
-    await db.query(
+    const [result] = await db.query(
       "UPDATE reservation_waitlist SET status = 'cancelled', updated_at = NOW() WHERE id = ? AND user_id = ? AND status = 'waiting'",
       [req.params.id, req.user.id]
     );
+    if (!result || result.affectedRows === 0) {
+      return response.error(res, '候补记录不存在或已被处理', 409);
+    }
     return response.success(res, null, '已退出候补队列');
   } catch (err) {
     logger.error('退出候补异常:', err);
