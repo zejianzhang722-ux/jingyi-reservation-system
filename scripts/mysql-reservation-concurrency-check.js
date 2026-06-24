@@ -32,6 +32,8 @@ async function main() {
 
   const [slotTables] = await db.query("SHOW TABLES LIKE 'reservation_slots'")
   assert(slotTables.length > 0, 'reservation_slots table is required before running MySQL consistency checks')
+  const [waitlistIndexes] = await db.query("SHOW INDEX FROM reservation_waitlist WHERE Key_name = 'uk_waitlist_user_slot'")
+  assert(waitlistIndexes.length > 0, 'active waitlist uniqueness index is required before running MySQL consistency checks')
 
   const testUserA = 101
   const testUserB = 102
@@ -198,10 +200,30 @@ async function main() {
       participants: 4,
       idempotencyKey: purposePrefix + ':waitlist-source'
     })
-    const [waitlistInsert] = await db.query(
-      "INSERT INTO reservation_waitlist (user_id, room_id, seat_id, date, start_time, end_time, status, created_at) VALUES (?, ?, NULL, ?, ?, ?, 'waiting', NOW())",
-      [testUserB, 8, date, '17:00', '18:00']
+
+    const waitlistSql = "INSERT INTO reservation_waitlist " +
+      "(user_id, room_id, seat_id, date, start_time, end_time, status, created_at) " +
+      "VALUES (?, ?, NULL, ?, ?, ?, 'waiting', NOW())"
+    const waitlistParams = [testUserB, 8, date, '17:00', '18:00']
+    const waitlistAttempts = await Promise.allSettled([
+      db.query(waitlistSql, waitlistParams),
+      db.query(waitlistSql, waitlistParams)
+    ])
+    const waitlistCreated = waitlistAttempts.filter(function(item) { return item.status === 'fulfilled' })
+    const waitlistRejected = waitlistAttempts.filter(function(item) { return item.status === 'rejected' })
+    assert.strictEqual(waitlistCreated.length, 1, 'exactly one concurrent identical waitlist entry should succeed')
+    assert.strictEqual(waitlistRejected.length, 1, 'exactly one concurrent identical waitlist entry should fail')
+    assert(
+      waitlistRejected[0].reason.code === 'ER_DUP_ENTRY' || Number(waitlistRejected[0].reason.errno) === 1062,
+      'duplicate waitlist entry must be rejected by the database unique constraint'
     )
+    const waitlistInsertId = waitlistCreated[0].value[0].insertId
+    const [waitingCount] = await db.query(
+      "SELECT COUNT(*) AS count FROM reservation_waitlist WHERE user_id = ? AND room_id = ? " +
+      "AND waiting_seat_scope = 0 AND date = ? AND start_time = ? AND end_time = ? AND status = 'waiting'",
+      waitlistParams
+    )
+    assert.strictEqual(Number(waitingCount[0].count), 1, 'only one active waitlist entry may exist for one user and slot')
 
     const lifecycleResult = await reservationLifecycleService.releaseAndPromote({
       reservationId: source.id,
@@ -212,7 +234,7 @@ async function main() {
     })
     assert(lifecycleResult.promotedReservation && lifecycleResult.promotedReservation.id, 'release must promote the first waitlist entry')
 
-    const [convertedRows] = await db.query('SELECT status FROM reservation_waitlist WHERE id = ?', [waitlistInsert.insertId])
+    const [convertedRows] = await db.query('SELECT status FROM reservation_waitlist WHERE id = ?', [waitlistInsertId])
     assert.strictEqual(convertedRows[0].status, 'converted', 'waitlist entry and promoted reservation must commit together')
     const [promotedSlots] = await db.query('SELECT id FROM reservation_slots WHERE reservation_id = ?', [lifecycleResult.promotedReservation.id])
     assert.strictEqual(promotedSlots.length, 60, 'promoted reservation must own all minute slots')
