@@ -25,7 +25,12 @@ jobs:
       - name: Check mutation files
         run: |
           node --check server/src/services/reservationMutationService.js
+          node --check server/src/services/waitlistService.js
           node --check server/src/controllers/reservationMutationController.js
+          node --check server/src/controllers/checkinController.js
           node --check scripts/reservation-mutation-consistency-check.js
+          node --check scripts/checkout-waitlist-consistency-check.js
       - name: Run mutation consistency regression
         run: node scripts/reservation-mutation-consistency-check.js
+      - name: Run checkout and waitlist consistency regression
+        run: node scripts/checkout-waitlist-consistency-check.js
