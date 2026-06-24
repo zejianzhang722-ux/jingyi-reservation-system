@@ -84,6 +84,8 @@ async function main() {
     assert(timeline && Array.isArray(timeline.timeline), 'S03 功能房时间线没有返回时间段');
     const seats = await api('/room/1/seats');
     assert(Array.isArray(seats) && seats.length > 0, 'S03 功能房座位没有返回数据');
+    const integrationSeatId = seats[0].id;
+    assert(integrationSeatId, 'S03 功能房座位没有返回座位编号');
 
     const studentLogin = await api('/auth/login/student', {
       method: 'POST',
@@ -105,9 +107,13 @@ async function main() {
     const reserveDate = formatDate(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
     const createdReservation = await api('/reservation', {
       method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, studentHeaders),
+      headers: Object.assign({
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'integration-seat-booking-' + Date.now()
+      }, studentHeaders),
       body: JSON.stringify({
-        roomId: 4,
+        roomId: 1,
+        seatId: integrationSeatId,
         date: reserveDate,
         startTime: '13:00',
         endTime: '14:00',
@@ -116,6 +122,7 @@ async function main() {
       })
     });
     assert(createdReservation && createdReservation.id, 'S04 创建预约没有返回预约编号');
+    assert(Number(createdReservation.seatId) === Number(integrationSeatId), 'S04 自习室预约没有保留所选座位');
 
     const myReservations = await api('/reservation?page=1&pageSize=20', { headers: studentHeaders });
     assert(Array.isArray(myReservations.list), 'S05 我的预约列表没有返回列表');

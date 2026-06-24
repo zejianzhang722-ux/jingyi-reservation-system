@@ -11,7 +11,29 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,13 +61,87 @@ jobs:
       - name: Run security regression checks
         run: npm run check:security
       - name: Run dynamic credential unit regression
-        run: node scripts/checkin-credential-check.js
+        run: node scripts/checkin-credential-ready-check.js
       - name: Run dynamic QR endpoint regression
         run: node scripts/checkin-credential-runtime-check.js
       - name: Run request refresh regression
         run: npm run check:request-refresh
       - name: Run administrator miniapp regression
         run: npm run check:admin-miniapp
+      - name: Run mock reservation consistency regression
+        run: node scripts/reservation-consistency-check.js
+      - name: Initialize legacy MySQL reservation database
+        env:
+          INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/initialize-ci-mysql.js
+      - name: Seed partial slot migration state
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/seed-partial-reservation-slots.js
+      - name: Run migration precheck
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/reservation-migration-precheck.js
+      - name: Apply resumable reservation migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/apply-reservation-consistency-migration.js
+      - name: Run strict migration postcheck
+        env:
+          REQUIRE_SLOT_CONSISTENCY: 'true'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/reservation-migration-precheck.js
+      - name: Verify production data readiness
+        env:
+          NODE_ENV: production
+          ALLOW_MOCK_DB: 'false'
+          ALLOW_MOCK_REDIS: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: node scripts/production-data-readiness-check.js
+      - name: Run MySQL reservation concurrency regression
+        env:
+          NODE_ENV: test
+          ALLOW_MOCK_DB: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/mysql-reservation-concurrency-check.js > mysql-concurrency.log 2>&1
+      - name: Upload MySQL regression log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-concurrency-log
+          path: mysql-concurrency.log
+          if-no-files-found: ignore
       - name: Run server integration check
         run: npm run test:integration
         working-directory: server

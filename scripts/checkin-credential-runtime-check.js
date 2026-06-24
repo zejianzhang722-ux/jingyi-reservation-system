@@ -88,6 +88,7 @@ function jsonAuthHeaders(token) {
 }
 
 async function main() {
+  await db.ready()
   await waitForHealth()
   await waitForMocks()
 

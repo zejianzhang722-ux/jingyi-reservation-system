@@ -115,6 +115,7 @@ const batchAuditRules = [
 
 const waitlistRules = [
   body('roomId').isInt({ min: 1 }).withMessage('功能房ID无效'),
+  body('seatId').optional({ nullable: true }).isInt({ min: 1 }).withMessage('座位ID无效'),
   body('date').isISO8601().withMessage('日期格式无效'),
   body('startTime').matches(/^\d{2}:\d{2}$/).withMessage('开始时间格式无效'),
   body('endTime').matches(/^\d{2}:\d{2}$/).withMessage('结束时间格式无效'),

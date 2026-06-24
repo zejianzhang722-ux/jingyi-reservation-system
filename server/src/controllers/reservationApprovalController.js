@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
 const wechatService = require('../services/wechatService');
+const lifecycleService = require('../services/reservationLifecycleService');
 
 const allowedStatusesForRole = function(role) {
   if (role === 'super_admin') return ['pending', 'counselor_pending'];
@@ -33,8 +34,6 @@ const createNotificationSafely = async function(userId, type, title, content, da
   try {
     await notificationService.createNotification(userId, type, title, content, data);
   } catch (err) {
-    // 审批状态已经成功落库时，通知失败不应把整个审批响应变成 500，
-    // 否则客户端重试会得到 409，造成“操作失败但实际已成功”的错觉。
     logger.error('创建审批站内通知失败:', err);
   }
 };
@@ -48,13 +47,13 @@ const pending = async function(req, res) {
 
     const placeholders = allowedStatuses.map(function() { return '?'; }).join(',');
     const [reservations] = await db.query(
-      "SELECT r.*, rm.name AS roomName, rm.name AS room_name, " +
-      "u.real_name AS userName, u.real_name AS user_name, u.student_id, u.student_no " +
-      "FROM reservations r " +
-      "JOIN rooms rm ON r.room_id = rm.id " +
-      "JOIN users u ON r.user_id = u.id " +
-      "WHERE r.status IN (" + placeholders + ") " +
-      "ORDER BY r.created_at DESC LIMIT 50",
+      'SELECT r.*, rm.name AS roomName, rm.name AS room_name, ' +
+      'u.real_name AS userName, u.real_name AS user_name, u.student_id, u.student_no ' +
+      'FROM reservations r ' +
+      'JOIN rooms rm ON r.room_id = rm.id ' +
+      'JOIN users u ON r.user_id = u.id ' +
+      'WHERE r.status IN (' + placeholders + ') ' +
+      'ORDER BY r.created_at DESC LIMIT 50',
       allowedStatuses
     );
     return response.success(res, reservations);
@@ -131,7 +130,7 @@ const approve = async function(req, res) {
     return response.success(res, null, '审批通过');
   } catch (err) {
     logger.error('审批异常:', err);
-    return response.error(res, '审批失败', 500);
+    return response.error(res, err.message || '审批失败', err.httpStatus || 500);
   }
 };
 
@@ -156,14 +155,13 @@ const reject = async function(req, res) {
     const reservation = reservations[0];
     if (!ensureApprovalScope(req, res, reservation)) return;
 
-    const [updateResult] = await db.query(
-      "UPDATE reservations SET status = 'rejected', reject_reason = ?, audited_by = ?, audited_at = NOW() " +
-      'WHERE id = ? AND status = ?',
-      [reason, req.user.id, id, reservation.status]
-    );
-    if (!updateResult || updateResult.affectedRows === 0) {
-      return response.error(res, '该预约已被其他管理员处理，请刷新后重试', 409);
-    }
+    await lifecycleService.releaseAndPromote({
+      reservationId: id,
+      nextStatus: 'rejected',
+      reason,
+      auditedBy: req.user.id,
+      allowedCurrentStatuses: [reservation.status]
+    });
 
     await createNotificationSafely(
       reservation.user_id,
@@ -187,7 +185,7 @@ const reject = async function(req, res) {
     return response.success(res, null, '已拒绝');
   } catch (err) {
     logger.error('拒绝预约异常:', err);
-    return response.error(res, '拒绝预约失败', 500);
+    return response.error(res, err.message || '拒绝预约失败', err.httpStatus || 500);
   }
 };
 

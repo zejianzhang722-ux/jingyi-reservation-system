@@ -1,54 +1,139 @@
 const config = require('./index');
 
-let pool;
+let pool = null;
 let useMock = false;
+let initializationError = null;
+const isProduction = process.env.NODE_ENV === 'production';
+const allowMock = !isProduction && process.env.ALLOW_MOCK_DB !== 'false';
+
+const CONNECTION_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EPIPE',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'PROTOCOL_CONNECTION_LOST',
+  'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR',
+  'PROTOCOL_SEQUENCE_TIMEOUT',
+  'ER_CON_COUNT_ERROR',
+  'ER_SERVER_SHUTDOWN'
+]);
+
+const isConnectionFailure = function(err) {
+  if (!err) return false;
+  if (CONNECTION_ERROR_CODES.has(err.code)) return true;
+  const fatal = err.fatal === true;
+  const syscall = String(err.syscall || '').toLowerCase();
+  return fatal && ['connect', 'read', 'write'].includes(syscall);
+};
+
+const switchToMock = function(err, context) {
+  initializationError = err || initializationError;
+  if (!allowMock) {
+    const failure = new Error('MySQL不可用，生产环境禁止回退到模拟数据库');
+    failure.code = 'DATABASE_UNAVAILABLE';
+    failure.cause = err;
+    throw failure;
+  }
+  if (!useMock) {
+    console.warn('[数据库] ' + context + '，仅在非生产环境切换到模拟数据:', err ? err.message : '未知错误');
+  }
+  useMock = true;
+  pool = null;
+};
 
 try {
   const mysql = require('mysql2/promise');
   pool = mysql.createPool(config.mysql);
-
-  pool.getConnection()
-    .then(function(connection) {
-      connection.release();
-      useMock = false;
-      console.log('[数据库] MySQL连接成功');
-    })
-    .catch(function(err) {
-      console.warn('[数据库] MySQL连接失败，切换到模拟数据模式:', err.message);
-      useMock = true;
-      pool = null;
-    });
-} catch (e) {
-  console.warn('[数据库] mysql2模块不可用，切换到模拟数据模式');
-  useMock = true;
-  pool = null;
+} catch (err) {
+  switchToMock(err, 'mysql2模块不可用');
 }
 
-var query = function(sql, params) {
-  if (useMock) {
-    return require('./mock-db').query(sql, params);
+const ready = async function() {
+  if (useMock) return { mode: 'mock' };
+  if (!pool) {
+    switchToMock(initializationError || new Error('连接池未初始化'), 'MySQL连接池未初始化');
+    return { mode: 'mock' };
   }
-  return pool.execute(sql, params).catch(function(err) {
-    console.warn('[数据库] MySQL查询失败，回退到模拟数据:', err.message);
-    useMock = true;
-    pool = null;
-    return require('./mock-db').query(sql, params);
-  });
+
+  let connection = null;
+  try {
+    connection = await pool.getConnection();
+    await connection.ping();
+    return { mode: 'mysql' };
+  } catch (err) {
+    switchToMock(err, 'MySQL连接失败');
+    return { mode: 'mock' };
+  } finally {
+    if (connection && typeof connection.release === 'function') connection.release();
+  }
 };
 
-var getConnection = function() {
+const query = async function(sql, params) {
   if (useMock) {
-    return Promise.resolve({ release: function() {} });
+    return require('./mock-db').query(sql, params);
   }
-  return pool.getConnection().catch(function(err) {
-    useMock = true;
-    pool = null;
-    return { release: function() {} };
-  });
+  if (!pool) {
+    await ready();
+    if (useMock) return require('./mock-db').query(sql, params);
+  }
+
+  try {
+    return await pool.execute(sql, params);
+  } catch (err) {
+    // 约束、语法和业务 SQL 错误必须原样返回，不能静默切换到另一套数据源。
+    if (!isConnectionFailure(err)) throw err;
+    if (isProduction || !allowMock) {
+      err.code = err.code || 'DATABASE_QUERY_FAILED';
+      throw err;
+    }
+    switchToMock(err, 'MySQL连接在查询期间中断');
+    return require('./mock-db').query(sql, params);
+  }
+};
+
+const getConnection = async function() {
+  if (useMock) {
+    return {
+      isMock: true,
+      release: function() {}
+    };
+  }
+  if (!pool) {
+    await ready();
+    if (useMock) return { isMock: true, release: function() {} };
+  }
+
+  try {
+    return await pool.getConnection();
+  } catch (err) {
+    if (isProduction || !allowMock || !isConnectionFailure(err)) {
+      err.code = err.code || 'DATABASE_CONNECTION_FAILED';
+      throw err;
+    }
+    switchToMock(err, '获取MySQL连接失败');
+    return { isMock: true, release: function() {} };
+  }
+};
+
+const assertTransactional = function(connection) {
+  if (!connection || connection.isMock || typeof connection.beginTransaction !== 'function' || typeof connection.execute !== 'function') {
+    const err = new Error('当前数据库模式不支持事务操作');
+    err.code = 'TRANSACTION_UNAVAILABLE';
+    err.httpStatus = 503;
+    throw err;
+  }
 };
 
 module.exports = {
-  query: query,
-  getConnection: getConnection,
-  isMock: function() { return useMock; }
+  query,
+  getConnection,
+  ready,
+  assertTransactional,
+  isConnectionFailure,
+  isMock: function() { return useMock; },
+  isProduction,
+  allowMock
 };

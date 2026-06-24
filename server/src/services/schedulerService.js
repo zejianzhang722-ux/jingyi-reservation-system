@@ -1,13 +1,14 @@
 ﻿const schedule = require('node-schedule');
 const logger = require('../config/logger');
 const reservationService = require('./reservationService');
+const reservationLifecycleService = require('./reservationLifecycleService');
 const creditService = require('./creditService');
 
 const initScheduler = function() {
   schedule.scheduleJob('*/5 * * * *', async function() {
     logger.info('执行爽约自动检测定时任务');
     try {
-      await reservationService.detectNoshow();
+      await reservationLifecycleService.detectNoshow();
     } catch (err) {
       logger.error('爽约检测任务执行失败:', err);
     }

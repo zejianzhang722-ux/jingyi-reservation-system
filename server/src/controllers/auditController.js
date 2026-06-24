@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
 const wechatPushService = require('../services/wechatPushService');
+const reservationLifecycleService = require('../services/reservationLifecycleService');
 const reservationApprovalController = require('./reservationApprovalController');
 
 const allowedStatusesForRole = reservationApprovalController.allowedStatusesForRole;
@@ -66,7 +67,6 @@ const pendingList = async function(req, res) {
   }
 };
 
-// 单条审核统一复用预约接口控制器，避免 /audit 与 /reservation 两套权限规则漂移。
 const approve = reservationApprovalController.approve;
 const reject = reservationApprovalController.reject;
 
@@ -102,6 +102,27 @@ const notifyBatchResult = async function(reservation, action, reason) {
   }
 };
 
+const notifyPromotion = async function(promotion) {
+  if (!promotion || !promotion.entry || !promotion.promoted) return;
+  try {
+    await notificationService.createNotification(
+      promotion.entry.user_id,
+      'waitlist_converted',
+      '候补已转为预约',
+      promotion.promoted.status === 'approved'
+        ? '您的候补已自动转为正式预约'
+        : '您的候补已转为预约，请留意后续审核状态',
+      {
+        reservationId: promotion.promoted.id,
+        roomId: promotion.promoted.roomId,
+        date: promotion.promoted.date
+      }
+    );
+  } catch (err) {
+    logger.error('批量拒绝候补转正通知失败:', err);
+  }
+};
+
 const createHttpError = function(status, message) {
   const err = new Error(message);
   err.httpStatus = status;
@@ -109,13 +130,15 @@ const createHttpError = function(status, message) {
 };
 
 const batchAudit = async function(req, res) {
-  const ids = Array.from(new Set((req.body.ids || []).map(Number)));
+  // 所有批量事务按预约ID升序加锁，降低并发批次之间形成反向锁序的概率。
+  const ids = Array.from(new Set((req.body.ids || []).map(Number))).sort(function(a, b) { return a - b; });
   const action = req.body.action;
   const reason = String(req.body.reason || '').trim();
   const allowedStatuses = allowedStatusesForRole(req.user && req.user.role);
   let connection = null;
   let transactional = false;
   let reservations = [];
+  const promotions = [];
 
   try {
     if (allowedStatuses.length === 0) {
@@ -172,6 +195,11 @@ const batchAudit = async function(req, res) {
           'WHERE id = ? AND status = ?',
           [req.user.id, reason, reservation.id, reservation.status]
         );
+        await runQuery('DELETE FROM reservation_slots WHERE reservation_id = ?', [reservation.id]);
+        if (transactional) {
+          const promotion = await reservationLifecycleService.promoteWithinTransaction(connection, reservation);
+          if (promotion) promotions.push(promotion);
+        }
       }
 
       if (!updateResult || updateResult.affectedRows === 0) {
@@ -196,12 +224,28 @@ const batchAudit = async function(req, res) {
     }
   }
 
-  // 通知属于提交后的副作用，失败不回滚已成功的业务状态。
+  if (action === 'reject' && !transactional) {
+    for (const reservation of reservations) {
+      try {
+        await reservationLifecycleService.promoteReleasedReservation(reservation);
+      } catch (err) {
+        logger.error('批量拒绝后的候补转正失败，预约ID=' + reservation.id + ':', err);
+      }
+    }
+  } else {
+    for (const promotion of promotions) {
+      await notifyPromotion(promotion);
+    }
+  }
+
   for (const reservation of reservations) {
     await notifyBatchResult(reservation, action, reason);
   }
 
-  return response.success(res, { processed: reservations.length }, '批量审核完成');
+  return response.success(res, {
+    processed: reservations.length,
+    promoted: promotions.length
+  }, '批量审核完成');
 };
 
 const counselorPending = async function(req, res) {
