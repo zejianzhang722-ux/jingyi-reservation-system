@@ -52,6 +52,14 @@ function toLegacyReservationSchema(sql) {
       '  INDEX idx_room_date (room_id, date)'
     )
     .replace(/\nCREATE TABLE reservation_slots \([\s\S]*?\n\) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n/m, '\n')
+    .replace(
+      /\n\s*waiting_seat_scope INT GENERATED ALWAYS AS \(\n\s*CASE WHEN status = 'waiting' THEN COALESCE\(seat_id, 0\) ELSE NULL END\n\s*\) STORED,\n/m,
+      '\n'
+    )
+    .replace(
+      /^\s*INDEX idx_room_date_status \(room_id, date, status\),\s*\n\s*UNIQUE KEY uk_waitlist_user_slot \(user_id, room_id, waiting_seat_scope, date, start_time, end_time\)\s*$/m,
+      '  INDEX idx_room_date_status (room_id, date, status)'
+    )
 }
 
 async function main() {
@@ -105,6 +113,25 @@ async function main() {
     })
     if (initializeLegacySchema && (columnNames.includes('idempotency_key') || columnNames.includes('request_hash'))) {
       throw new Error('legacy CI schema must not contain consistency columns before migration')
+    }
+
+    const [waitlistColumns] = await connection.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = 'reservation_waitlist'",
+      [database]
+    )
+    const waitlistColumnNames = waitlistColumns.map(function(row) {
+      return row.COLUMN_NAME || row.column_name
+    })
+    const [waitlistIndexes] = await connection.query(
+      "SELECT index_name FROM information_schema.statistics WHERE table_schema = ? " +
+      "AND table_name = 'reservation_waitlist' AND index_name = 'uk_waitlist_user_slot'",
+      [database]
+    )
+    if (initializeLegacySchema && (waitlistColumnNames.includes('waiting_seat_scope') || waitlistIndexes.length)) {
+      throw new Error('legacy CI schema must not contain waitlist consistency objects before migration')
+    }
+    if (!initializeLegacySchema && (!waitlistColumnNames.includes('waiting_seat_scope') || !waitlistIndexes.length)) {
+      throw new Error('current schema must contain waitlist consistency objects')
     }
 
     const mode = initializeLegacySchema ? 'legacy-reservation-schema' : 'current-schema'
