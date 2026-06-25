@@ -8,6 +8,7 @@ const authMiddleware = require('../middleware/auth');
 const ADMIN_ROLES = ['super_admin', 'admin', 'counselor'];
 const ROOM_EVENT_LIMIT = 30;
 const ROOM_EVENT_WINDOW_MS = 60 * 1000;
+const SESSION_CHECK_INTERVAL_MS = 60 * 1000;
 
 const socketError = function(message, code) {
   const err = new Error(message);
@@ -28,6 +29,16 @@ const extractToken = function(socket) {
     : null;
   const raw = authToken || header || '';
   return String(raw).startsWith('Bearer ') ? String(raw).slice(7) : String(raw);
+};
+
+const buildDependencies = function(options) {
+  return Object.assign({
+    jwtLib: jwt,
+    configObject: config,
+    dbClient: db,
+    redisClient: redis,
+    isStoredRefreshToken: authMiddleware.isStoredRefreshToken
+  }, options || {});
 };
 
 const loadPrincipal = async function(decoded, dependencies) {
@@ -66,14 +77,18 @@ const loadPrincipal = async function(decoded, dependencies) {
   };
 };
 
+const assertTokenNotRevoked = async function(token, dependencies) {
+  let blacklisted;
+  try {
+    blacklisted = await dependencies.redisClient.get('blacklist:' + token);
+  } catch (err) {
+    throw socketError('实时认证服务暂不可用', 'SOCKET_AUTH_DEPENDENCY_UNAVAILABLE');
+  }
+  if (blacklisted) throw socketError('认证令牌已失效', 'SOCKET_TOKEN_REVOKED');
+};
+
 const authenticateSocket = async function(socket, options) {
-  const dependencies = Object.assign({
-    jwtLib: jwt,
-    configObject: config,
-    dbClient: db,
-    redisClient: redis,
-    isStoredRefreshToken: authMiddleware.isStoredRefreshToken
-  }, options || {});
+  const dependencies = buildDependencies(options);
   const token = extractToken(socket);
   if (!token) throw socketError('未提供实时连接认证令牌', 'SOCKET_TOKEN_REQUIRED');
 
@@ -97,20 +112,87 @@ const authenticateSocket = async function(socket, options) {
     }
   }
 
-  let blacklisted;
-  try {
-    blacklisted = await dependencies.redisClient.get('blacklist:' + token);
-  } catch (err) {
-    throw socketError('实时认证服务暂不可用', 'SOCKET_AUTH_DEPENDENCY_UNAVAILABLE');
-  }
-  if (blacklisted) throw socketError('认证令牌已失效', 'SOCKET_TOKEN_REVOKED');
-
+  await assertTokenNotRevoked(token, dependencies);
   const principal = await loadPrincipal(decoded, dependencies);
   socket.data = socket.data || {};
   socket.data.user = principal;
   socket.data.accessToken = token;
+  socket.data.tokenClaims = decoded;
   socket.data.roomEventTimestamps = [];
   return principal;
+};
+
+const sameScope = function(left, right) {
+  return Number(left.id) === Number(right.id) &&
+    left.role === right.role &&
+    (left.buildingId || null) === (right.buildingId || null);
+};
+
+const validateLiveSession = async function(socket, options) {
+  const dependencies = buildDependencies(options);
+  const data = socket && socket.data ? socket.data : {};
+  if (!data.accessToken || !data.tokenClaims || !data.user) {
+    throw socketError('实时连接尚未认证', 'SOCKET_NOT_AUTHENTICATED');
+  }
+  if (data.tokenClaims.exp && Number(data.tokenClaims.exp) * 1000 <= Date.now()) {
+    throw socketError('实时连接认证令牌已过期', 'SOCKET_TOKEN_EXPIRED');
+  }
+
+  await assertTokenNotRevoked(data.accessToken, dependencies);
+  const currentPrincipal = await loadPrincipal(data.tokenClaims, dependencies);
+  if (!sameScope(data.user, currentPrincipal)) {
+    throw socketError('管理员实时权限范围已变化，请重新连接', 'SOCKET_SCOPE_CHANGED');
+  }
+  return currentPrincipal;
+};
+
+const startSessionGuard = function(socket, options) {
+  const settings = options || {};
+  const intervalMs = Math.max(5000, Number(settings.sessionCheckIntervalMs || SESSION_CHECK_INTERVAL_MS));
+  let stopped = false;
+  let validating = false;
+  let expiryTimer = null;
+
+  const stop = function() {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(interval);
+    if (expiryTimer) clearTimeout(expiryTimer);
+  };
+
+  const disconnect = function(err) {
+    if (stopped) return;
+    socket.emit('socket-error', {
+      ok: false,
+      code: err && err.data ? err.data.code : 'SOCKET_SESSION_INVALID',
+      message: err ? err.message : '实时连接认证已失效'
+    });
+    stop();
+    socket.disconnect(true);
+  };
+
+  const check = function() {
+    if (stopped || validating) return;
+    validating = true;
+    validateLiveSession(socket, settings).catch(disconnect).finally(function() {
+      validating = false;
+    });
+  };
+
+  const interval = setInterval(check, intervalMs);
+  if (typeof interval.unref === 'function') interval.unref();
+
+  const claims = socket.data && socket.data.tokenClaims;
+  if (claims && claims.exp) {
+    const delay = Math.max(0, Number(claims.exp) * 1000 - Date.now());
+    expiryTimer = setTimeout(function() {
+      disconnect(socketError('实时连接认证令牌已过期', 'SOCKET_TOKEN_EXPIRED'));
+    }, Math.min(delay, 2147483647));
+    if (typeof expiryTimer.unref === 'function') expiryTimer.unref();
+  }
+
+  socket.on('disconnect', stop);
+  return { stop, check };
 };
 
 const normalizeRoomName = function(value) {
@@ -210,6 +292,7 @@ const configureSocketServer = function(io, options) {
     socket.join('admin:' + user.id);
     if (user.role === 'super_admin') socket.join('monitor:all');
     else if (user.buildingId) socket.join('building:' + user.buildingId);
+    startSessionGuard(socket, settings);
 
     logger.info('WebSocket管理员连接: socket=' + socket.id + ' admin=' + user.id + ' role=' + user.role);
 
@@ -265,10 +348,14 @@ module.exports = {
   ADMIN_ROLES,
   ROOM_EVENT_LIMIT,
   ROOM_EVENT_WINDOW_MS,
+  SESSION_CHECK_INTERVAL_MS,
   socketError,
   normalizeRole,
   extractToken,
+  buildDependencies,
   authenticateSocket,
+  validateLiveSession,
+  startSessionGuard,
   normalizeRoomName,
   ensureBuildingScope,
   authorizeRoom,
