@@ -14,6 +14,7 @@ const routes = require('./routes');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
 const schedulerService = require('./services/schedulerService');
+const socketAuthService = require('./services/socketAuthService');
 const dataReadinessService = require('./services/dataReadinessService');
 
 const app = express();
@@ -77,22 +78,7 @@ app.use(function(err, req, res, next) {
   });
 });
 
-io.on('connection', function(socket) {
-  logger.info('WebSocket客户端连接: ' + socket.id);
-
-  socket.on('join', function(room) {
-    socket.join(room);
-  });
-
-  socket.on('leave', function(room) {
-    socket.leave(room);
-  });
-
-  socket.on('disconnect', function() {
-    logger.info('WebSocket客户端断开: ' + socket.id);
-  });
-});
-
+socketAuthService.configureSocketServer(io);
 app.set('io', io);
 
 const startServer = async function() {
