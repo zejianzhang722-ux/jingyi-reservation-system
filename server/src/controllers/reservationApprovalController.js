@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
 const wechatService = require('../services/wechatService');
 const lifecycleService = require('../services/reservationLifecycleService');
+const realtimeEventService = require('../services/realtimeEventService');
 
 const allowedStatusesForRole = function(role) {
   if (role === 'super_admin') return ['pending', 'counselor_pending'];
@@ -127,6 +128,7 @@ const approve = async function(req, res) {
       });
     }
 
+    await realtimeEventService.publishRoomStatusSafely(reservation.room_id, 'reservation-approved');
     return response.success(res, null, '审批通过');
   } catch (err) {
     logger.error('审批异常:', err);

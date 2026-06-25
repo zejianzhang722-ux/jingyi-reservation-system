@@ -5,6 +5,7 @@ const config = require('../config');
 const creditService = require('../services/creditService');
 const credentialService = require('../services/checkinCredentialService');
 const reservationLifecycleService = require('../services/reservationLifecycleService');
+const realtimeEventService = require('../services/realtimeEventService');
 const helpers = require('../utils/helpers');
 
 const ensureProductionDatabase = function() {
@@ -105,6 +106,7 @@ const checkin = async function(req, res) {
     );
 
     if (transactional) await connection.commit();
+    await realtimeEventService.publishRoomStatusSafely(reservation.room_id, 'qrcode-checkin');
     return response.success(res, null, '签到成功');
   } catch (err) {
     if (transactional && connection && typeof connection.rollback === 'function') {
@@ -125,6 +127,7 @@ const checkout = async function(req, res) {
   let connection = null;
   let transactional = false;
   let checkedOutUserId = null;
+  let checkedOutRoomId = null;
   try {
     ensureProductionDatabase();
     const reservationId = Number(req.body.reservationId);
@@ -172,6 +175,7 @@ const checkout = async function(req, res) {
     await runQuery('DELETE FROM reservation_slots WHERE reservation_id = ?', [reservationId]);
 
     checkedOutUserId = checkins[0].user_id;
+    checkedOutRoomId = checkins[0].room_id;
     if (transactional) await connection.commit();
   } catch (err) {
     if (transactional && connection && typeof connection.rollback === 'function') {
@@ -187,6 +191,7 @@ const checkout = async function(req, res) {
     if (connection && typeof connection.release === 'function') connection.release();
   }
 
+  await realtimeEventService.publishRoomStatusSafely(checkedOutRoomId, 'checkout');
   try {
     await creditService.addCredit(
       checkedOutUserId,
@@ -220,6 +225,7 @@ const getStatus = async function(req, res) {
 const manualCheckin = async function(req, res) {
   let connection = null;
   let transactional = false;
+  let checkedInRoomId = null;
   try {
     ensureProductionDatabase();
     const reservationId = Number(req.body.reservationId);
@@ -274,7 +280,9 @@ const manualCheckin = async function(req, res) {
       [reservationId, reservation.user_id, reservation.room_id, 'admin_manual']
     );
 
+    checkedInRoomId = reservation.room_id;
     if (transactional) await connection.commit();
+    await realtimeEventService.publishRoomStatusSafely(checkedInRoomId, 'manual-checkin');
     return response.success(res, null, '手动签到成功');
   } catch (err) {
     if (transactional && connection && typeof connection.rollback === 'function') {

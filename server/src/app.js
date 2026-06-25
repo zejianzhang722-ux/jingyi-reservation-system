@@ -13,7 +13,11 @@ const redis = require('./config/redis');
 const routes = require('./routes');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
-const { initScheduler } = require('./services/schedulerService');
+const schedulerService = require('./services/schedulerService');
+const socketConnectionRateLimitService = require('./services/socketConnectionRateLimitService');
+const socketAuthService = require('./services/socketAuthService');
+const socketRedisAdapterService = require('./services/socketRedisAdapterService');
+const realtimeEventService = require('./services/realtimeEventService');
 const dataReadinessService = require('./services/dataReadinessService');
 
 const app = express();
@@ -28,6 +32,7 @@ const io = new Server(server, {
     credentials: true
   }
 });
+let shuttingDown = false;
 
 var corsOptions = {
   origin: function (origin, callback) {
@@ -77,30 +82,20 @@ app.use(function(err, req, res, next) {
   });
 });
 
-io.on('connection', function(socket) {
-  logger.info('WebSocket客户端连接: ' + socket.id);
-
-  socket.on('join', function(room) {
-    socket.join(room);
-  });
-
-  socket.on('leave', function(room) {
-    socket.leave(room);
-  });
-
-  socket.on('disconnect', function() {
-    logger.info('WebSocket客户端断开: ' + socket.id);
-  });
-});
-
+socketConnectionRateLimitService.configure(io);
+socketAuthService.configureSocketServer(io);
+realtimeEventService.setIO(io);
 app.set('io', io);
 
 const startServer = async function() {
   try {
     const readiness = await dataReadinessService.checkDataReadiness();
+    const socketAdapterState = await socketRedisAdapterService.initSocketAdapter(io);
+    logger.info('实时广播适配器已就绪，模式: ' + socketAdapterState.mode);
 
     if (process.env.ENABLE_SCHEDULER === 'true') {
-      initScheduler();
+      const schedulerState = await schedulerService.initScheduler();
+      logger.info('定时任务协调已就绪，任务数: ' + schedulerState.jobs + '，Redis模式: ' + schedulerState.redisMode);
     } else {
       logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
     }
@@ -115,10 +110,12 @@ const startServer = async function() {
       console.log('  数据库运行模式: ' + dbMode);
       console.log('  Redis运行模式: ' + redisMode);
       console.log('  预约一致性结构: ' + schemaMode);
+      console.log('  实时广播模式: ' + socketAdapterState.mode);
       console.log('========================================');
       logger.info(
         '敬一书院预约管理系统服务已启动，端口: ' + config.port +
-        '，数据库: ' + dbMode + '，Redis: ' + redisMode + '，预约结构: ' + schemaMode
+        '，数据库: ' + dbMode + '，Redis: ' + redisMode +
+        '，预约结构: ' + schemaMode + '，实时广播: ' + socketAdapterState.mode
       );
     });
   } catch (err) {
@@ -130,6 +127,74 @@ const startServer = async function() {
   }
 };
 
+const closeSocketServer = function() {
+  return new Promise(function(resolve) {
+    if (!server.listening) return resolve();
+    let resolved = false;
+    const done = function() {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
+    const timeout = setTimeout(done, 5000);
+    if (typeof timeout.unref === 'function') timeout.unref();
+    io.close(function() {
+      clearTimeout(timeout);
+      logger.info('HTTP与WebSocket服务已关闭');
+      done();
+    });
+  });
+};
+
+const shutdown = async function(signal) {
+  if (shuttingDown) return { stopped: true, reused: true };
+  shuttingDown = true;
+  logger.info('收到' + signal + '，开始关闭服务');
+
+  try {
+    await schedulerService.stopScheduler();
+  } catch (err) {
+    logger.error('停止定时任务失败:', err);
+  }
+  try {
+    await closeSocketServer();
+  } catch (err) {
+    logger.error('关闭HTTP与WebSocket服务失败:', err);
+  }
+  try {
+    await socketRedisAdapterService.closeSocketAdapter();
+  } catch (err) {
+    logger.error('关闭实时广播适配器失败:', err);
+  }
+  try {
+    await db.close();
+  } catch (err) {
+    logger.error('关闭MySQL连接池失败:', err);
+  }
+  try {
+    if (typeof redis.quit === 'function') await redis.quit();
+    else if (typeof redis.disconnect === 'function') redis.disconnect();
+  } catch (err) {
+    if (typeof redis.disconnect === 'function') redis.disconnect();
+    logger.error('关闭Redis连接失败:', err);
+  }
+
+  logger.info('服务资源已全部关闭');
+  return { stopped: true, reused: false };
+};
+
+const handleSignal = function(signal) {
+  shutdown(signal).then(function() {
+    process.exit(0);
+  }).catch(function(err) {
+    logger.error('服务关闭异常:', err);
+    process.exit(1);
+  });
+};
+
+process.once('SIGTERM', function() { handleSignal('SIGTERM'); });
+process.once('SIGINT', function() { handleSignal('SIGINT'); });
+
 startServer();
 
-module.exports = { app, server, io, startServer };
+module.exports = { app, server, io, startServer, shutdown, closeSocketServer };

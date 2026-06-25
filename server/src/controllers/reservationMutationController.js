@@ -6,6 +6,7 @@ const config = require('../config');
 const helpers = require('../utils/helpers');
 const reservationCommandService = require('../services/reservationCommandService');
 const mutationService = require('../services/reservationMutationService');
+const realtimeEventService = require('../services/realtimeEventService');
 
 const update = async function(req, res) {
   try {
@@ -17,6 +18,7 @@ const update = async function(req, res) {
       seatId: req.body.seatId,
       purpose: req.body.purpose
     });
+    await realtimeEventService.publishRoomStatusSafely(updated.room_id, 'reservation-updated');
     return response.success(res, {
       id: updated.id,
       startTime: updated.start_time,
@@ -62,6 +64,9 @@ const rebook = async function(req, res) {
       idempotencyKey: headerKey || fallbackKey
     });
 
+    if (!created.idempotent) {
+      await realtimeEventService.publishRoomStatusSafely(created.roomId, 'reservation-rebooked');
+    }
     return response.success(res, created, created.idempotent ? '预约已存在' : '再次预约成功');
   } catch (err) {
     logger.error('事务再次预约异常:', err);

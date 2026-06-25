@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
 const wechatPushService = require('../services/wechatPushService');
 const reservationLifecycleService = require('../services/reservationLifecycleService');
+const realtimeEventService = require('../services/realtimeEventService');
 const reservationApprovalController = require('./reservationApprovalController');
 
 const allowedStatusesForRole = reservationApprovalController.allowedStatusesForRole;
@@ -241,6 +242,11 @@ const batchAudit = async function(req, res) {
   for (const reservation of reservations) {
     await notifyBatchResult(reservation, action, reason);
   }
+
+  await realtimeEventService.publishReservationRoomsSafely(
+    reservations.concat(promotions.map(function(promotion) { return promotion.promoted; })),
+    'batch-audit-committed'
+  );
 
   return response.success(res, {
     processed: reservations.length,

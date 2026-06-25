@@ -4,6 +4,7 @@ const helpers = require('../utils/helpers');
 const config = require('../config');
 const commandService = require('./reservationCommandService');
 const notificationService = require('./notificationService');
+const realtimeEventService = require('./realtimeEventService');
 
 const ACTIVE_STATUSES = commandService.ACTIVE_STATUSES;
 
@@ -137,6 +138,13 @@ const notifyPromotion = async function(result) {
   }
 };
 
+const publishLifecycleRooms = async function(reservation, promotion, context) {
+  await realtimeEventService.publishReservationRoomsSafely([
+    reservation,
+    promotion && promotion.promoted
+  ], context);
+};
+
 const releaseAndPromoteMysql = async function(options) {
   const connection = await db.getConnection();
   db.assertTransactional(connection);
@@ -164,6 +172,7 @@ const releaseAndPromoteMysql = async function(options) {
   }
 
   await notifyPromotion(promotion);
+  await publishLifecycleRooms(reservation, promotion, 'reservation-lifecycle-committed');
   return {
     reservation: mapReservation(reservation, nextStatus),
     promotedReservation: promotion ? promotion.promoted : null,
@@ -248,6 +257,7 @@ const releaseAndPromoteMock = async function(options) {
     }
 
     await notifyPromotion(promotion);
+    await publishLifecycleRooms(reservation, promotion, 'reservation-lifecycle-mock');
     return {
       reservation: mapReservation(reservation, nextStatus),
       promotedReservation: promotion ? promotion.promoted : null,
@@ -300,6 +310,7 @@ const promoteReleasedReservation = async function(source) {
     connection.release();
   }
   await notifyPromotion(promotion);
+  await publishLifecycleRooms(source, promotion, 'waitlist-promotion-committed');
   return promotion ? promotion.promoted : null;
 };
 

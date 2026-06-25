@@ -5,7 +5,9 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
+    "start:scheduler": "node src/scheduler-worker.js",
     "dev": "nodemon src/app.js",
+    "dev:scheduler": "nodemon src/scheduler-worker.js",
     "test:integration": "node tests/integration-check.js"
   },
   "dependencies": {

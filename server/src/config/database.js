@@ -127,10 +127,19 @@ const assertTransactional = function(connection) {
   }
 };
 
+const close = async function() {
+  const currentPool = pool;
+  pool = null;
+  if (!currentPool || typeof currentPool.end !== 'function') return { closed: true, mode: useMock ? 'mock' : 'none' };
+  await currentPool.end();
+  return { closed: true, mode: 'mysql' };
+};
+
 module.exports = {
   query,
   getConnection,
   ready,
+  close,
   assertTransactional,
   isConnectionFailure,
   isMock: function() { return useMock; },
