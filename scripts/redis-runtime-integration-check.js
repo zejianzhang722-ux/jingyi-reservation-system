@@ -3,17 +3,19 @@ process.env.ALLOW_MOCK_REDIS = 'false'
 
 const assert = require('assert')
 const crypto = require('crypto')
+const http = require('http')
 const { Server } = require('../server/node_modules/socket.io')
+const { io: createClient } = require('../admin/node_modules/socket.io-client')
 const redis = require('../server/src/config/redis')
 const distributedLockService = require('../server/src/services/distributedLockService')
 const adapterService = require('../server/src/services/socketRedisAdapterService')
 
-async function connect(client) {
+async function connectRedis(client) {
   if (client.status === 'wait') await client.connect()
   await client.ping()
 }
 
-async function close(client) {
+async function closeRedis(client) {
   if (!client) return
   try {
     if (client.status !== 'end') await client.quit()
@@ -22,13 +24,44 @@ async function close(client) {
   }
 }
 
-async function waitFor(predicate, timeoutMs) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) return
-    await new Promise(function(resolve) { setTimeout(resolve, 25) })
-  }
-  throw new Error('Timed out waiting for Redis cross-instance broadcast')
+function listen(server) {
+  return new Promise(function(resolve, reject) {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', function() {
+      server.removeListener('error', reject)
+      resolve(server.address())
+    })
+  })
+}
+
+function waitForClientConnection(client) {
+  return new Promise(function(resolve, reject) {
+    const timeout = setTimeout(function() {
+      reject(new Error('Timed out waiting for Socket.IO client connection'))
+    }, 5000)
+    client.once('connect', function() {
+      clearTimeout(timeout)
+      resolve()
+    })
+    client.once('connect_error', function(err) {
+      clearTimeout(timeout)
+      reject(err)
+    })
+  })
+}
+
+function waitForEvent(client, eventName, timeoutMs) {
+  return new Promise(function(resolve, reject) {
+    const timeout = setTimeout(function() {
+      client.off(eventName, onEvent)
+      reject(new Error('Timed out waiting for Redis cross-instance broadcast'))
+    }, timeoutMs)
+    const onEvent = function(payload) {
+      clearTimeout(timeout)
+      resolve(payload)
+    }
+    client.once(eventName, onEvent)
+  })
 }
 
 async function main() {
@@ -51,45 +84,64 @@ async function main() {
   await distributedLockService.release(reacquired)
 
   const clients = [redis.duplicate(), redis.duplicate(), redis.duplicate(), redis.duplicate()]
-  await Promise.all(clients.map(connect))
-  const ioA = new Server()
-  const ioB = new Server()
-  const prefix = 'runtime:test:' + crypto.randomUUID() + ':'
-  ioA.adapter(adapterService.createAdapterFactory(clients[0], clients[1], {
-    prefix,
-    uid: 'instance-a'
-  }))
-  ioB.adapter(adapterService.createAdapterFactory(clients[2], clients[3], {
-    prefix,
-    uid: 'instance-b'
-  }))
-  await Promise.all([ioA.of('/').adapter.ready, ioB.of('/').adapter.ready])
+  let ioA = null
+  let ioB = null
+  let httpServerB = null
+  let socketClient = null
+  try {
+    await Promise.all(clients.map(connectRedis))
+    ioA = new Server()
+    httpServerB = http.createServer()
+    ioB = new Server(httpServerB, { transports: ['websocket'] })
+    const prefix = 'runtime:test:' + crypto.randomUUID() + ':'
 
-  const received = []
-  const fakeSocket = {
-    id: 'remote-socket',
-    client: {
-      writeToEngine: function(encodedPackets, options) {
-        received.push({ encodedPackets, options })
-      }
-    },
-    notifyOutgoingListeners: function() {}
+    ioA.adapter(adapterService.createAdapterFactory(clients[0], clients[1], {
+      prefix,
+      uid: 'instance-a'
+    }))
+    ioB.adapter(adapterService.createAdapterFactory(clients[2], clients[3], {
+      prefix,
+      uid: 'instance-b'
+    }))
+    await Promise.all([ioA.of('/').adapter.ready, ioB.of('/').adapter.ready])
+
+    ioB.on('connection', function(socket) {
+      socket.join('building:2')
+    })
+    const address = await listen(httpServerB)
+    socketClient = createClient('http://127.0.0.1:' + address.port, {
+      transports: ['websocket'],
+      reconnection: false,
+      timeout: 5000
+    })
+    await waitForClientConnection(socketClient)
+
+    const eventPromise = waitForEvent(socketClient, 'room-status-update', 5000)
+    ioA.to('building:2').emit('room-status-update', { roomId: 8, status: 'using' })
+    const payload = await eventPromise
+    assert.deepStrictEqual(
+      payload,
+      { roomId: 8, status: 'using' },
+      'remote Socket.IO instance must deliver the Redis broadcast to its local client'
+    )
+
+    console.log('redis-runtime-integration-check passed')
+  } finally {
+    if (socketClient) socketClient.close()
+    if (ioA && ioA.of('/').adapter && typeof ioA.of('/').adapter.close === 'function') {
+      ioA.of('/').adapter.close()
+    }
+    if (ioB && ioB.of('/').adapter && typeof ioB.of('/').adapter.close === 'function') {
+      ioB.of('/').adapter.close()
+    }
+    if (ioA) ioA.close()
+    if (ioB) ioB.close()
+    if (httpServerB && httpServerB.listening) {
+      await new Promise(function(resolve) { httpServerB.close(resolve) })
+    }
+    await Promise.all(clients.map(closeRedis))
+    if (typeof redis.quit === 'function') await redis.quit()
   }
-  ioB.of('/').sockets.set(fakeSocket.id, fakeSocket)
-  ioB.of('/').adapter.addAll(fakeSocket.id, new Set([fakeSocket.id, 'building:2']))
-
-  ioA.to('building:2').emit('room-status-update', { roomId: 8, status: 'using' })
-  await waitFor(function() { return received.length > 0 }, 3000)
-  assert(received[0].encodedPackets.length > 0, 'remote Socket.IO instance must encode the Redis broadcast for its local client')
-
-  ioA.of('/').adapter.close()
-  ioB.of('/').adapter.close()
-  ioA.close()
-  ioB.close()
-  await Promise.all(clients.map(close))
-  if (typeof redis.quit === 'function') await redis.quit()
-
-  console.log('redis-runtime-integration-check passed')
 }
 
 main().then(function() {
