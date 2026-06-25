@@ -15,6 +15,7 @@ const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
 const schedulerService = require('./services/schedulerService');
 const socketAuthService = require('./services/socketAuthService');
+const socketRedisAdapterService = require('./services/socketRedisAdapterService');
 const dataReadinessService = require('./services/dataReadinessService');
 
 const app = express();
@@ -84,6 +85,8 @@ app.set('io', io);
 const startServer = async function() {
   try {
     const readiness = await dataReadinessService.checkDataReadiness();
+    const socketAdapterState = await socketRedisAdapterService.initSocketAdapter(io);
+    logger.info('实时广播适配器已就绪，模式: ' + socketAdapterState.mode);
 
     if (process.env.ENABLE_SCHEDULER === 'true') {
       const schedulerState = await schedulerService.initScheduler();
@@ -102,10 +105,12 @@ const startServer = async function() {
       console.log('  数据库运行模式: ' + dbMode);
       console.log('  Redis运行模式: ' + redisMode);
       console.log('  预约一致性结构: ' + schemaMode);
+      console.log('  实时广播模式: ' + socketAdapterState.mode);
       console.log('========================================');
       logger.info(
         '敬一书院预约管理系统服务已启动，端口: ' + config.port +
-        '，数据库: ' + dbMode + '，Redis: ' + redisMode + '，预约结构: ' + schemaMode
+        '，数据库: ' + dbMode + '，Redis: ' + redisMode +
+        '，预约结构: ' + schemaMode + '，实时广播: ' + socketAdapterState.mode
       );
     });
   } catch (err) {
@@ -123,6 +128,11 @@ const shutdown = async function(signal) {
     await schedulerService.stopScheduler();
   } catch (err) {
     logger.error('停止定时任务失败:', err);
+  }
+  try {
+    await socketRedisAdapterService.closeSocketAdapter();
+  } catch (err) {
+    logger.error('关闭实时广播适配器失败:', err);
   }
   server.close(function() {
     logger.info('HTTP服务已关闭');
