@@ -15,7 +15,7 @@
     "check:request-refresh": "node scripts/request-refresh-check.js",
     "check:reservation-consistency": "node scripts/reservation-consistency-check.js && node scripts/mysql-reservation-concurrency-check.js",
     "check:security": "node scripts/security-critical-check.js && node scripts/security-runtime-check.js",
-    "check:runtime-coordination": "node scripts/runtime-coordination-check.js && node scripts/socket-auth-check.js && node scripts/socket-adapter-check.js && node scripts/realtime-event-check.js",
+    "check:runtime-coordination": "node scripts/runtime-coordination-check.js && node scripts/socket-connection-rate-limit-check.js && node scripts/socket-auth-check.js && node scripts/socket-adapter-check.js && node scripts/realtime-event-check.js",
     "check:all": "npm run check:network && npm run check:test-data && npm run check:student-loop && npm run check:mobile && npm run check:admin-miniapp && npm run check:miniapp-ui && npm run check:request-refresh && npm run check:reservation-consistency && npm run check:security && npm run check:runtime-coordination",
     "install:all": "cd server && npm install && cd ../admin && npm install",
     "db:init": "mysql -u root -p < server/sql/schema.sql && mysql -u root -p < server/sql/seed.sql",
