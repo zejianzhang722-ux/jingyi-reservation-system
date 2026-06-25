@@ -18,15 +18,26 @@ function createMockRedis() {
     return false;
   };
 
-  const getExSeconds = function(args) {
-    for (let index = 0; index < args.length; index++) {
-      const current = args[index];
-      if (Array.isArray(current)) return getExSeconds(current);
-      if (typeof current === 'string' && current.toUpperCase() === 'EX') return Number(args[index + 1]);
-      if (typeof current === 'string' && current.toUpperCase() === 'PX') return Number(args[index + 1]) / 1000;
-      if (typeof current === 'number') return current;
+  const parseSetOptions = function(args) {
+    const options = { ttlMs: null, nx: false, xx: false };
+    const flat = args.flat();
+    for (let index = 0; index < flat.length; index++) {
+      const current = flat[index];
+      if (typeof current !== 'string') continue;
+      const option = current.toUpperCase();
+      if (option === 'EX') {
+        options.ttlMs = Number(flat[index + 1]) * 1000;
+        index++;
+      } else if (option === 'PX') {
+        options.ttlMs = Number(flat[index + 1]);
+        index++;
+      } else if (option === 'NX') {
+        options.nx = true;
+      } else if (option === 'XX') {
+        options.xx = true;
+      }
     }
-    return null;
+    return options;
   };
 
   return {
@@ -35,11 +46,17 @@ function createMockRedis() {
       return Promise.resolve(mockStore.get(key) || null);
     },
     set: function(key, value) {
-      const args = Array.prototype.slice.call(arguments, 2);
-      const exSeconds = getExSeconds(args);
+      checkExpiry(key);
+      const options = parseSetOptions(Array.prototype.slice.call(arguments, 2));
+      const exists = mockStore.has(key);
+      if (options.nx && exists) return Promise.resolve(null);
+      if (options.xx && !exists) return Promise.resolve(null);
       mockStore.set(key, value);
-      if (exSeconds) mockExpiry.set(key, Date.now() + exSeconds * 1000);
-      else mockExpiry.delete(key);
+      if (Number.isFinite(options.ttlMs) && options.ttlMs > 0) {
+        mockExpiry.set(key, Date.now() + options.ttlMs);
+      } else {
+        mockExpiry.delete(key);
+      }
       return Promise.resolve('OK');
     },
     del: function() {
@@ -52,8 +69,15 @@ function createMockRedis() {
       return Promise.resolve(count);
     },
     expire: function(key, seconds) {
+      checkExpiry(key);
       if (!mockStore.has(key)) return Promise.resolve(0);
       mockExpiry.set(key, Date.now() + Number(seconds) * 1000);
+      return Promise.resolve(1);
+    },
+    pexpire: function(key, milliseconds) {
+      checkExpiry(key);
+      if (!mockStore.has(key)) return Promise.resolve(0);
+      mockExpiry.set(key, Date.now() + Number(milliseconds));
       return Promise.resolve(1);
     },
     exists: function(key) {
@@ -81,6 +105,7 @@ function createMockRedis() {
       return Promise.resolve([String(end >= matched.length ? 0 : Number(cursor) + 1), matched.slice(start, end)]);
     },
     ttl: function(key) {
+      checkExpiry(key);
       if (!mockStore.has(key)) return Promise.resolve(-2);
       if (!mockExpiry.has(key)) return Promise.resolve(-1);
       const remaining = Math.floor((mockExpiry.get(key) - Date.now()) / 1000);
@@ -133,6 +158,7 @@ function createMockRedis() {
           removed++;
         }
       });
+      mockStore.set(key, values);
       return Promise.resolve(removed);
     },
     sismember: function(key, member) {
@@ -159,6 +185,25 @@ function createMockRedis() {
       const value = (Number(mockStore.get(key)) || 0) - 1;
       mockStore.set(key, String(value));
       return Promise.resolve(value);
+    },
+    eval: function(script, numberOfKeys) {
+      const args = Array.prototype.slice.call(arguments, 2);
+      const key = args[0];
+      const token = args[Number(numberOfKeys)];
+      checkExpiry(key);
+      if (String(script).includes("redis.call('del'") || String(script).includes('redis.call("del"')) {
+        if (mockStore.get(key) !== token) return Promise.resolve(0);
+        mockStore.delete(key);
+        mockExpiry.delete(key);
+        return Promise.resolve(1);
+      }
+      if (String(script).includes("redis.call('pexpire'") || String(script).includes('redis.call("pexpire"')) {
+        const ttlMs = Number(args[Number(numberOfKeys) + 1]);
+        if (mockStore.get(key) !== token) return Promise.resolve(0);
+        mockExpiry.set(key, Date.now() + ttlMs);
+        return Promise.resolve(1);
+      }
+      return Promise.reject(new Error('Mock Redis only supports lock release and renewal Lua scripts'));
     },
     on: function() {},
     disconnect: function() {},
