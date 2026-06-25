@@ -31,6 +31,7 @@ const io = new Server(server, {
     credentials: true
   }
 });
+let shuttingDown = false;
 
 var corsOptions = {
   origin: function (origin, callback) {
@@ -124,26 +125,74 @@ const startServer = async function() {
   }
 };
 
+const closeSocketServer = function() {
+  return new Promise(function(resolve) {
+    if (!server.listening) return resolve();
+    let resolved = false;
+    const done = function() {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
+    const timeout = setTimeout(done, 5000);
+    if (typeof timeout.unref === 'function') timeout.unref();
+    io.close(function() {
+      clearTimeout(timeout);
+      logger.info('HTTP与WebSocket服务已关闭');
+      done();
+    });
+  });
+};
+
 const shutdown = async function(signal) {
+  if (shuttingDown) return { stopped: true, reused: true };
+  shuttingDown = true;
   logger.info('收到' + signal + '，开始关闭服务');
+
   try {
     await schedulerService.stopScheduler();
   } catch (err) {
     logger.error('停止定时任务失败:', err);
   }
   try {
+    await closeSocketServer();
+  } catch (err) {
+    logger.error('关闭HTTP与WebSocket服务失败:', err);
+  }
+  try {
     await socketRedisAdapterService.closeSocketAdapter();
   } catch (err) {
     logger.error('关闭实时广播适配器失败:', err);
   }
-  server.close(function() {
-    logger.info('HTTP服务已关闭');
+  try {
+    await db.close();
+  } catch (err) {
+    logger.error('关闭MySQL连接池失败:', err);
+  }
+  try {
+    if (typeof redis.quit === 'function') await redis.quit();
+    else if (typeof redis.disconnect === 'function') redis.disconnect();
+  } catch (err) {
+    if (typeof redis.disconnect === 'function') redis.disconnect();
+    logger.error('关闭Redis连接失败:', err);
+  }
+
+  logger.info('服务资源已全部关闭');
+  return { stopped: true, reused: false };
+};
+
+const handleSignal = function(signal) {
+  shutdown(signal).then(function() {
+    process.exit(0);
+  }).catch(function(err) {
+    logger.error('服务关闭异常:', err);
+    process.exit(1);
   });
 };
 
-process.once('SIGTERM', function() { shutdown('SIGTERM'); });
-process.once('SIGINT', function() { shutdown('SIGINT'); });
+process.once('SIGTERM', function() { handleSignal('SIGTERM'); });
+process.once('SIGINT', function() { handleSignal('SIGINT'); });
 
 startServer();
 
-module.exports = { app, server, io, startServer, shutdown };
+module.exports = { app, server, io, startServer, shutdown, closeSocketServer };
