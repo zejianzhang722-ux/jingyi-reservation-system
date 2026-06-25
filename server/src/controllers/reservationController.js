@@ -12,57 +12,52 @@ const list = async function(req, res) {
     const status = req.query.status;
     const date = req.query.date;
     const roomId = req.query.roomId;
-
     const userRole = req.user.role || 'student';
     const isAdmin = ['admin', 'super_admin', 'counselor'].includes(userRole);
 
-    let sql = 'SELECT r.*, rm.name AS room_name, rm.name AS roomName, rm.type AS room_type, ' +
-      'u.nickname, u.real_name, u.real_name AS user_name, u.real_name AS userName, ' +
-      'u.student_id, u.student_no FROM reservations r ' +
-      'JOIN rooms rm ON r.room_id = rm.id JOIN users u ON r.user_id = u.id WHERE 1=1';
-    const params = [];
+    if (isAdmin && !req.adminScope) return response.error(res, '管理员数据范围未初始化', 500);
 
+    let where = ' WHERE 1=1';
+    const params = [];
     if (!isAdmin) {
-      sql += ' AND r.user_id = ?';
+      where += ' AND r.user_id = ?';
       params.push(req.user.id);
+    } else if (!req.adminScope.isGlobal) {
+      where += ' AND rm.building_id = ?';
+      params.push(req.adminScope.buildingId);
     }
     if (status) {
-      sql += ' AND r.status = ?';
+      where += ' AND r.status = ?';
       params.push(status);
     }
     if (date) {
-      sql += ' AND r.date = ?';
+      where += ' AND r.date = ?';
       params.push(date);
     }
     if (roomId) {
-      sql += ' AND r.room_id = ?';
+      if (isAdmin && !req.adminScope.isGlobal) {
+        const [rooms] = await db.query('SELECT id, building_id FROM rooms WHERE id = ?', [Number(roomId)]);
+        if (!rooms.length || Number(rooms[0].building_id) !== Number(req.adminScope.buildingId)) {
+          return response.error(res, '无权查看其他楼栋功能房预约', 403);
+        }
+      }
+      where += ' AND r.room_id = ?';
       params.push(roomId);
     }
 
-    sql += ' ORDER BY r.date DESC, r.start_time DESC LIMIT ? OFFSET ?';
-    params.push(pageSize, offset);
-    const [reservations] = await db.query(sql, params);
+    const [reservations] = await db.query(
+      'SELECT r.*, rm.name AS room_name, rm.name AS roomName, rm.type AS room_type, rm.building_id, ' +
+      'u.nickname, u.real_name, u.real_name AS user_name, u.real_name AS userName, ' +
+      'u.student_id, u.student_no FROM reservations r ' +
+      'JOIN rooms rm ON r.room_id = rm.id JOIN users u ON r.user_id = u.id' + where +
+      ' ORDER BY r.date DESC, r.start_time DESC LIMIT ? OFFSET ?',
+      params.concat([pageSize, offset])
+    );
 
-    let countSql = 'SELECT COUNT(*) AS total FROM reservations r WHERE 1=1';
-    const countParams = [];
-    if (!isAdmin) {
-      countSql += ' AND r.user_id = ?';
-      countParams.push(req.user.id);
-    }
-    if (status) {
-      countSql += ' AND r.status = ?';
-      countParams.push(status);
-    }
-    if (date) {
-      countSql += ' AND r.date = ?';
-      countParams.push(date);
-    }
-    if (roomId) {
-      countSql += ' AND r.room_id = ?';
-      countParams.push(roomId);
-    }
-
-    const [countResult] = await db.query(countSql, countParams);
+    const [countResult] = await db.query(
+      'SELECT COUNT(*) AS total FROM reservations r JOIN rooms rm ON rm.id = r.room_id' + where,
+      params
+    );
     return response.paginate(res, reservations, Number(countResult[0].total) || 0, page, pageSize);
   } catch (err) {
     logger.error('获取预约列表异常:', err);
@@ -73,7 +68,7 @@ const list = async function(req, res) {
 const detail = async function(req, res) {
   try {
     const [reservations] = await db.query(
-      'SELECT r.*, rm.name AS room_name, rm.type AS room_type, rm.location, ' +
+      'SELECT r.*, rm.name AS room_name, rm.type AS room_type, rm.location, rm.building_id, ' +
       'rm.open_start_time, rm.open_end_time, u.nickname, u.real_name, u.student_id, u.phone ' +
       'FROM reservations r JOIN rooms rm ON r.room_id = rm.id ' +
       'JOIN users u ON r.user_id = u.id WHERE r.id = ?',
@@ -82,8 +77,15 @@ const detail = async function(req, res) {
     if (!reservations.length) return response.error(res, '预约不存在', 404);
 
     const reservation = reservations[0];
-    if ((req.user.role || 'student') === 'student' && Number(reservation.user_id) !== Number(req.user.id)) {
+    const role = req.user.role || 'student';
+    if (role === 'student' && Number(reservation.user_id) !== Number(req.user.id)) {
       return response.error(res, '无权查看此预约', 403);
+    }
+    if (['admin', 'super_admin', 'counselor'].includes(role)) {
+      if (!req.adminScope) return response.error(res, '管理员数据范围未初始化', 500);
+      if (!req.adminScope.isGlobal && Number(reservation.building_id) !== Number(req.adminScope.buildingId)) {
+        return response.error(res, '无权查看其他楼栋预约', 403);
+      }
     }
 
     if (reservation.seat_id) {
@@ -131,9 +133,7 @@ const joinWaitlist = async function(req, res) {
     return response.success(res, { id: result.id }, '已加入候补队列');
   } catch (err) {
     const duplicateWaitlist = err && (
-      err.code === 'ER_DUP_ENTRY' ||
-      Number(err.errno) === 1062 ||
-      err.message === '已在候补队列中'
+      err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062 || err.message === '已在候补队列中'
     );
     if (duplicateWaitlist) return response.error(res, '已在候补队列中', 409);
     logger.error('加入候补异常:', err);
@@ -147,9 +147,7 @@ const leaveWaitlist = async function(req, res) {
       "UPDATE reservation_waitlist SET status = 'cancelled', updated_at = NOW() WHERE id = ? AND user_id = ? AND status = 'waiting'",
       [req.params.id, req.user.id]
     );
-    if (!result || result.affectedRows === 0) {
-      return response.error(res, '候补记录不存在或已被处理', 409);
-    }
+    if (!result || result.affectedRows === 0) return response.error(res, '候补记录不存在或已被处理', 409);
     return response.success(res, null, '已退出候补队列');
   } catch (err) {
     logger.error('退出候补异常:', err);
@@ -157,10 +155,4 @@ const leaveWaitlist = async function(req, res) {
   }
 };
 
-module.exports = {
-  list,
-  detail,
-  checkConflict,
-  joinWaitlist,
-  leaveWaitlist
-};
+module.exports = { list, detail, checkConflict, joinWaitlist, leaveWaitlist };
