@@ -100,7 +100,7 @@ const startServer = async function() {
     const readiness = await dataReadinessService.checkDataReadiness();
 
     if (process.env.ENABLE_SCHEDULER === 'true') {
-      initScheduler();
+      await initScheduler();
     } else {
       logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
     }
