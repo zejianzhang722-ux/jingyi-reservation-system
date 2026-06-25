@@ -10,11 +10,13 @@ const distributedLockService = require('./distributedLockService');
 let initialized = false;
 let scheduledJobs = [];
 
-const sendEndingReminders = async function() {
+const sendEndingReminders = async function(referenceDate) {
   const db = require('../config/database');
   const helpers = require('../utils/helpers');
   const notificationService = require('./notificationService');
-  const now = new Date();
+  const now = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+    ? referenceDate
+    : new Date();
   const today = helpers.formatDate(now);
   const currentTime = helpers.formatTime(now);
   const endTime = helpers.addMinutes(currentTime, 15);
@@ -36,9 +38,14 @@ const sendEndingReminders = async function() {
   return { processed: ending.length };
 };
 
-const expirePosters = async function() {
+const expirePosters = async function(referenceDate) {
   const db = require('../config/database');
-  const today = new Date().toISOString().split('T')[0];
+  const helpers = require('../utils/helpers');
+  const today = helpers.formatDate(
+    referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+      ? referenceDate
+      : new Date()
+  );
   const [expired] = await db.query(
     "SELECT id FROM posters WHERE status = 'approved' AND end_date < ?",
     [today]
@@ -73,14 +80,14 @@ const TASK_DEFINITIONS = [
     ttlMs: 50 * 1000,
     renewEveryMs: 15 * 1000,
     dedupeTtlMs: 3 * 60 * 1000,
-    run: function() { return reservationService.sendReservationReminders(); }
+    run: function(fireDate) { return reservationService.sendReservationReminders(fireDate); }
   },
   {
     name: 'reservation-ending-reminders',
-    cron: '0 */1 * * *',
-    ttlMs: 50 * 60 * 1000,
-    renewEveryMs: 5 * 60 * 1000,
-    dedupeTtlMs: 2 * 60 * 60 * 1000,
+    cron: '* * * * *',
+    ttlMs: 50 * 1000,
+    renewEveryMs: 15 * 1000,
+    dedupeTtlMs: 3 * 60 * 1000,
     run: sendEndingReminders
   },
   {
@@ -93,7 +100,7 @@ const TASK_DEFINITIONS = [
   },
   {
     name: 'expire-waitlist',
-    cron: '0 */10 * * *',
+    cron: '*/10 * * * *',
     ttlMs: 9 * 60 * 1000,
     renewEveryMs: 60 * 1000,
     dedupeTtlMs: 20 * 60 * 1000,
@@ -116,6 +123,16 @@ const occurrenceKey = function(fireDate) {
   return String(Math.floor(date.getTime() / 60000));
 };
 
+const releaseLockSafely = async function(lockService, lock, taskName, kind) {
+  if (!lock || !lock.acquired) return false;
+  try {
+    return await lockService.release(lock);
+  } catch (err) {
+    logger.error('[Scheduler] failed to release ' + kind + ' lock task=' + taskName, err);
+    return false;
+  }
+};
+
 const runLockedTask = async function(definition, options, fireDate) {
   const lockService = options && options.lockService
     ? options.lockService
@@ -124,41 +141,56 @@ const runLockedTask = async function(definition, options, fireDate) {
   const startedAt = Date.now();
   const taskName = definition.name;
   const occurrence = occurrenceKey(fireDate);
-  const lockName = 'scheduler:' + taskName + ':' + occurrence;
-  let lock = null;
+  const dedupeTtlMs = Number(definition.dedupeTtlMs || Math.max(definition.ttlMs, 2 * 60 * 1000));
+  let occurrenceLock = null;
+  let runLock = null;
   let renewalTimer = null;
 
   try {
-    lock = await lockService.acquire(lockName, definition.ttlMs);
-    if (!lock.acquired) {
-      logger.info('[Scheduler] skipped task=' + taskName + ' occurrence=' + occurrence + ' reason=already-claimed');
-      return { status: 'skipped', taskName, executionId, occurrence };
+    occurrenceLock = await lockService.acquire(
+      'scheduler:occurrence:' + taskName + ':' + occurrence,
+      dedupeTtlMs
+    );
+    if (!occurrenceLock.acquired) {
+      logger.info('[Scheduler] skipped task=' + taskName + ' occurrence=' + occurrence + ' reason=already-completed-or-claimed');
+      return { status: 'skipped', reason: 'already-claimed', taskName, executionId, occurrence };
+    }
+
+    runLock = await lockService.acquire('scheduler:run:' + taskName, definition.ttlMs);
+    if (!runLock.acquired) {
+      await releaseLockSafely(lockService, occurrenceLock, taskName, 'occurrence');
+      logger.info('[Scheduler] skipped task=' + taskName + ' occurrence=' + occurrence + ' reason=previous-occurrence-running');
+      return { status: 'skipped', reason: 'task-running', taskName, executionId, occurrence };
     }
 
     if (definition.renewEveryMs >= 1000 && definition.renewEveryMs < definition.ttlMs) {
       renewalTimer = setInterval(function() {
-        lockService.renew(lock, definition.ttlMs).catch(function(err) {
-          logger.error('[Scheduler] lock renewal failed task=' + taskName + ' occurrence=' + occurrence, err);
+        lockService.renew(runLock, definition.ttlMs).then(function(renewed) {
+          if (!renewed) {
+            logger.error('[Scheduler] run lock ownership lost task=' + taskName + ' occurrence=' + occurrence);
+          }
+        }).catch(function(err) {
+          logger.error('[Scheduler] run lock renewal failed task=' + taskName + ' occurrence=' + occurrence, err);
         });
       }, definition.renewEveryMs);
       if (typeof renewalTimer.unref === 'function') renewalTimer.unref();
     }
 
     logger.info('[Scheduler] acquired task=' + taskName + ' occurrence=' + occurrence + ' execution=' + executionId);
-    const value = await definition.run();
+    const value = await definition.run(fireDate);
     if (renewalTimer) {
       clearInterval(renewalTimer);
       renewalTimer = null;
     }
 
-    // 成功后保留“本次触发已完成”标记直到去重窗口结束，避免另一实例稍晚到达时重复执行。
-    const dedupeTtlMs = Number(definition.dedupeTtlMs || Math.max(definition.ttlMs, 2 * 60 * 1000));
-    const retained = await lockService.renew(lock, dedupeTtlMs);
+    const retained = await lockService.renew(occurrenceLock, dedupeTtlMs);
     if (!retained) {
-      const err = new Error('任务执行完成但已失去分布式锁所有权');
-      err.code = 'SCHEDULER_LOCK_LOST';
+      const err = new Error('任务执行完成但已失去触发周期锁所有权');
+      err.code = 'SCHEDULER_OCCURRENCE_LOCK_LOST';
       throw err;
     }
+    await releaseLockSafely(lockService, runLock, taskName, 'run');
+    runLock = null;
 
     const durationMs = Date.now() - startedAt;
     logger.info(
@@ -175,14 +207,8 @@ const runLockedTask = async function(definition, options, fireDate) {
     };
   } catch (err) {
     if (renewalTimer) clearInterval(renewalTimer);
-    // 失败时释放锁，让同一触发周期中稍晚到达的其他实例有机会接管重试。
-    if (lock && lock.acquired) {
-      try {
-        await lockService.release(lock);
-      } catch (releaseErr) {
-        logger.error('[Scheduler] failed to release failed-task lock task=' + taskName, releaseErr);
-      }
-    }
+    await releaseLockSafely(lockService, runLock, taskName, 'run');
+    await releaseLockSafely(lockService, occurrenceLock, taskName, 'occurrence');
     const durationMs = Date.now() - startedAt;
     logger.error(
       '[Scheduler] failed task=' + taskName + ' occurrence=' + occurrence +
@@ -252,6 +278,7 @@ module.exports = {
   sendEndingReminders,
   expirePosters,
   expireWaitlist,
+  releaseLockSafely,
   runLockedTask,
   initScheduler,
   stopScheduler,
