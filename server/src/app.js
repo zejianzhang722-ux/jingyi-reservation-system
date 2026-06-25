@@ -14,6 +14,7 @@ const routes = require('./routes');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
 const schedulerService = require('./services/schedulerService');
+const socketConnectionRateLimitService = require('./services/socketConnectionRateLimitService');
 const socketAuthService = require('./services/socketAuthService');
 const socketRedisAdapterService = require('./services/socketRedisAdapterService');
 const realtimeEventService = require('./services/realtimeEventService');
@@ -81,6 +82,7 @@ app.use(function(err, req, res, next) {
   });
 });
 
+socketConnectionRateLimitService.configure(io);
 socketAuthService.configureSocketServer(io);
 realtimeEventService.setIO(io);
 app.set('io', io);
