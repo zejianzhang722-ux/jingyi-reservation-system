@@ -27,9 +27,11 @@
           <el-button type="primary" @click="loadRooms">刷新</el-button>
         </el-form-item>
         <el-form-item>
-          <el-tag :type="socketConnected ? 'success' : 'danger'">
-            {{ socketConnected ? 'WebSocket 已连接' : 'WebSocket 未连接' }}
-          </el-tag>
+          <el-tooltip :content="socketStatusMessage" placement="bottom">
+            <el-tag :type="socketConnected ? 'success' : 'danger'">
+              {{ socketConnected ? 'WebSocket 已连接' : 'WebSocket 未连接' }}
+            </el-tag>
+          </el-tooltip>
         </el-form-item>
       </el-form>
     </el-card>
@@ -71,6 +73,7 @@ const filters = reactive({ buildingId: '', type: '' })
 const rooms = ref([])
 const buildingOptions = ref([])
 const socketConnected = ref(false)
+const socketStatusMessage = ref('实时连接尚未建立')
 const timelineDialogVisible = ref(false)
 const currentRoom = ref(null)
 const timelineDetailRef = ref(null)
@@ -169,9 +172,35 @@ function renderTimeline(data) {
 }
 
 function initSocket() {
-  socket = io(window.location.origin, { path: '/socket.io', transports: ['websocket'] })
-  socket.on('connect', () => { socketConnected.value = true })
-  socket.on('disconnect', () => { socketConnected.value = false })
+  const token = localStorage.getItem('token') || ''
+  if (!token) {
+    socketConnected.value = false
+    socketStatusMessage.value = '缺少管理员访问令牌，请重新登录'
+    return
+  }
+
+  socket = io(window.location.origin, {
+    path: '/socket.io',
+    transports: ['websocket'],
+    auth: (callback) => callback({ token: localStorage.getItem('token') || '' }),
+    reconnectionAttempts: 5,
+    timeout: 8000
+  })
+  socket.on('connect', () => {
+    socketConnected.value = true
+    socketStatusMessage.value = '已通过管理员身份认证并连接实时服务'
+  })
+  socket.on('disconnect', (reason) => {
+    socketConnected.value = false
+    socketStatusMessage.value = `实时连接已断开：${reason}`
+  })
+  socket.on('connect_error', (error) => {
+    socketConnected.value = false
+    socketStatusMessage.value = error?.message || '实时连接认证失败'
+  })
+  socket.on('socket-error', (error) => {
+    socketStatusMessage.value = error?.message || '实时通道操作失败'
+  })
   socket.on('room-status-update', (data) => {
     const idx = rooms.value.findIndex(r => r.id === data.roomId)
     if (idx !== -1) {
