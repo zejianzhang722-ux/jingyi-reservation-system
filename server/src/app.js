@@ -4,13 +4,12 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const path = require('path');
-const fs = require('fs');
 const config = require('./config');
 const logger = require('./config/logger');
 const db = require('./config/database');
 const redis = require('./config/redis');
 const routes = require('./routes');
+const mediaRouter = require('./routes/media');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
 const schedulerService = require('./services/schedulerService');
@@ -19,11 +18,10 @@ const socketAuthService = require('./services/socketAuthService');
 const socketRedisAdapterService = require('./services/socketRedisAdapterService');
 const realtimeEventService = require('./services/realtimeEventService');
 const dataReadinessService = require('./services/dataReadinessService');
+const productionConfigGuard = require('./services/productionConfigGuard');
 
 const app = express();
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -34,37 +32,27 @@ const io = new Server(server, {
 });
 let shuttingDown = false;
 
-var corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || config.corsOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS origin not allowed: ' + origin));
-    }
+const corsOptions = {
+  origin: function(origin, callback) {
+    if (!origin || config.corsOrigins.indexOf(origin) !== -1) callback(null, true);
+    else callback(new Error('CORS origin not allowed'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Idempotency-Key']
 };
 app.use(cors(corsOptions));
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'same-site' },
+  contentSecurityPolicy: false
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan('combined', { stream: { write: function(msg) { logger.info(msg.trim()); } } }));
 app.use(checkTokenBlacklist);
 app.use(apiLimiter);
 
-const uploadsDir = path.join(__dirname, '..', config.upload.dir);
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-app.use('/uploads', express.static(uploadsDir, {
-  dotfiles: 'deny',
-  setHeaders: function(res) {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-  }
-}));
-
+app.use('/uploads', mediaRouter);
 app.use('/api/v1', routes);
 
 app.use('/api', function(req, res) {
@@ -74,10 +62,11 @@ app.use('/api', function(req, res) {
 app.use(function(err, req, res, next) {
   logger.error('未捕获异常:', err);
   if (res.headersSent) return next(err);
+  const status = Number(err.httpStatus) >= 400 && Number(err.httpStatus) <= 599 ? Number(err.httpStatus) : 500;
   const isProduction = process.env.NODE_ENV === 'production';
-  res.status(500).json({
-    code: 500,
-    message: isProduction ? '服务器内部错误' : (err.message || '服务器内部错误'),
+  res.status(status).json({
+    code: status,
+    message: isProduction && status === 500 ? '服务器内部错误' : (err.message || '服务器内部错误'),
     data: null
   });
 });
@@ -89,6 +78,7 @@ app.set('io', io);
 
 const startServer = async function() {
   try {
+    productionConfigGuard.validate();
     const readiness = await dataReadinessService.checkDataReadiness();
     const socketAdapterState = await socketRedisAdapterService.initSocketAdapter(io);
     logger.info('实时广播适配器已就绪，模式: ' + socketAdapterState.mode);
@@ -101,17 +91,9 @@ const startServer = async function() {
     }
 
     server.listen(config.port, function() {
-      var dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
-      var redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
-      var schemaMode = readiness.schema.ready ? '已就绪' : '未完成迁移';
-      console.log('========================================');
-      console.log('  敬一书院预约管理系统服务已启动');
-      console.log('  端口: ' + config.port);
-      console.log('  数据库运行模式: ' + dbMode);
-      console.log('  Redis运行模式: ' + redisMode);
-      console.log('  预约一致性结构: ' + schemaMode);
-      console.log('  实时广播模式: ' + socketAdapterState.mode);
-      console.log('========================================');
+      const dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
+      const redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
+      const schemaMode = readiness.schema.ready ? '已就绪' : '未完成迁移';
       logger.info(
         '敬一书院预约管理系统服务已启动，端口: ' + config.port +
         '，数据库: ' + dbMode + '，Redis: ' + redisMode +
@@ -150,27 +132,10 @@ const shutdown = async function(signal) {
   if (shuttingDown) return { stopped: true, reused: true };
   shuttingDown = true;
   logger.info('收到' + signal + '，开始关闭服务');
-
-  try {
-    await schedulerService.stopScheduler();
-  } catch (err) {
-    logger.error('停止定时任务失败:', err);
-  }
-  try {
-    await closeSocketServer();
-  } catch (err) {
-    logger.error('关闭HTTP与WebSocket服务失败:', err);
-  }
-  try {
-    await socketRedisAdapterService.closeSocketAdapter();
-  } catch (err) {
-    logger.error('关闭实时广播适配器失败:', err);
-  }
-  try {
-    await db.close();
-  } catch (err) {
-    logger.error('关闭MySQL连接池失败:', err);
-  }
+  try { await schedulerService.stopScheduler(); } catch (err) { logger.error('停止定时任务失败:', err); }
+  try { await closeSocketServer(); } catch (err) { logger.error('关闭HTTP与WebSocket服务失败:', err); }
+  try { await socketRedisAdapterService.closeSocketAdapter(); } catch (err) { logger.error('关闭实时广播适配器失败:', err); }
+  try { await db.close(); } catch (err) { logger.error('关闭MySQL连接池失败:', err); }
   try {
     if (typeof redis.quit === 'function') await redis.quit();
     else if (typeof redis.disconnect === 'function') redis.disconnect();
@@ -178,15 +143,12 @@ const shutdown = async function(signal) {
     if (typeof redis.disconnect === 'function') redis.disconnect();
     logger.error('关闭Redis连接失败:', err);
   }
-
   logger.info('服务资源已全部关闭');
   return { stopped: true, reused: false };
 };
 
 const handleSignal = function(signal) {
-  shutdown(signal).then(function() {
-    process.exit(0);
-  }).catch(function(err) {
+  shutdown(signal).then(function() { process.exit(0); }).catch(function(err) {
     logger.error('服务关闭异常:', err);
     process.exit(1);
   });
