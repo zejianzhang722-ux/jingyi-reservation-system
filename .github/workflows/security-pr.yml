@@ -103,6 +103,14 @@ jobs:
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_reservation_ci
         run: node scripts/apply-reservation-consistency-migration.js
+      - name: Apply notification outbox migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/apply-notification-outbox-migration.js
       - name: Run strict migration postcheck
         env:
           REQUIRE_SLOT_CONSISTENCY: 'true'
