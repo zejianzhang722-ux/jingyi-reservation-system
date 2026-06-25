@@ -20,10 +20,12 @@ function fakeSocket(token) {
     joined: [],
     left: [],
     handlers: {},
+    disconnected: false,
     join: function(room) { this.joined.push(room) },
     leave: function(room) { this.left.push(room) },
     emit: function(event, payload) { this.emitted.push({ event, payload }) },
-    on: function(event, handler) { this.handlers[event] = handler }
+    on: function(event, handler) { this.handlers[event] = handler },
+    disconnect: function() { this.disconnected = true }
   }
 }
 
@@ -40,7 +42,12 @@ function dependencies(overrides) {
         if (token === 'invalid') throw new Error('invalid')
         if (token === 'refresh') return { id: 7, role: 'admin', tokenType: 'refresh' }
         if (token === 'student') return { id: 1, role: 'student', tokenType: 'access' }
-        return { id: 7, role: settings.tokenRole || 'admin', tokenType: 'access' }
+        return {
+          id: 7,
+          role: settings.tokenRole || 'admin',
+          tokenType: 'access',
+          exp: settings.exp || Math.floor(Date.now() / 1000) + 3600
+        }
       }
     },
     configObject: { jwt: { secret: 'test-secret' } },
@@ -91,6 +98,8 @@ async function main() {
   assert.strictEqual(principal.id, 7, 'authenticated administrator id must be attached')
   assert.strictEqual(principal.buildingId, 2, 'administrator building scope must come from the database')
   assert.strictEqual(authenticatedSocket.data.user.role, 'admin', 'authenticated role must be attached to socket data')
+  assert(authenticatedSocket.data.tokenClaims.exp, 'verified token claims must be retained for live session checks')
+  await socketAuthService.validateLiveSession(authenticatedSocket, dependencies())
 
   await expectSocketError(function() {
     return socketAuthService.authenticateSocket(fakeSocket(''), dependencies())
@@ -111,6 +120,21 @@ async function main() {
   await expectSocketError(function() {
     return socketAuthService.authenticateSocket(fakeSocket('access-token'), dependencies({ databaseRole: 'counselor' }))
   }, 'SOCKET_ROLE_CHANGED', 'database role changes must invalidate existing socket role claims')
+
+  await expectSocketError(function() {
+    return socketAuthService.validateLiveSession(authenticatedSocket, dependencies({ blacklisted: 'access-token' }))
+  }, 'SOCKET_TOKEN_REVOKED', 'a connected socket must be rejected after its token is revoked')
+
+  await expectSocketError(function() {
+    return socketAuthService.validateLiveSession(authenticatedSocket, dependencies({ buildingId: 3 }))
+  }, 'SOCKET_SCOPE_CHANGED', 'a connected socket must be rejected after its building scope changes')
+
+  const expiredLiveSocket = fakeSocket('access-token')
+  await socketAuthService.authenticateSocket(expiredLiveSocket, dependencies())
+  expiredLiveSocket.data.tokenClaims.exp = Math.floor(Date.now() / 1000) - 1
+  await expectSocketError(function() {
+    return socketAuthService.validateLiveSession(expiredLiveSocket, dependencies())
+  }, 'SOCKET_TOKEN_EXPIRED', 'a connected socket must be rejected after token expiration')
 
   const adminSocket = fakeSocket('access-token')
   adminSocket.data.user = { id: 7, role: 'admin', buildingId: 2 }
@@ -174,8 +198,10 @@ async function main() {
 
   const appSource = fs.readFileSync(path.join(__dirname, '../server/src/app.js'), 'utf8')
   const monitorSource = fs.readFileSync(path.join(__dirname, '../admin/src/views/Room/Monitor.vue'), 'utf8')
+  const authSource = fs.readFileSync(path.join(__dirname, '../server/src/services/socketAuthService.js'), 'utf8')
   assert(/socketAuthService\.configureSocketServer\(io\)/.test(appSource), 'server must configure authenticated Socket.IO handlers')
   assert(!/socket\.join\(room\)/.test(appSource), 'server entry point must not retain unrestricted room joins')
+  assert(/startSessionGuard\(socket, settings\)/.test(authSource), 'connected sockets must be periodically revalidated')
   assert(/auth: \(callback\) => callback\(\{ token: localStorage\.getItem\('token'\)/.test(monitorSource), 'admin monitor must provide the current access token on every connection')
   assert(/connect_error/.test(monitorSource), 'admin monitor must display socket authentication failures')
 
