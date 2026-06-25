@@ -36,6 +36,9 @@ const loadPrincipal = async function(decoded, dependencies) {
   if (!ADMIN_ROLES.includes(role)) {
     throw socketError('实时监控仅允许管理员连接', 'SOCKET_ROLE_FORBIDDEN');
   }
+  if (!Number.isInteger(Number(decoded.id)) || Number(decoded.id) <= 0) {
+    throw socketError('实时连接令牌缺少有效账号标识', 'SOCKET_SUBJECT_INVALID');
+  }
 
   const [rows] = await dbClient.query(
     'SELECT id, username, real_name, role, building_id, status FROM admins WHERE id = ?',
@@ -118,6 +121,13 @@ const normalizeRoomName = function(value) {
   return room;
 };
 
+const ensureBuildingScope = function(user) {
+  if (user.role === 'super_admin') return;
+  if (!Number.isInteger(Number(user.buildingId)) || Number(user.buildingId) <= 0) {
+    throw socketError('管理员尚未分配楼栋范围', 'SOCKET_BUILDING_SCOPE_REQUIRED');
+  }
+};
+
 const authorizeRoom = async function(socket, requestedRoom, options) {
   const dependencies = Object.assign({ dbClient: db }, options || {});
   const user = socket && socket.data ? socket.data.user : null;
@@ -142,6 +152,7 @@ const authorizeRoom = async function(socket, requestedRoom, options) {
   const buildingMatch = room.match(/^building:(\d+)$/);
   if (buildingMatch) {
     const buildingId = Number(buildingMatch[1]);
+    ensureBuildingScope(user);
     if (user.role !== 'super_admin' && Number(user.buildingId) !== buildingId) {
       throw socketError('无权订阅其他楼栋', 'SOCKET_ROOM_FORBIDDEN');
     }
@@ -151,11 +162,13 @@ const authorizeRoom = async function(socket, requestedRoom, options) {
   const roomMatch = room.match(/^room:(\d+)$/);
   if (roomMatch) {
     const roomId = Number(roomMatch[1]);
+    ensureBuildingScope(user);
     const [rows] = await dependencies.dbClient.query(
       'SELECT id, building_id FROM rooms WHERE id = ?',
       [roomId]
     );
     if (!rows || !rows.length) throw socketError('功能房不存在', 'SOCKET_ROOM_NOT_FOUND');
+    if (!rows[0].building_id) throw socketError('功能房尚未分配楼栋', 'SOCKET_ROOM_SCOPE_INVALID');
     if (user.role !== 'super_admin' && Number(user.buildingId) !== Number(rows[0].building_id)) {
       throw socketError('无权订阅该功能房', 'SOCKET_ROOM_FORBIDDEN');
     }
@@ -219,8 +232,14 @@ const configureSocketServer = function(io, options) {
       try {
         consumeRoomEventQuota(socket);
         const normalized = normalizeRoomName(room);
-        const protectedRoom = normalized === 'admin:' + user.id;
-        if (protectedRoom) throw socketError('不能退出管理员私有房间', 'SOCKET_ROOM_PROTECTED');
+        const protectedRooms = [
+          'admin:' + user.id,
+          user.role === 'super_admin' ? 'monitor:all' : null,
+          user.buildingId ? 'building:' + user.buildingId : null
+        ].filter(Boolean);
+        if (protectedRooms.includes(normalized)) {
+          throw socketError('不能退出系统自动分配的实时房间', 'SOCKET_ROOM_PROTECTED');
+        }
         socket.leave(normalized);
         acknowledge(socket, callback, { ok: true, room: normalized });
       } catch (err) {
@@ -251,6 +270,7 @@ module.exports = {
   extractToken,
   authenticateSocket,
   normalizeRoomName,
+  ensureBuildingScope,
   authorizeRoom,
   consumeRoomEventQuota,
   configureSocketServer
