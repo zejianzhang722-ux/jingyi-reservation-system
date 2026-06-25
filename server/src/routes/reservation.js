@@ -5,17 +5,19 @@ const reservationCreateController = require('../controllers/reservationCreateCon
 const reservationMutationController = require('../controllers/reservationMutationController');
 const reservationLifecycleController = require('../controllers/reservationLifecycleController');
 const reservationApprovalController = require('../controllers/reservationApprovalController');
+const scopedQueryController = require('../controllers/scopedQueryController');
 const checkinCredentialController = require('../controllers/checkinCredentialController');
 const { auth, requireAdmin } = require('../middleware/auth');
+const adminScope = require('../middleware/adminScope');
 const { createReservationRules, reservationIdRules, waitlistRules, paginationRules, auditRules } = require('../middleware/validator');
 const { reservationLimiter } = require('../middleware/rateLimit');
 
 router.post('/', auth, reservationLimiter, createReservationRules, reservationCreateController.create);
 router.get('/', auth, paginationRules, reservationController.list);
-router.get('/pending', auth, requireAdmin, reservationApprovalController.pending);
-router.get('/pending-count', auth, requireAdmin, reservationApprovalController.pendingCount);
-router.put('/:id/approve', auth, requireAdmin, auditRules, reservationApprovalController.approve);
-router.put('/:id/reject', auth, requireAdmin, auditRules, reservationApprovalController.reject);
+router.get('/pending', auth, requireAdmin, adminScope.loadAdminScope, scopedQueryController.pendingReservations);
+router.get('/pending-count', auth, requireAdmin, adminScope.loadAdminScope, scopedQueryController.pendingReservationCount);
+router.put('/:id/approve', auth, requireAdmin, adminScope.loadAdminScope, adminScope.reservationFromParam('id'), auditRules, reservationApprovalController.approve);
+router.put('/:id/reject', auth, requireAdmin, adminScope.loadAdminScope, adminScope.reservationFromParam('id'), auditRules, reservationApprovalController.reject);
 router.get('/:id', auth, reservationIdRules, reservationController.detail);
 router.delete('/:id', auth, reservationIdRules, reservationLifecycleController.cancel);
 router.put('/:id', auth, reservationIdRules, reservationMutationController.update);
