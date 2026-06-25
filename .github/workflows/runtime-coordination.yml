@@ -12,6 +12,16 @@ jobs:
   runtime-coordination:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,8 +54,16 @@ jobs:
           node --check scripts/socket-auth-check.js
           node --check scripts/socket-adapter-check.js
           node --check scripts/realtime-event-check.js
-      - name: Run runtime coordination regression
+          node --check scripts/redis-runtime-integration-check.js
+      - name: Run isolated runtime coordination regression
         run: npm run check:runtime-coordination
+      - name: Run real Redis runtime integration
+        env:
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          REDIS_DB: 15
+          ALLOW_MOCK_REDIS: 'false'
+        run: node scripts/redis-runtime-integration-check.js
       - name: Run server integration check
         run: npm run test:integration
         working-directory: server
