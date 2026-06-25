@@ -16,6 +16,7 @@ const { checkTokenBlacklist } = require('./middleware/auth');
 const schedulerService = require('./services/schedulerService');
 const socketAuthService = require('./services/socketAuthService');
 const socketRedisAdapterService = require('./services/socketRedisAdapterService');
+const realtimeEventService = require('./services/realtimeEventService');
 const dataReadinessService = require('./services/dataReadinessService');
 
 const app = express();
@@ -80,6 +81,7 @@ app.use(function(err, req, res, next) {
 });
 
 socketAuthService.configureSocketServer(io);
+realtimeEventService.setIO(io);
 app.set('io', io);
 
 const startServer = async function() {
