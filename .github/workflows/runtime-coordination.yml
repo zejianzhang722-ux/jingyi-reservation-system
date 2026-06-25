@@ -45,12 +45,14 @@ jobs:
           node --check server/src/middleware/auth.js
           node --check server/src/services/distributedLockService.js
           node --check server/src/services/schedulerService.js
+          node --check server/src/services/socketConnectionRateLimitService.js
           node --check server/src/services/socketAuthService.js
           node --check server/src/services/socketRedisAdapterService.js
           node --check server/src/services/realtimeEventService.js
           node --check server/src/scheduler-worker.js
           node --check server/src/app.js
           node --check scripts/runtime-coordination-check.js
+          node --check scripts/socket-connection-rate-limit-check.js
           node --check scripts/socket-auth-check.js
           node --check scripts/socket-adapter-check.js
           node --check scripts/realtime-event-check.js
