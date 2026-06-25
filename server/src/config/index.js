@@ -1,7 +1,9 @@
-module.exports = {
+const crypto = require('crypto');
+
+const config = {
   port: process.env.PORT || 3000,
   jwt: {
-    secret: process.env.JWT_SECRET || 'jingyi-reservation-jwt-secret-2026-dev',
+    secret: process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex'),
     expiresIn: '2h',
     refreshExpiresIn: '7d'
   },
@@ -9,11 +11,12 @@ module.exports = {
     host: process.env.MYSQL_HOST || 'localhost',
     port: process.env.MYSQL_PORT || 3306,
     user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || '123456',
+    password: process.env.MYSQL_PASSWORD || '',
     database: process.env.MYSQL_DATABASE || 'jingyi_reservation',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    dateStrings: true
   },
   redis: {
     host: process.env.REDIS_HOST || 'localhost',
@@ -22,12 +25,12 @@ module.exports = {
     db: process.env.REDIS_DB || 0
   },
   wechat: {
-    appId: process.env.WECHAT_APPID || 'wx_test_appid',
-    appSecret: process.env.WECHAT_APPSECRET || 'wx_test_secret'
+    appId: process.env.WECHAT_APPID || '',
+    appSecret: process.env.WECHAT_APPSECRET || ''
   },
   upload: {
-    dir: './uploads',
-    maxSize: 5 * 1024 * 1024
+    dir: process.env.UPLOAD_DIR || './uploads',
+    maxSize: Math.min(10 * 1024 * 1024, Math.max(64 * 1024, Number(process.env.UPLOAD_MAX_SIZE || 5 * 1024 * 1024)))
   },
   reservation: {
     advanceDays: 3,
@@ -63,3 +66,5 @@ module.exports = {
     return origin.trim();
   }).filter(Boolean)
 };
+
+module.exports = config;
