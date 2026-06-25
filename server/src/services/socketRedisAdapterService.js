@@ -59,8 +59,9 @@ class RedisBroadcastAdapter extends Adapter {
     this.closed = false;
     this.onMessage = this.handleMessage.bind(this);
     this.subscriber.on('message', this.onMessage);
-    Promise.resolve(this.subscriber.subscribe(this.channel)).catch(function(err) {
-      logger.error('[SocketAdapter] 订阅频道失败 channel=' + settings.channel, err);
+    const channel = this.channel;
+    Promise.resolve(this.subscriber.subscribe(channel)).catch(function(err) {
+      logger.error('[SocketAdapter] 订阅频道失败 channel=' + channel, err);
     });
   }
 
@@ -106,6 +107,16 @@ const connectClient = async function(client) {
   if (client.status === 'end') throw new Error('Redis专用连接已关闭');
 };
 
+const closeClient = async function(client) {
+  if (!client) return;
+  try {
+    if (typeof client.quit === 'function' && client.status !== 'end') await client.quit();
+    else if (typeof client.disconnect === 'function') client.disconnect();
+  } catch (err) {
+    if (typeof client.disconnect === 'function') client.disconnect();
+  }
+};
+
 const initSocketAdapter = async function(io, options) {
   if (initialized) return { initialized: true, reused: true, mode: currentMode };
   const settings = options || {};
@@ -130,19 +141,29 @@ const initSocketAdapter = async function(io, options) {
     throw err;
   }
 
-  pubClient = settings.pubClient || redisClient.duplicate();
-  subClient = settings.subClient || redisClient.duplicate();
-  await Promise.all([connectClient(pubClient), connectClient(subClient)]);
-  await pubClient.ping();
-  io.adapter(createAdapterFactory(pubClient, subClient, {
-    prefix: settings.prefix || DEFAULT_PREFIX,
-    uid: settings.uid
-  }));
-
-  initialized = true;
-  currentMode = 'redis-broadcast';
-  logger.info('[SocketAdapter] Redis跨实例广播已启用');
-  return { initialized: true, reused: false, mode: currentMode };
+  const nextPubClient = settings.pubClient || redisClient.duplicate();
+  const nextSubClient = settings.subClient || redisClient.duplicate();
+  try {
+    await Promise.all([connectClient(nextPubClient), connectClient(nextSubClient)]);
+    await Promise.all([nextPubClient.ping(), nextSubClient.ping()]);
+    io.adapter(createAdapterFactory(nextPubClient, nextSubClient, {
+      prefix: settings.prefix || DEFAULT_PREFIX,
+      uid: settings.uid
+    }));
+    pubClient = nextPubClient;
+    subClient = nextSubClient;
+    initialized = true;
+    currentMode = 'redis-broadcast';
+    logger.info('[SocketAdapter] Redis跨实例广播已启用');
+    return { initialized: true, reused: false, mode: currentMode };
+  } catch (err) {
+    await Promise.all([closeClient(nextPubClient), closeClient(nextSubClient)]);
+    pubClient = null;
+    subClient = null;
+    initialized = false;
+    currentMode = 'memory';
+    throw err;
+  }
 };
 
 const closeSocketAdapter = async function() {
@@ -151,14 +172,7 @@ const closeSocketAdapter = async function() {
   subClient = null;
   initialized = false;
   currentMode = 'memory';
-  for (const client of clients) {
-    try {
-      if (typeof client.quit === 'function' && client.status !== 'end') await client.quit();
-      else if (typeof client.disconnect === 'function') client.disconnect();
-    } catch (err) {
-      if (typeof client.disconnect === 'function') client.disconnect();
-    }
-  }
+  await Promise.all(clients.map(closeClient));
   return { closed: true };
 };
 
