@@ -59,10 +59,7 @@ class RedisBroadcastAdapter extends Adapter {
     this.closed = false;
     this.onMessage = this.handleMessage.bind(this);
     this.subscriber.on('message', this.onMessage);
-    const channel = this.channel;
-    Promise.resolve(this.subscriber.subscribe(channel)).catch(function(err) {
-      logger.error('[SocketAdapter] 订阅频道失败 channel=' + channel, err);
-    });
+    this.ready = Promise.resolve(this.subscriber.subscribe(this.channel));
   }
 
   handleMessage(channel, payload) {
@@ -150,6 +147,8 @@ const initSocketAdapter = async function(io, options) {
       prefix: settings.prefix || DEFAULT_PREFIX,
       uid: settings.uid
     }));
+    const defaultAdapter = io.of && io.of('/').adapter;
+    if (defaultAdapter && defaultAdapter.ready) await defaultAdapter.ready;
     pubClient = nextPubClient;
     subClient = nextSubClient;
     initialized = true;
