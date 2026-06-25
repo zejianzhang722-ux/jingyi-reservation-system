@@ -109,5 +109,6 @@ module.exports = {
   requireRole,
   requireAdmin,
   checkTokenBlacklist,
-  getRefreshTokenKey
+  getRefreshTokenKey,
+  isStoredRefreshToken
 };
