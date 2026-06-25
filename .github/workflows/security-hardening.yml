@@ -50,7 +50,21 @@ jobs:
       - name: Run security hardening regression
         run: npm run check:security-hardening
       - name: Run existing security regression
-        run: npm run check:security
+        id: existing_security
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run check:security 2>&1 | tee existing-security.log
+      - name: Upload existing security diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: existing-security-regression-log
+          path: existing-security.log
+          if-no-files-found: ignore
+      - name: Fail when existing security regression failed
+        if: steps.existing_security.outcome == 'failure'
+        run: exit 1
       - name: Run server integration check
         run: npm run test:integration
         working-directory: server
