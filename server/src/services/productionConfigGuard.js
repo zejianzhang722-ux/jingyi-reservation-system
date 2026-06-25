@@ -1,0 +1,34 @@
+const config = require('../config');
+
+const fail = function(message, code) {
+  const err = new Error(message);
+  err.code = code || 'PRODUCTION_CONFIG_INVALID';
+  throw err;
+};
+
+const validate = function() {
+  if (process.env.NODE_ENV !== 'production') return { valid: true, production: false };
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    fail('生产环境必须配置至少32字符的JWT_SECRET', 'JWT_SECRET_REQUIRED');
+  }
+  if (!process.env.MYSQL_PASSWORD || process.env.MYSQL_PASSWORD.length < 8) {
+    fail('生产环境必须配置强MySQL密码', 'MYSQL_PASSWORD_REQUIRED');
+  }
+  if (!process.env.REDIS_PASSWORD || process.env.REDIS_PASSWORD.length < 8) {
+    fail('生产环境必须配置Redis密码', 'REDIS_PASSWORD_REQUIRED');
+  }
+  if (process.env.ALLOW_WECHAT_DISABLED !== 'true' && (!process.env.WECHAT_APPID || !process.env.WECHAT_APPSECRET)) {
+    fail('生产环境必须配置微信应用凭据', 'WECHAT_SECRET_REQUIRED');
+  }
+  if ((config.corsOrigins || []).some(function(origin) {
+    return origin === '*' || /localhost|127\.0\.0\.1/.test(origin);
+  })) {
+    fail('生产环境CORS_ORIGINS不能包含通配符或本机地址', 'CORS_ORIGIN_INVALID');
+  }
+  if (process.env.ALLOW_INSECURE_BASE_URL !== 'true' && !/^https:\/\//i.test(config.baseUrl || '')) {
+    fail('生产环境BASE_URL必须使用HTTPS', 'BASE_URL_HTTPS_REQUIRED');
+  }
+  return { valid: true, production: true };
+};
+
+module.exports = { validate };

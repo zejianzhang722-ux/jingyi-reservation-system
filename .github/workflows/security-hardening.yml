@@ -1,0 +1,73 @@
+name: Security hardening checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            admin/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Check JavaScript syntax
+        run: |
+          node --check server/src/services/secureUploadService.js
+          node --check server/src/services/productionConfigGuard.js
+          node --check server/src/middleware/adminScope.js
+          node --check server/src/middleware/optionalAdminScope.js
+          node --check server/src/controllers/scopedQueryController.js
+          node --check server/src/controllers/scopedStatsController.js
+          node --check server/src/routes/media.js
+          node --check server/src/routes/user.js
+          node --check server/src/routes/admin.js
+          node --check server/src/routes/audit.js
+          node --check server/src/routes/reservation.js
+          node --check server/src/routes/checkin.js
+          node --check server/src/routes/poster.js
+          node --check server/src/routes/stats.js
+          node --check server/src/app.js
+          node --check scripts/security-hardening-check.js
+          node --check scripts/secret-scan-check.js
+      - name: Run security hardening regression
+        run: npm run check:security-hardening
+      - name: Run existing security regression
+        id: existing_security
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run check:security 2>&1 | tee existing-security.log
+      - name: Upload existing security diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: existing-security-regression-log
+          path: existing-security.log
+          if-no-files-found: ignore
+      - name: Fail when existing security regression failed
+        if: steps.existing_security.outcome == 'failure'
+        run: exit 1
+      - name: Run server integration check
+        run: npm run test:integration
+        working-directory: server
+      - name: Audit critical production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+        working-directory: server

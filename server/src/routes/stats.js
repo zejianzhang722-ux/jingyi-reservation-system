@@ -1,14 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const statsController = require('../controllers/statsController');
+const statsController = require('../controllers/scopedStatsController');
 const { auth, requireAdmin } = require('../middleware/auth');
+const adminScope = require('../middleware/adminScope');
 
-router.get('/dashboard', auth, requireAdmin, statsController.dashboard);
-router.get('/reservations', auth, requireAdmin, statsController.reservationStats);
-router.get('/usage-rate', auth, requireAdmin, statsController.usageRate);
-router.get('/peak-hours', auth, requireAdmin, statsController.peakHours);
-router.get('/noshow', auth, requireAdmin, statsController.noshowStats);
-router.get('/users', auth, requireAdmin, statsController.userStats);
-router.get('/export', auth, requireAdmin, statsController.exportData);
+router.use(auth, requireAdmin, adminScope.loadAdminScope);
+router.get('/dashboard', statsController.dashboard);
+router.get('/reservations', statsController.reservationStats);
+router.get('/usage-rate', statsController.usageRate);
+router.get('/peak-hours', statsController.peakHours);
+router.get('/noshow', statsController.noshowStats);
+router.get('/users', statsController.userStats);
+router.get('/export', statsController.exportData);
 
 module.exports = router;
