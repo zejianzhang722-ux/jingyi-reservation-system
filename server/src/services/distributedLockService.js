@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const redis = require('../config/redis');
 
 const mockLocks = new Map();
+const MAX_LOCK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const normalizeName = function(name) {
   const value = String(name || '').trim();
@@ -15,8 +16,8 @@ const normalizeName = function(name) {
 
 const normalizeTtl = function(ttlMs) {
   const value = Number(ttlMs);
-  if (!Number.isFinite(value) || value < 1000 || value > 24 * 60 * 60 * 1000) {
-    const err = new Error('分布式锁有效期必须在1秒至24小时之间');
+  if (!Number.isFinite(value) || value < 1000 || value > MAX_LOCK_TTL_MS) {
+    const err = new Error('分布式锁有效期必须在1秒至7天之间');
     err.code = 'INVALID_LOCK_TTL';
     throw err;
   }
@@ -130,6 +131,7 @@ const clearMockLocks = function() {
 };
 
 module.exports = {
+  MAX_LOCK_TTL_MS,
   acquire,
   release,
   extend,
