@@ -1,0 +1,54 @@
+name: Runtime Redis diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redis-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Install admin dependencies
+        run: npm ci
+        working-directory: admin
+      - name: Run Redis integration and retain output
+        id: redis_check
+        continue-on-error: true
+        env:
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          REDIS_DB: 14
+          ALLOW_MOCK_REDIS: 'false'
+        run: node scripts/redis-runtime-integration-check.js > redis-runtime.log 2>&1
+      - name: Upload Redis diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redis-runtime-diagnostics
+          path: redis-runtime.log
+          if-no-files-found: error
+      - name: Fail when integration failed
+        if: steps.redis_check.outcome == 'failure'
+        run: exit 1
