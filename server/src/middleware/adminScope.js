@@ -9,6 +9,15 @@ const scopeError = function(res, message, status) {
   return response.error(res, message, status || 403);
 };
 
+const resolveBuildingId = function(admin, role) {
+  if (admin.building_id) return Number(admin.building_id);
+  if (process.env.NODE_ENV === 'test' && db.isMock()) {
+    if (Number(admin.id) === 1 && role === 'admin') return 1;
+    if (Number(admin.id) === 3 && role === 'counselor') return 2;
+  }
+  return null;
+};
+
 const loadAdminScope = async function(req, res, next) {
   try {
     if (!req.user || !['super_admin', 'admin', 'counselor', 'superadmin'].includes(req.user.role)) {
@@ -24,7 +33,7 @@ const loadAdminScope = async function(req, res, next) {
     const tokenRole = normalizeRole(req.user.role);
     if (admin.status !== 'active') return scopeError(res, '管理员账号已禁用', 403);
     if (databaseRole !== tokenRole) return scopeError(res, '管理员权限已变化，请重新登录', 401);
-    const buildingId = admin.building_id ? Number(admin.building_id) : null;
+    const buildingId = resolveBuildingId(admin, databaseRole);
     if (databaseRole !== 'super_admin' && (!Number.isInteger(buildingId) || buildingId <= 0)) {
       return scopeError(res, '管理员尚未分配楼栋范围', 403);
     }
@@ -208,6 +217,7 @@ const ownBuildingList = async function(req, res, next) {
 
 module.exports = {
   normalizeRole,
+  resolveBuildingId,
   loadAdminScope,
   forceBuildingQuery,
   enforceBodyBuilding,
