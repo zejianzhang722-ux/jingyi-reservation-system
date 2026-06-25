@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const schedule = require('node-schedule');
 const logger = require('../config/logger');
 const redis = require('../config/redis');
-const reservationService = require('./reservationService');
 const reservationLifecycleService = require('./reservationLifecycleService');
 const creditService = require('./creditService');
 const distributedLockService = require('./distributedLockService');
@@ -10,19 +9,48 @@ const distributedLockService = require('./distributedLockService');
 let initialized = false;
 let scheduledJobs = [];
 
+const resolveReferenceDate = function(referenceDate) {
+  return referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+    ? referenceDate
+    : new Date();
+};
+
+const sendStartReminders = async function(referenceDate) {
+  const db = require('../config/database');
+  const helpers = require('../utils/helpers');
+  const notificationService = require('./notificationService');
+  const now = resolveReferenceDate(referenceDate);
+  const today = helpers.formatDate(now);
+  const reminderTime = helpers.addMinutes(helpers.formatTime(now), 30);
+  const [upcoming] = await db.query(
+    "SELECT r.*, rm.name AS room_name FROM reservations r " +
+    "JOIN rooms rm ON r.room_id = rm.id " +
+    "WHERE r.date = ? AND r.start_time = ? AND r.status = 'approved'",
+    [today, reminderTime]
+  );
+  for (const reservation of upcoming) {
+    await notificationService.createNotification(
+      reservation.user_id,
+      'reservation_reminder',
+      '预约提醒',
+      '您在' + reservation.room_name + '的预约将在30分钟后开始',
+      { reservationId: reservation.id }
+    );
+  }
+  return { processed: upcoming.length };
+};
+
 const sendEndingReminders = async function(referenceDate) {
   const db = require('../config/database');
   const helpers = require('../utils/helpers');
   const notificationService = require('./notificationService');
-  const now = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
-    ? referenceDate
-    : new Date();
+  const now = resolveReferenceDate(referenceDate);
   const today = helpers.formatDate(now);
   const currentTime = helpers.formatTime(now);
   const endTime = helpers.addMinutes(currentTime, 15);
   const [ending] = await db.query(
-    "SELECT r.*, u.openid, rm.name AS room_name FROM reservations r " +
-    "JOIN users u ON r.user_id = u.id JOIN rooms rm ON r.room_id = rm.id " +
+    "SELECT r.*, rm.name AS room_name FROM reservations r " +
+    "JOIN rooms rm ON r.room_id = rm.id " +
     "WHERE r.date = ? AND r.end_time = ? AND r.status = 'checked_in'",
     [today, endTime]
   );
@@ -41,11 +69,7 @@ const sendEndingReminders = async function(referenceDate) {
 const expirePosters = async function(referenceDate) {
   const db = require('../config/database');
   const helpers = require('../utils/helpers');
-  const today = helpers.formatDate(
-    referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
-      ? referenceDate
-      : new Date()
-  );
+  const today = helpers.formatDate(resolveReferenceDate(referenceDate));
   const [expired] = await db.query(
     "SELECT id FROM posters WHERE status = 'approved' AND end_date < ?",
     [today]
@@ -80,7 +104,7 @@ const TASK_DEFINITIONS = [
     ttlMs: 50 * 1000,
     renewEveryMs: 15 * 1000,
     dedupeTtlMs: 3 * 60 * 1000,
-    run: function(fireDate) { return reservationService.sendReservationReminders(fireDate); }
+    run: sendStartReminders
   },
   {
     name: 'reservation-ending-reminders',
@@ -117,10 +141,7 @@ const TASK_DEFINITIONS = [
 ];
 
 const occurrenceKey = function(fireDate) {
-  const date = fireDate instanceof Date && !Number.isNaN(fireDate.getTime())
-    ? fireDate
-    : new Date();
-  return String(Math.floor(date.getTime() / 60000));
+  return String(Math.floor(resolveReferenceDate(fireDate).getTime() / 60000));
 };
 
 const releaseLockSafely = async function(lockService, lock, taskName, kind) {
@@ -177,7 +198,7 @@ const runLockedTask = async function(definition, options, fireDate) {
     }
 
     logger.info('[Scheduler] acquired task=' + taskName + ' occurrence=' + occurrence + ' execution=' + executionId);
-    const value = await definition.run(fireDate);
+    const value = await definition.run(resolveReferenceDate(fireDate));
     if (renewalTimer) {
       clearInterval(renewalTimer);
       renewalTimer = null;
@@ -274,7 +295,9 @@ const getSchedulerState = function() {
 
 module.exports = {
   TASK_DEFINITIONS,
+  resolveReferenceDate,
   occurrenceKey,
+  sendStartReminders,
   sendEndingReminders,
   expirePosters,
   expireWaitlist,
