@@ -76,35 +76,49 @@ async function main() {
     ready: async function() { return { mode: 'mock' } },
     isMock: function() { return true }
   }
-  const fakeLockService = {
-    withLock: async function(options, task) {
-      return { acquired: true, value: await task(), lockKey: options.name }
-    }
-  }
   const fakeTasks = [
-    { name: 'alpha', cron: '* * * * *', ttlMs: 5000, run: async function() { return 'alpha' } },
-    { name: 'beta', cron: '*/5 * * * *', ttlMs: 5000, run: async function() { return 'beta' } }
+    {
+      name: 'alpha',
+      cron: '* * * * *',
+      ttlMs: 5000,
+      renewEveryMs: 1000,
+      dedupeTtlMs: 120000,
+      run: async function() { return 'alpha' }
+    },
+    {
+      name: 'beta',
+      cron: '*/5 * * * *',
+      ttlMs: 5000,
+      renewEveryMs: 1000,
+      dedupeTtlMs: 120000,
+      run: async function() { return 'beta' }
+    }
   ]
 
   const initialized = await schedulerService.initScheduler({
     scheduleLib: fakeSchedule,
     redisClient: fakeRedis,
-    lockService: fakeLockService,
+    lockService: distributedLockService,
     taskDefinitions: fakeTasks
   })
   const reused = await schedulerService.initScheduler({
     scheduleLib: fakeSchedule,
     redisClient: fakeRedis,
-    lockService: fakeLockService,
+    lockService: distributedLockService,
     taskDefinitions: fakeTasks
   })
   assert.strictEqual(initialized.reused, false, 'first scheduler initialization must register jobs')
   assert.strictEqual(reused.reused, true, 'second scheduler initialization must be ignored')
   assert.strictEqual(registered.length, 2, 'duplicate initialization must not register duplicate jobs')
 
-  const executed = await registered[0].callback()
-  assert.strictEqual(executed.status, 'success', 'registered job must run through the lock wrapper')
+  const fireDate = new Date('2026-06-25T03:15:00.000Z')
+  const executed = await registered[0].callback(fireDate)
+  assert.strictEqual(executed.status, 'success', 'registered job must run through the occurrence lock')
   assert.strictEqual(executed.value, 'alpha', 'registered job result must be preserved')
+  const duplicateOccurrence = await registered[0].callback(fireDate)
+  assert.strictEqual(duplicateOccurrence.status, 'skipped', 'a later instance callback for the same scheduled occurrence must be deduplicated')
+  const nextOccurrence = await registered[0].callback(new Date('2026-06-25T03:16:00.000Z'))
+  assert.strictEqual(nextOccurrence.status, 'success', 'the next scheduled occurrence must use a different deduplication key')
 
   await schedulerService.stopScheduler()
   assert.strictEqual(cancelled.length, 2, 'scheduler shutdown must cancel all registered jobs')
@@ -119,6 +133,8 @@ async function main() {
   assert(/checkDataReadiness\(\)/.test(workerSource), 'dedicated worker must verify production dependencies before scheduling')
   assert.strictEqual(serverPackage.scripts['start:scheduler'], 'node src/scheduler-worker.js', 'server package must expose the scheduler worker command')
   assert(/process\.env\.NODE_ENV === 'production' && mockMode/.test(schedulerSource), 'production scheduler must reject mock Redis')
+  assert(/scheduler:' \+ taskName \+ ':' \+ occurrence/.test(schedulerSource), 'scheduler lock key must include the scheduled occurrence')
+  assert(/dedupeTtlMs/.test(schedulerSource), 'successful scheduler occurrence must retain a deduplication marker')
   assert(/distributedLockService/.test(schedulerSource), 'scheduler jobs must use the distributed lock service')
   assert(/options\.nx && exists/.test(redisSource), 'mock Redis must implement NX semantics for lock tests')
   assert(/redis\.call\('del'/.test(distributedLockService.RELEASE_SCRIPT), 'lock release must compare ownership before delete')
