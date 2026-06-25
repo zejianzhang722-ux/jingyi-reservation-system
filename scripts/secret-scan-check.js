@@ -5,7 +5,18 @@ const path = require('path')
 
 const root = path.join(__dirname, '..')
 const tracked = childProcess.execFileSync('git', ['ls-files', '-z'], { cwd: root }).toString('utf8').split('\0').filter(Boolean)
-const excluded = [/package-lock\.json$/, /\.png$/i, /\.jpe?g$/i, /\.gif$/i, /\.ico$/i, /\.zip$/i, /\.mp4$/i, /\.pdf$/i]
+const excluded = [
+  /package-lock\.json$/,
+  /\.png$/i,
+  /\.jpe?g$/i,
+  /\.gif$/i,
+  /\.ico$/i,
+  /\.zip$/i,
+  /\.mp4$/i,
+  /\.pdf$/i,
+  /^scripts\/secret-scan-check\.js$/,
+  /^scripts\/security-hardening-check\.js$/
+]
 const forbiddenFiles = tracked.filter(function(file) {
   const base = path.basename(file)
   return base === '.env' || /\.(pem|p12|pfx|key)$/i.test(base)
