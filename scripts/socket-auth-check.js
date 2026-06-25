@@ -63,7 +63,10 @@ function dependencies(overrides) {
         }
         if (sql.includes('FROM rooms')) {
           if (Number(params[0]) === 404) return [[]]
-          return [[{ id: Number(params[0]), building_id: settings.roomBuildingId || 2 }]]
+          return [[{
+            id: Number(params[0]),
+            building_id: settings.roomBuildingId === undefined ? 2 : settings.roomBuildingId
+          }]]
         }
         return [[]]
       }
@@ -134,12 +137,26 @@ async function main() {
     return socketAuthService.authorizeRoom(adminSocket, 'room:9', dependencies({ roomBuildingId: 3 }))
   }, 'SOCKET_ROOM_FORBIDDEN', 'administrator must not join another building room')
 
+  const unscopedAdminSocket = fakeSocket('access-token')
+  unscopedAdminSocket.data.user = { id: 8, role: 'admin', buildingId: null }
+  await expectSocketError(function() {
+    return socketAuthService.authorizeRoom(unscopedAdminSocket, 'building:0', dependencies())
+  }, 'SOCKET_BUILDING_SCOPE_REQUIRED', 'administrator without a building must not gain implicit building zero access')
+  await expectSocketError(function() {
+    return socketAuthService.authorizeRoom(unscopedAdminSocket, 'room:8', dependencies({ roomBuildingId: 2 }))
+  }, 'SOCKET_BUILDING_SCOPE_REQUIRED', 'administrator without a building must not subscribe to room updates')
+
   const superSocket = fakeSocket('access-token')
   superSocket.data.user = { id: 1, role: 'super_admin', buildingId: null }
   assert.strictEqual(
     await socketAuthService.authorizeRoom(superSocket, 'monitor:all', dependencies()),
     'monitor:all',
     'super administrator must join global monitor room'
+  )
+  assert.strictEqual(
+    await socketAuthService.authorizeRoom(superSocket, 'building:2', dependencies()),
+    'building:2',
+    'super administrator does not require an assigned building scope'
   )
 
   const quotaSocket = fakeSocket('access-token')
