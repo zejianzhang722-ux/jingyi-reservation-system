@@ -18,10 +18,7 @@ const loadAdminScope = async function(req, res, next) {
     if (!req.user || !['super_admin', 'admin', 'counselor', 'superadmin'].includes(req.user.role)) {
       return scopeError(res, '管理员身份无效', 403);
     }
-    const [rows] = await db.query(
-      'SELECT id, role, building_id, status FROM admins WHERE id = ?',
-      [req.user.id]
-    );
+    const [rows] = await db.query('SELECT id, role, building_id, status FROM admins WHERE id = ?', [req.user.id]);
     if (!rows || !rows.length) return scopeError(res, '管理员账号不存在', 401);
     const admin = rows[0];
     const databaseRole = normalizeRole(admin.role);
@@ -49,9 +46,7 @@ const forceBuildingQuery = function(req, res, next) {
   if (!req.adminScope) return scopeError(res, '管理员数据范围未初始化', 500);
   if (!req.adminScope.isGlobal) {
     const requested = req.query && req.query.buildingId;
-    if (requested && Number(requested) !== req.adminScope.buildingId) {
-      return scopeError(res, '无权访问其他楼栋数据', 403);
-    }
+    if (requested && Number(requested) !== req.adminScope.buildingId) return scopeError(res, '无权访问其他楼栋数据', 403);
     req.query = Object.assign({}, req.query, { buildingId: String(req.adminScope.buildingId) });
   }
   next();
@@ -67,9 +62,7 @@ const enforceBodyBuilding = function(options) {
     if (requested !== undefined && requested !== null && requested !== '' && Number(requested) !== req.adminScope.buildingId) {
       return scopeError(res, '无权操作其他楼栋', 403);
     }
-    if (settings.inject !== false) {
-      req.body = Object.assign({}, req.body, { [field]: req.adminScope.buildingId });
-    }
+    if (settings.inject !== false) req.body = Object.assign({}, req.body, { [field]: req.adminScope.buildingId });
     next();
   };
 };
@@ -79,13 +72,63 @@ const assertBuilding = function(scope, buildingId) {
   return Number(buildingId) === Number(scope.buildingId);
 };
 
+const loadRoom = async function(roomId) {
+  const [rows] = await db.query('SELECT id, building_id FROM rooms WHERE id = ?', [Number(roomId)]);
+  return rows && rows.length ? rows[0] : null;
+};
+
+const loadReservationScope = async function(reservationId) {
+  if (!db.isMock()) {
+    const [rows] = await db.query(
+      'SELECT r.id, r.room_id, rm.building_id FROM reservations r JOIN rooms rm ON rm.id = r.room_id WHERE r.id = ?',
+      [Number(reservationId)]
+    );
+    return rows && rows.length ? rows[0] : null;
+  }
+  const [reservations] = await db.query('SELECT * FROM reservations WHERE id = ?', [Number(reservationId)]);
+  if (!reservations || !reservations.length) return null;
+  const room = await loadRoom(reservations[0].room_id);
+  if (!room) return null;
+  return { id: Number(reservations[0].id), room_id: Number(reservations[0].room_id), building_id: Number(room.building_id) };
+};
+
+const loadSeatScope = async function(seatId) {
+  if (!db.isMock()) {
+    const [rows] = await db.query(
+      'SELECT s.id, s.room_id, r.building_id FROM seats s JOIN rooms r ON r.id = s.room_id WHERE s.id = ?',
+      [Number(seatId)]
+    );
+    return rows && rows.length ? rows[0] : null;
+  }
+  const [seats] = await db.query('SELECT * FROM seats WHERE id = ?', [Number(seatId)]);
+  if (!seats || !seats.length) return null;
+  const room = await loadRoom(seats[0].room_id);
+  if (!room) return null;
+  return { id: Number(seats[0].id), room_id: Number(seats[0].room_id), building_id: Number(room.building_id) };
+};
+
+const loadPosterScope = async function(posterId) {
+  if (!db.isMock()) {
+    const [rows] = await db.query(
+      'SELECT p.id, u.building_id FROM posters p JOIN users u ON u.id = p.user_id WHERE p.id = ?',
+      [Number(posterId)]
+    );
+    return rows && rows.length ? rows[0] : null;
+  }
+  const [posters] = await db.query('SELECT * FROM posters WHERE id = ?', [Number(posterId)]);
+  if (!posters || !posters.length) return null;
+  const [users] = await db.query('SELECT * FROM users WHERE id = ?', [Number(posters[0].user_id)]);
+  if (!users || !users.length) return null;
+  return { id: Number(posters[0].id), building_id: users[0].building_id ? Number(users[0].building_id) : null };
+};
+
 const verifyRoom = async function(req, res, next, roomId) {
   try {
     if (!Number.isInteger(Number(roomId)) || Number(roomId) <= 0) return scopeError(res, '功能房编号无效', 400);
-    const [rows] = await db.query('SELECT id, building_id FROM rooms WHERE id = ?', [Number(roomId)]);
-    if (!rows || !rows.length) return scopeError(res, '功能房不存在', 404);
-    if (!assertBuilding(req.adminScope, rows[0].building_id)) return scopeError(res, '无权操作其他楼栋功能房', 403);
-    req.scopedRoom = rows[0];
+    const room = await loadRoom(roomId);
+    if (!room) return scopeError(res, '功能房不存在', 404);
+    if (!assertBuilding(req.adminScope, room.building_id)) return scopeError(res, '无权操作其他楼栋功能房', 403);
+    req.scopedRoom = room;
     next();
   } catch (err) {
     next(err);
@@ -94,28 +137,21 @@ const verifyRoom = async function(req, res, next, roomId) {
 
 const roomFromParam = function(paramName) {
   const name = paramName || 'id';
-  return function(req, res, next) {
-    return verifyRoom(req, res, next, req.params[name]);
-  };
+  return function(req, res, next) { return verifyRoom(req, res, next, req.params[name]); };
 };
 
 const roomFromBody = function(fieldName) {
   const name = fieldName || 'roomId';
-  return function(req, res, next) {
-    return verifyRoom(req, res, next, req.body && req.body[name]);
-  };
+  return function(req, res, next) { return verifyRoom(req, res, next, req.body && req.body[name]); };
 };
 
 const verifyReservation = async function(req, res, next, reservationId) {
   try {
     if (!Number.isInteger(Number(reservationId)) || Number(reservationId) <= 0) return scopeError(res, '预约编号无效', 400);
-    const [rows] = await db.query(
-      'SELECT r.id, r.room_id, rm.building_id FROM reservations r JOIN rooms rm ON rm.id = r.room_id WHERE r.id = ?',
-      [Number(reservationId)]
-    );
-    if (!rows || !rows.length) return scopeError(res, '预约不存在', 404);
-    if (!assertBuilding(req.adminScope, rows[0].building_id)) return scopeError(res, '无权操作其他楼栋预约', 403);
-    req.scopedReservation = rows[0];
+    const reservation = await loadReservationScope(reservationId);
+    if (!reservation) return scopeError(res, '预约不存在', 404);
+    if (!assertBuilding(req.adminScope, reservation.building_id)) return scopeError(res, '无权操作其他楼栋预约', 403);
+    req.scopedReservation = reservation;
     next();
   } catch (err) {
     next(err);
@@ -124,16 +160,12 @@ const verifyReservation = async function(req, res, next, reservationId) {
 
 const reservationFromParam = function(paramName) {
   const name = paramName || 'id';
-  return function(req, res, next) {
-    return verifyReservation(req, res, next, req.params[name]);
-  };
+  return function(req, res, next) { return verifyReservation(req, res, next, req.params[name]); };
 };
 
 const reservationFromBody = function(fieldName) {
   const name = fieldName || 'reservationId';
-  return function(req, res, next) {
-    return verifyReservation(req, res, next, req.body && req.body[name]);
-  };
+  return function(req, res, next) { return verifyReservation(req, res, next, req.body && req.body[name]); };
 };
 
 const reservationBatchFromBody = function(fieldName) {
@@ -144,12 +176,12 @@ const reservationBatchFromBody = function(fieldName) {
         return Number.isInteger(id) && id > 0;
       });
       if (!ids.length) return scopeError(res, '请选择预约记录', 400);
-      const placeholders = ids.map(function() { return '?'; }).join(',');
-      const [rows] = await db.query(
-        'SELECT r.id, rm.building_id FROM reservations r JOIN rooms rm ON rm.id = r.room_id WHERE r.id IN (' + placeholders + ')',
-        ids
-      );
-      if (rows.length !== ids.length) return scopeError(res, '部分预约不存在', 404);
+      const rows = [];
+      for (const id of ids) {
+        const row = await loadReservationScope(id);
+        if (!row) return scopeError(res, '部分预约不存在', 404);
+        rows.push(row);
+      }
       if (!req.adminScope.isGlobal && rows.some(function(row) { return Number(row.building_id) !== req.adminScope.buildingId; })) {
         return scopeError(res, '批量操作包含其他楼栋预约', 403);
       }
@@ -164,14 +196,10 @@ const seatFromParam = function(paramName) {
   const name = paramName || 'id';
   return async function(req, res, next) {
     try {
-      const seatId = Number(req.params[name]);
-      const [rows] = await db.query(
-        'SELECT s.id, s.room_id, r.building_id FROM seats s JOIN rooms r ON r.id = s.room_id WHERE s.id = ?',
-        [seatId]
-      );
-      if (!rows || !rows.length) return scopeError(res, '座位不存在', 404);
-      if (!assertBuilding(req.adminScope, rows[0].building_id)) return scopeError(res, '无权操作其他楼栋座位', 403);
-      req.scopedSeat = rows[0];
+      const seat = await loadSeatScope(req.params[name]);
+      if (!seat) return scopeError(res, '座位不存在', 404);
+      if (!assertBuilding(req.adminScope, seat.building_id)) return scopeError(res, '无权操作其他楼栋座位', 403);
+      req.scopedSeat = seat;
       next();
     } catch (err) {
       next(err);
@@ -183,13 +211,9 @@ const posterFromParam = function(paramName) {
   const name = paramName || 'id';
   return async function(req, res, next) {
     try {
-      const posterId = Number(req.params[name]);
-      const [rows] = await db.query(
-        'SELECT p.id, u.building_id FROM posters p JOIN users u ON u.id = p.user_id WHERE p.id = ?',
-        [posterId]
-      );
-      if (!rows || !rows.length) return scopeError(res, '海报申请不存在', 404);
-      if (!assertBuilding(req.adminScope, rows[0].building_id)) return scopeError(res, '无权处理其他楼栋海报', 403);
+      const poster = await loadPosterScope(req.params[name]);
+      if (!poster) return scopeError(res, '海报申请不存在', 404);
+      if (!assertBuilding(req.adminScope, poster.building_id)) return scopeError(res, '无权处理其他楼栋海报', 403);
       next();
     } catch (err) {
       next(err);
@@ -218,6 +242,10 @@ module.exports = {
   forceBuildingQuery,
   enforceBodyBuilding,
   assertBuilding,
+  loadRoom,
+  loadReservationScope,
+  loadSeatScope,
+  loadPosterScope,
   roomFromParam,
   roomFromBody,
   reservationFromParam,
