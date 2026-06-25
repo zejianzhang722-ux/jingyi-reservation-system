@@ -134,7 +134,6 @@ async function main() {
     if (ioB && ioB.of('/').adapter && typeof ioB.of('/').adapter.close === 'function') {
       ioB.of('/').adapter.close()
     }
-    if (ioA) ioA.close()
     if (ioB) ioB.close()
     if (httpServerB && httpServerB.listening) {
       await new Promise(function(resolve) { httpServerB.close(resolve) })
