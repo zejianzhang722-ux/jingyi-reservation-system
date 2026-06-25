@@ -13,7 +13,7 @@ const redis = require('./config/redis');
 const routes = require('./routes');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
-const { initScheduler } = require('./services/schedulerService');
+const schedulerService = require('./services/schedulerService');
 const dataReadinessService = require('./services/dataReadinessService');
 
 const app = express();
@@ -100,7 +100,8 @@ const startServer = async function() {
     const readiness = await dataReadinessService.checkDataReadiness();
 
     if (process.env.ENABLE_SCHEDULER === 'true') {
-      initScheduler();
+      const schedulerState = await schedulerService.initScheduler();
+      logger.info('定时任务协调已就绪，任务数: ' + schedulerState.jobs + '，Redis模式: ' + schedulerState.redisMode);
     } else {
       logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
     }
@@ -130,6 +131,21 @@ const startServer = async function() {
   }
 };
 
+const shutdown = async function(signal) {
+  logger.info('收到' + signal + '，开始关闭服务');
+  try {
+    await schedulerService.stopScheduler();
+  } catch (err) {
+    logger.error('停止定时任务失败:', err);
+  }
+  server.close(function() {
+    logger.info('HTTP服务已关闭');
+  });
+};
+
+process.once('SIGTERM', function() { shutdown('SIGTERM'); });
+process.once('SIGINT', function() { shutdown('SIGINT'); });
+
 startServer();
 
-module.exports = { app, server, io, startServer };
+module.exports = { app, server, io, startServer, shutdown };
