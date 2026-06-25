@@ -3,7 +3,8 @@ const redis = require('../config/redis');
 
 const requiredReservationColumns = ['idempotency_key', 'request_hash'];
 const requiredWaitlistColumns = ['waiting_seat_scope'];
-const requiredTables = ['reservation_slots', 'reservation_waitlist'];
+const requiredNotificationColumns = ['dedupe_key'];
+const requiredTables = ['reservation_slots', 'reservation_waitlist', 'notification_outbox'];
 const requiredIndexDefinitions = {
   uk_reservation_user_idempotency: {
     table: 'reservations',
@@ -19,6 +20,21 @@ const requiredIndexDefinitions = {
     table: 'reservation_waitlist',
     columns: 'user_id,room_id,waiting_seat_scope,date,start_time,end_time',
     unique: true
+  },
+  uk_notification_user_dedupe: {
+    table: 'notifications',
+    columns: 'user_id,dedupe_key',
+    unique: true
+  },
+  uk_notification_outbox_event: {
+    table: 'notification_outbox',
+    columns: 'event_key',
+    unique: true
+  },
+  idx_notification_outbox_claim: {
+    table: 'notification_outbox',
+    columns: 'status,available_at,id',
+    unique: false
   }
 };
 
@@ -40,38 +56,41 @@ const placeholders = function(items) {
   return items.map(function() { return '?'; }).join(',');
 };
 
+const readColumns = async function(databaseName, table, columns, extraFields) {
+  const select = ['column_name AS schema_column'].concat(extraFields || []).join(', ');
+  const [rows] = await db.query(
+    'SELECT ' + select + ' FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name IN (' + placeholders(columns) + ')',
+    [databaseName, table].concat(columns)
+  );
+  return rows;
+};
+
 const checkReservationSchema = async function() {
-  if (db.isMock()) {
-    return { mode: 'mock', ready: true, missing: [], invalid: [] };
-  }
+  if (db.isMock()) return { mode: 'mock', ready: true, missing: [], invalid: [] };
 
   const [databaseRows] = await db.query('SELECT DATABASE() AS database_name');
   const databaseName = valueOf(databaseRows[0], 'database_name', 'DATABASE_NAME');
   if (!databaseName) throw readinessError('无法确认当前MySQL数据库');
 
-  const [reservationColumnRows] = await db.query(
-    "SELECT column_name AS schema_column FROM information_schema.columns " +
-    "WHERE table_schema = ? AND table_name = 'reservations' AND column_name IN (" +
-    placeholders(requiredReservationColumns) + ')',
-    [databaseName].concat(requiredReservationColumns)
-  );
+  const reservationColumnRows = await readColumns(databaseName, 'reservations', requiredReservationColumns);
+  const waitlistColumnRows = await readColumns(databaseName, 'reservation_waitlist', requiredWaitlistColumns, [
+    'extra AS column_extra',
+    'generation_expression AS generated_expression'
+  ]);
+  const notificationColumnRows = await readColumns(databaseName, 'notifications', requiredNotificationColumns);
+
   const presentReservationColumns = reservationColumnRows.map(function(row) {
     return valueOf(row, 'schema_column', 'SCHEMA_COLUMN');
   });
-
-  const [waitlistColumnRows] = await db.query(
-    "SELECT column_name AS schema_column, extra AS column_extra, generation_expression AS generated_expression " +
-    "FROM information_schema.columns WHERE table_schema = ? AND table_name = 'reservation_waitlist' " +
-    "AND column_name IN (" + placeholders(requiredWaitlistColumns) + ')',
-    [databaseName].concat(requiredWaitlistColumns)
-  );
   const presentWaitlistColumns = waitlistColumnRows.map(function(row) {
+    return valueOf(row, 'schema_column', 'SCHEMA_COLUMN');
+  });
+  const presentNotificationColumns = notificationColumnRows.map(function(row) {
     return valueOf(row, 'schema_column', 'SCHEMA_COLUMN');
   });
 
   const [tableRows] = await db.query(
-    "SELECT table_name AS reservation_table FROM information_schema.tables " +
-    'WHERE table_schema = ? AND table_name IN (' + placeholders(requiredTables) + ')',
+    'SELECT table_name AS reservation_table FROM information_schema.tables WHERE table_schema = ? AND table_name IN (' + placeholders(requiredTables) + ')',
     [databaseName].concat(requiredTables)
   );
   const presentTables = tableRows.map(function(row) {
@@ -104,6 +123,9 @@ const checkReservationSchema = async function() {
   requiredWaitlistColumns.forEach(function(column) {
     if (!presentWaitlistColumns.includes(column)) missing.push('reservation_waitlist.' + column);
   });
+  requiredNotificationColumns.forEach(function(column) {
+    if (!presentNotificationColumns.includes(column)) missing.push('notifications.' + column);
+  });
   requiredTables.forEach(function(table) {
     if (!presentTables.includes(table)) missing.push('table:' + table);
   });
@@ -114,9 +136,7 @@ const checkReservationSchema = async function() {
   if (waitlistGeneratedColumn) {
     const extra = String(valueOf(waitlistGeneratedColumn, 'column_extra', 'COLUMN_EXTRA') || '').toUpperCase();
     const expression = String(valueOf(waitlistGeneratedColumn, 'generated_expression', 'GENERATED_EXPRESSION') || '').toLowerCase();
-    if (!extra.includes('STORED GENERATED')) {
-      invalid.push('reservation_waitlist.waiting_seat_scope:not_stored_generated');
-    }
+    if (!extra.includes('STORED GENERATED')) invalid.push('reservation_waitlist.waiting_seat_scope:not_stored_generated');
     if (!expression.includes('status') || !expression.includes('waiting') || !expression.includes('seat_id')) {
       invalid.push('reservation_waitlist.waiting_seat_scope:unexpected_expression');
     }
@@ -129,15 +149,10 @@ const checkReservationSchema = async function() {
       missing.push('index:' + indexName);
       return;
     }
-    if (actual.table !== expected.table) {
-      invalid.push('index:' + indexName + ':table=' + actual.table);
-    }
-    if (actual.columns !== expected.columns) {
-      invalid.push('index:' + indexName + ':columns=' + actual.columns);
-    }
-    if (expected.unique && Number(actual.nonUnique) !== 0) {
-      invalid.push('index:' + indexName + ':not_unique');
-    }
+    if (actual.table !== expected.table) invalid.push('index:' + indexName + ':table=' + actual.table);
+    if (actual.columns !== expected.columns) invalid.push('index:' + indexName + ':columns=' + actual.columns);
+    if (expected.unique && Number(actual.nonUnique) !== 0) invalid.push('index:' + indexName + ':not_unique');
+    if (!expected.unique && Number(actual.nonUnique) !== 1) invalid.push('index:' + indexName + ':unexpected_unique');
   });
 
   return {
@@ -155,28 +170,18 @@ const checkDataReadiness = async function() {
   const schemaState = await checkReservationSchema();
 
   if (process.env.NODE_ENV === 'production') {
-    if (dbState.mode !== 'mysql') {
-      throw readinessError('生产环境必须连接真实MySQL数据库', { dbState });
-    }
-    if (redisState.mode !== 'redis') {
-      throw readinessError('生产环境必须连接真实Redis服务', { redisState });
-    }
-    if (!schemaState.ready) {
-      throw readinessError('预约一致性数据库迁移尚未完成', schemaState);
-    }
+    if (dbState.mode !== 'mysql') throw readinessError('生产环境必须连接真实MySQL数据库', { dbState });
+    if (redisState.mode !== 'redis') throw readinessError('生产环境必须连接真实Redis服务', { redisState });
+    if (!schemaState.ready) throw readinessError('数据库一致性迁移尚未完成', schemaState);
   }
 
-  return {
-    ready: schemaState.ready,
-    database: dbState,
-    redis: redisState,
-    schema: schemaState
-  };
+  return { ready: schemaState.ready, database: dbState, redis: redisState, schema: schemaState };
 };
 
 module.exports = {
   requiredReservationColumns,
   requiredWaitlistColumns,
+  requiredNotificationColumns,
   requiredTables,
   requiredIndexDefinitions,
   checkReservationSchema,
