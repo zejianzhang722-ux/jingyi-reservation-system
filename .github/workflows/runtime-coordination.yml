@@ -40,8 +40,15 @@ jobs:
           node --check server/src/services/schedulerService.js
           node --check server/src/app.js
           node --check scripts/runtime-coordination-check.js
+          node --check scripts/redis-distributed-lock-check.js
       - name: Run isolated mock coordination regression
         run: npm run check:runtime-coordination
+      - name: Run real Redis cross-process lock regression
+        env:
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          ALLOW_MOCK_REDIS: 'false'
+        run: npm run check:redis-lock
       - name: Run server integration regression
         run: npm run test:integration
         working-directory: server
