@@ -58,6 +58,44 @@ async function main() {
   assert.strictEqual(forgedRelease, false, 'non-owner token must not release a lock')
   assert.strictEqual(await distributedLockService.release(owned), true, 'lock owner must release the lock')
 
+  let releaseOverlap
+  let overlapEntered
+  const overlapGate = new Promise(function(resolve) { releaseOverlap = resolve })
+  const overlapStarted = new Promise(function(resolve) { overlapEntered = resolve })
+  const overlapDefinition = {
+    name: 'overlap-task',
+    ttlMs: 5000,
+    renewEveryMs: 1000,
+    dedupeTtlMs: 120000,
+    run: async function() {
+      overlapEntered()
+      await overlapGate
+      return 'overlap-complete'
+    }
+  }
+  const overlapFirstDate = new Date('2026-06-25T03:10:00.000Z')
+  const overlapNextDate = new Date('2026-06-25T03:11:00.000Z')
+  const overlapFirst = schedulerService.runLockedTask(overlapDefinition, {
+    lockService: distributedLockService
+  }, overlapFirstDate)
+  await overlapStarted
+  const overlapSecond = await schedulerService.runLockedTask(overlapDefinition, {
+    lockService: distributedLockService
+  }, overlapNextDate)
+  assert.strictEqual(overlapSecond.status, 'skipped', 'next occurrence must not overlap a still-running previous occurrence')
+  assert.strictEqual(overlapSecond.reason, 'task-running', 'overlap skip must identify the active task lock')
+  releaseOverlap()
+  assert.strictEqual((await overlapFirst).status, 'success', 'first overlapping task must complete successfully')
+
+  const retriedNextOccurrence = await schedulerService.runLockedTask({
+    name: 'overlap-task',
+    ttlMs: 5000,
+    renewEveryMs: 1000,
+    dedupeTtlMs: 120000,
+    run: async function() { return 'next-after-release' }
+  }, { lockService: distributedLockService }, overlapNextDate)
+  assert.strictEqual(retriedNextOccurrence.status, 'success', 'skipped overlapping occurrence must be claimable after the previous run finishes')
+
   await schedulerService.stopScheduler()
   const registered = []
   const cancelled = []
@@ -133,8 +171,19 @@ async function main() {
   assert(/checkDataReadiness\(\)/.test(workerSource), 'dedicated worker must verify production dependencies before scheduling')
   assert.strictEqual(serverPackage.scripts['start:scheduler'], 'node src/scheduler-worker.js', 'server package must expose the scheduler worker command')
   assert(/process\.env\.NODE_ENV === 'production' && mockMode/.test(schedulerSource), 'production scheduler must reject mock Redis')
-  assert(/scheduler:' \+ taskName \+ ':' \+ occurrence/.test(schedulerSource), 'scheduler lock key must include the scheduled occurrence')
+  assert(/scheduler:occurrence:/.test(schedulerSource), 'scheduler must retain a per-occurrence deduplication lock')
+  assert(/scheduler:run:/.test(schedulerSource), 'scheduler must prevent overlapping occurrences of the same task')
   assert(/dedupeTtlMs/.test(schedulerSource), 'successful scheduler occurrence must retain a deduplication marker')
+  assert.strictEqual(
+    schedulerService.TASK_DEFINITIONS.find(function(task) { return task.name === 'reservation-ending-reminders' }).cron,
+    '* * * * *',
+    'ending reminders must run every minute'
+  )
+  assert.strictEqual(
+    schedulerService.TASK_DEFINITIONS.find(function(task) { return task.name === 'expire-waitlist' }).cron,
+    '*/10 * * * *',
+    'waitlist expiration must run every ten minutes'
+  )
   assert(/distributedLockService/.test(schedulerSource), 'scheduler jobs must use the distributed lock service')
   assert(/options\.nx && exists/.test(redisSource), 'mock Redis must implement NX semantics for lock tests')
   assert(/redis\.call\('del'/.test(distributedLockService.RELEASE_SCRIPT), 'lock release must compare ownership before delete')
