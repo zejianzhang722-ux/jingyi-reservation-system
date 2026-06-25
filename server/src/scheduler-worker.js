@@ -1,4 +1,5 @@
 const logger = require('./config/logger');
+const db = require('./config/database');
 const redis = require('./config/redis');
 const dataReadinessService = require('./services/dataReadinessService');
 const schedulerService = require('./services/schedulerService');
@@ -24,6 +25,11 @@ const shutdownWorker = async function(signal) {
     await schedulerService.stopScheduler();
   } catch (err) {
     logger.error('停止定时任务Worker失败:', err);
+  }
+  try {
+    await db.close();
+  } catch (err) {
+    logger.error('关闭Worker数据库连接失败:', err);
   }
   try {
     if (typeof redis.quit === 'function') await redis.quit();
