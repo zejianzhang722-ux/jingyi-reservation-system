@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const reservationCommandService = require('../services/reservationCommandService');
 const notificationService = require('../services/notificationService');
+const realtimeEventService = require('../services/realtimeEventService');
 
 const normalizeTime = function(body, prefix) {
   const direct = body[prefix + 'Time'];
@@ -63,6 +64,7 @@ const create = async function(req, res) {
       } catch (notifyErr) {
         logger.error('预约已提交，但通知创建失败:', notifyErr);
       }
+      await realtimeEventService.publishRoomStatusSafely(created.roomId, 'reservation-created');
     }
 
     return response.success(res, created, created.idempotent ? '预约已存在' : '预约创建成功');
