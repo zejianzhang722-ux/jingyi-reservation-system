@@ -1,0 +1,38 @@
+name: Runtime coordination checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-coordination:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Check runtime JavaScript syntax
+        run: |
+          node --check server/src/config/redis.js
+          node --check server/src/services/distributedLockService.js
+          node --check server/src/services/schedulerService.js
+          node --check server/src/app.js
+          node --check scripts/runtime-coordination-check.js
+      - name: Run runtime coordination regression
+        run: npm run check:runtime-coordination
+      - name: Run server integration check
+        run: npm run test:integration
+        working-directory: server
