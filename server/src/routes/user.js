@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const path = require('path');
-const config = require('../config');
 const userController = require('../controllers/userController');
-const { auth } = require('../middleware/auth');
+const scopedQueryController = require('../controllers/scopedQueryController');
+const secureUploadService = require('../services/secureUploadService');
+const { auth, requireAdmin } = require('../middleware/auth');
+const adminScope = require('../middleware/adminScope');
 const { updateProfileRules, bindStudentRules } = require('../middleware/validator');
 const response = require('../utils/response');
 
@@ -15,31 +15,16 @@ function studentOnly(req, res, next) {
   next();
 }
 
-const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    cb(null, path.join(__dirname, '..', '..', config.upload.dir));
-  },
-  filename: function(req, file, cb) {
-    const ext = path.extname(file.originalname || '') || '.jpg';
-    cb(null, 'avatar-' + req.user.id + '-' + Date.now() + ext);
-  }
-});
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: config.upload.maxSize },
-  fileFilter: function(req, file, cb) {
-    if (!/^image\//.test(file.mimetype || '')) {
-      cb(new Error('头像必须是图片文件'));
-      return;
-    }
-    cb(null, true);
-  }
-});
-
-router.get('/list', auth, userController.list);
+router.get('/list', auth, requireAdmin, adminScope.loadAdminScope, scopedQueryController.users);
 router.get('/profile', auth, studentOnly, userController.getProfile);
 router.put('/profile', auth, studentOnly, updateProfileRules, userController.updateProfile);
-router.post('/avatar', auth, studentOnly, upload.single('avatar'), userController.uploadAvatar);
+router.post(
+  '/avatar',
+  auth,
+  studentOnly,
+  secureUploadService.imageUpload('avatar', 'avatar'),
+  userController.uploadAvatar
+);
 router.get('/credit', auth, studentOnly, userController.getCredit);
 router.get('/stats', auth, studentOnly, userController.getStats);
 router.post('/bind', auth, studentOnly, bindStudentRules, userController.bindStudent);
