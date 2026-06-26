@@ -100,16 +100,16 @@ const claimMock = function(limit, workerId) {
 };
 
 const claim = async function(options) {
-  const limit = Math.min(200, Math.max(1, Number((options && options.limit) || 50)));
+  const requestedLimit = Number((options && options.limit) || 50);
+  const limit = Math.min(200, Math.max(1, Math.floor(Number.isFinite(requestedLimit) ? requestedLimit : 50)));
   const workerId = String((options && options.workerId) || ('outbox-' + crypto.randomUUID())).slice(0, 100);
   if (db.isMock()) return claimMock(limit, workerId);
   const connection = await db.getConnection();
   db.assertTransactional(connection);
   try {
     await connection.beginTransaction();
-    const [rows] = await connection.execute(
-      "SELECT * FROM notification_outbox WHERE available_at<=NOW() AND attempts<max_attempts AND (status IN ('pending','failed') OR (status='processing' AND locked_at<DATE_SUB(NOW(),INTERVAL " + STALE_SECONDS + " SECOND))) ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
-      [limit]
+    const [rows] = await connection.query(
+      "SELECT * FROM notification_outbox WHERE available_at<=NOW() AND attempts<max_attempts AND (status IN ('pending','failed') OR (status='processing' AND locked_at<DATE_SUB(NOW(),INTERVAL " + STALE_SECONDS + " SECOND))) ORDER BY id LIMIT " + limit + ' FOR UPDATE SKIP LOCKED'
     );
     if (rows.length) {
       const ids = rows.map(function(row) { return Number(row.id); });
