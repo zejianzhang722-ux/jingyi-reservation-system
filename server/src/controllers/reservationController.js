@@ -69,9 +69,11 @@ const detail = async function(req, res) {
   try {
     const [reservations] = await db.query(
       'SELECT r.*, rm.name AS room_name, rm.type AS room_type, rm.location, rm.building_id, ' +
-      'rm.open_start_time, rm.open_end_time, u.nickname, u.real_name, u.student_id, u.phone ' +
+      'rm.open_start_time, rm.open_end_time, u.nickname, u.real_name, u.student_id, u.phone, ' +
+      's.id AS joined_seat_id, s.seat_number AS joined_seat_number, s.row_num AS joined_seat_row, ' +
+      's.col_num AS joined_seat_col, s.status AS joined_seat_status ' +
       'FROM reservations r JOIN rooms rm ON r.room_id = rm.id ' +
-      'JOIN users u ON r.user_id = u.id WHERE r.id = ?',
+      'JOIN users u ON r.user_id = u.id LEFT JOIN seats s ON r.seat_id = s.id WHERE r.id = ?',
       [req.params.id]
     );
     if (!reservations.length) return response.error(res, '预约不存在', 404);
@@ -88,14 +90,24 @@ const detail = async function(req, res) {
       }
     }
 
-    if (reservation.seat_id) {
-      const [seats] = await db.query('SELECT * FROM seats WHERE id = ?', [reservation.seat_id]);
-      reservation.seat_info = seats[0] || null;
-      if (reservation.seat_info && reservation.seat_info.seat_number) {
-        reservation.seat_name = reservation.seat_info.seat_number;
-        reservation.seatName = reservation.seat_info.seat_number;
-      }
+    if (reservation.joined_seat_id) {
+      reservation.seat_info = {
+        id: reservation.joined_seat_id,
+        seat_number: reservation.joined_seat_number,
+        row_num: reservation.joined_seat_row,
+        col_num: reservation.joined_seat_col,
+        status: reservation.joined_seat_status
+      };
+      reservation.seat_name = reservation.joined_seat_number;
+      reservation.seatName = reservation.joined_seat_number;
+    } else {
+      reservation.seat_info = null;
     }
+    delete reservation.joined_seat_id;
+    delete reservation.joined_seat_number;
+    delete reservation.joined_seat_row;
+    delete reservation.joined_seat_col;
+    delete reservation.joined_seat_status;
     delete reservation.room_number;
     delete reservation.roomNumber;
     return response.success(res, reservation);
