@@ -60,6 +60,12 @@ function toLegacyReservationSchema(sql) {
       /^\s*INDEX idx_room_date_status \(room_id, date, status\),\s*\n\s*UNIQUE KEY uk_waitlist_user_slot \(user_id, room_id, waiting_seat_scope, date, start_time, end_time\)\s*$/m,
       '  INDEX idx_room_date_status (room_id, date, status)'
     )
+    .replace(/^\s*dedupe_key VARCHAR\(191\) DEFAULT NULL,\s*$/m, '')
+    .replace(
+      /^\s*INDEX idx_user_read \(user_id, is_read\),\s*\n\s*UNIQUE KEY uk_notification_user_dedupe \(user_id, dedupe_key\)\s*$/m,
+      '  INDEX idx_user_read (user_id, is_read)'
+    )
+    .replace(/\nCREATE TABLE notification_outbox \([\s\S]*?\n\) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n/m, '\n')
 }
 
 async function main() {
@@ -94,23 +100,27 @@ async function main() {
       'SELECT table_name FROM information_schema.tables WHERE table_schema = ?',
       [database]
     )
-    const hasReservationSlots = tables.some(function(row) {
-      return row.TABLE_NAME === 'reservation_slots' || row.table_name === 'reservation_slots'
-    })
+    const tableNames = tables.map(function(row) { return row.TABLE_NAME || row.table_name })
+    const hasReservationSlots = tableNames.includes('reservation_slots')
+    const hasNotificationOutbox = tableNames.includes('notification_outbox')
     if (initializeLegacySchema && hasReservationSlots) {
       throw new Error('legacy CI schema must not contain reservation_slots before migration')
     }
     if (!initializeLegacySchema && !hasReservationSlots) {
       throw new Error('reservation_slots table was not created')
     }
+    if (initializeLegacySchema && hasNotificationOutbox) {
+      throw new Error('legacy CI schema must not contain notification_outbox before migration')
+    }
+    if (!initializeLegacySchema && !hasNotificationOutbox) {
+      throw new Error('current schema must contain notification_outbox')
+    }
 
     const [reservationColumns] = await connection.query(
       "SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = 'reservations'",
       [database]
     )
-    const columnNames = reservationColumns.map(function(row) {
-      return row.COLUMN_NAME || row.column_name
-    })
+    const columnNames = reservationColumns.map(function(row) { return row.COLUMN_NAME || row.column_name })
     if (initializeLegacySchema && (columnNames.includes('idempotency_key') || columnNames.includes('request_hash'))) {
       throw new Error('legacy CI schema must not contain consistency columns before migration')
     }
@@ -119,12 +129,9 @@ async function main() {
       "SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = 'reservation_waitlist'",
       [database]
     )
-    const waitlistColumnNames = waitlistColumns.map(function(row) {
-      return row.COLUMN_NAME || row.column_name
-    })
+    const waitlistColumnNames = waitlistColumns.map(function(row) { return row.COLUMN_NAME || row.column_name })
     const [waitlistIndexes] = await connection.query(
-      "SELECT index_name FROM information_schema.statistics WHERE table_schema = ? " +
-      "AND table_name = 'reservation_waitlist' AND index_name = 'uk_waitlist_user_slot'",
+      "SELECT index_name FROM information_schema.statistics WHERE table_schema = ? AND table_name = 'reservation_waitlist' AND index_name = 'uk_waitlist_user_slot'",
       [database]
     )
     if (initializeLegacySchema && (waitlistColumnNames.includes('waiting_seat_scope') || waitlistIndexes.length)) {
@@ -134,7 +141,23 @@ async function main() {
       throw new Error('current schema must contain waitlist consistency objects')
     }
 
-    const mode = initializeLegacySchema ? 'legacy-reservation-schema' : 'current-schema'
+    const [notificationColumns] = await connection.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = 'notifications'",
+      [database]
+    )
+    const notificationColumnNames = notificationColumns.map(function(row) { return row.COLUMN_NAME || row.column_name })
+    const [notificationIndexes] = await connection.query(
+      "SELECT index_name FROM information_schema.statistics WHERE table_schema = ? AND table_name = 'notifications' AND index_name = 'uk_notification_user_dedupe'",
+      [database]
+    )
+    if (initializeLegacySchema && (notificationColumnNames.includes('dedupe_key') || notificationIndexes.length)) {
+      throw new Error('legacy CI schema must not contain notification idempotency objects before migration')
+    }
+    if (!initializeLegacySchema && (!notificationColumnNames.includes('dedupe_key') || !notificationIndexes.length)) {
+      throw new Error('current schema must contain notification idempotency objects')
+    }
+
+    const mode = initializeLegacySchema ? 'legacy-consistency-schema' : 'current-schema'
     console.log('initialize-ci-mysql passed: ' + database + ' (' + mode + ')')
   } finally {
     await connection.end()
