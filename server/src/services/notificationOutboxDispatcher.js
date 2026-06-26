@@ -26,14 +26,20 @@ const websocket = async function(row, payload, dependencies) {
 const wechat = async function(row, payload, dependencies) {
   const userId = Number(row.user_id || payload.userId);
   if (!userId) throw new Error('微信通知缺少用户编号');
+  if (!payload.templateId) throw new Error('微信通知缺少模板编号');
   const [users] = await dependencies.dbClient.query('SELECT openid FROM users WHERE id = ?', [userId]);
   if (!users.length || !users[0].openid) return { skipped: true, reason: 'openid-missing' };
-  await dependencies.wechatClient.sendSubscribeMessage(
+  const accepted = await dependencies.wechatClient.sendSubscribeMessage(
     users[0].openid,
     payload.templateId,
     payload.templateData || {},
     payload.page || ''
   );
+  if (accepted === false || (accepted && accepted.errcode && Number(accepted.errcode) !== 0)) {
+    const err = new Error('微信订阅消息被平台拒绝');
+    err.code = 'WECHAT_DELIVERY_REJECTED';
+    throw err;
+  }
   return { sent: true };
 };
 
@@ -54,17 +60,22 @@ const dispatch = async function(row, options) {
 const processBatch = async function(options) {
   const settings = options || {};
   const rows = await repository.claim({ limit: settings.limit, workerId: settings.workerId });
-  const result = { claimed: rows.length, sent: 0, failed: 0, dead: 0 };
+  const result = { claimed: rows.length, sent: 0, failed: 0, dead: 0, leaseLost: 0 };
   for (const row of rows) {
     try {
       await dispatch(row, settings);
-      await repository.sent(row);
-      result.sent += 1;
+      if (await repository.sent(row)) result.sent += 1;
+      else result.leaseLost += 1;
     } catch (err) {
       logger.error('通知Outbox发送失败 id=' + row.id + ' channel=' + row.channel + ':', err);
-      await repository.failed(row, err);
-      if (Number(row.attempts || 1) >= Number(row.max_attempts || repository.MAX_ATTEMPTS)) result.dead += 1;
-      else result.failed += 1;
+      const recorded = await repository.failed(row, err);
+      if (!recorded) {
+        result.leaseLost += 1;
+      } else if (Number(row.attempts || 1) >= Number(row.max_attempts || repository.MAX_ATTEMPTS)) {
+        result.dead += 1;
+      } else {
+        result.failed += 1;
+      }
     }
   }
   return result;
