@@ -32,6 +32,7 @@ WORKDIR /app
 COPY --from=dependencies --chown=jingyi:jingyi /build/server/node_modules ./server/node_modules
 COPY --chown=jingyi:jingyi server ./server
 COPY --chown=jingyi:jingyi scripts ./scripts
+COPY --chown=jingyi:jingyi deploy ./deploy
 COPY --chown=root:root deploy/docker-entrypoint.sh /usr/local/bin/jingyi-entrypoint
 RUN chmod 0555 /usr/local/bin/jingyi-entrypoint \
     && mkdir -p /app/server/uploads /var/lib/jingyi/backups /var/lib/jingyi/backup-secondary \
