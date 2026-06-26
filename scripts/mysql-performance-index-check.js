@@ -5,7 +5,19 @@ const assert = require('assert')
 const fs = require('fs')
 const path = require('path')
 const mysql = require('../server/node_modules/mysql2/promise')
-const performanceSchemaService = require('../server/src/services/performanceSchemaService')
+
+const REQUIRED_INDEXES = {
+  rooms: ['idx_rooms_status_type_building'],
+  seats: ['idx_seats_room_status_order'],
+  reservations: [
+    'idx_reservation_status_created',
+    'idx_reservation_user_status_schedule',
+    'idx_reservation_room_schedule_status'
+  ],
+  checkins: ['idx_checkins_room_time'],
+  notifications: ['idx_notifications_user_read_created'],
+  reservation_waitlist: ['idx_waitlist_status_created']
+}
 
 function percentile(values, ratio) {
   const sorted = values.slice().sort(function(a, b) { return a - b })
@@ -18,7 +30,7 @@ async function explainContains(connection, sql, params, indexName) {
   const raw = rows[0] && (rows[0].EXPLAIN || rows[0]['EXPLAIN'])
   const plan = typeof raw === 'string' ? raw : JSON.stringify(raw || rows[0])
   assert(plan.includes(indexName), 'query plan must reference ' + indexName + ': ' + plan)
-  return JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw || {}))
+  return plan
 }
 
 async function measure(connection, sql, params, iterations) {
@@ -57,32 +69,31 @@ async function main() {
     const existing = new Set(indexRows.map(function(row) {
       return (row.table_name || row.TABLE_NAME) + '.' + (row.index_name || row.INDEX_NAME)
     }))
-    Object.keys(performanceSchemaService.REQUIRED_INDEXES).forEach(function(table) {
-      performanceSchemaService.REQUIRED_INDEXES[table].forEach(function(index) {
+    Object.keys(REQUIRED_INDEXES).forEach(function(table) {
+      REQUIRED_INDEXES[table].forEach(function(index) {
         assert(existing.has(table + '.' + index), 'missing performance index ' + table + '.' + index)
       })
     })
 
-    const plans = {}
-    plans.pending = await explainContains(
+    await explainContains(
       connection,
       "SELECT id,status,created_at FROM reservations FORCE INDEX (idx_reservation_status_created) WHERE status IN ('pending','counselor_pending') ORDER BY created_at DESC LIMIT 50",
       [],
       'idx_reservation_status_created'
     )
-    plans.timeline = await explainContains(
+    await explainContains(
       connection,
       "SELECT id,seat_id,start_time,end_time FROM reservations FORCE INDEX (idx_reservation_room_schedule_status) WHERE room_id=? AND date=CURDATE() AND status IN ('approved','checked_in')",
       [1],
       'idx_reservation_room_schedule_status'
     )
-    plans.notifications = await explainContains(
+    await explainContains(
       connection,
       'SELECT id,title,is_read,created_at FROM notifications FORCE INDEX (idx_notifications_user_read_created) WHERE user_id=? AND is_read=? ORDER BY created_at DESC LIMIT 20',
       [1, 0],
       'idx_notifications_user_read_created'
     )
-    plans.seats = await explainContains(
+    await explainContains(
       connection,
       "SELECT id,seat_number FROM seats FORCE INDEX (idx_seats_room_status_order) WHERE room_id=? AND status!='disabled' ORDER BY row_num,col_num,seat_number",
       [1],
