@@ -117,12 +117,11 @@ const query = async function(sql, params) {
 
   const started = process.hrtime.bigint();
   try {
-    const result = await pool.execute(sql, params);
+    const result = await pool.query(sql, params);
     recordQuery(sql, started, null);
     return result;
   } catch (err) {
     recordQuery(sql, started, err);
-    // 约束、语法和业务 SQL 错误必须原样返回，不能静默切换到另一套数据源。
     if (!isConnectionFailure(err)) throw err;
     if (isProduction || !allowMock) {
       err.code = err.code || 'DATABASE_QUERY_FAILED';
