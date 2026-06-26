@@ -135,6 +135,28 @@ async function main() {
   const missingAckRow = tables.notification_outbox.find(function(row) { return row.event_key === 'test:wechat:missing-ack' })
   assert.strictEqual(missingAckRow.status, 'failed', 'missing acknowledgement must not be marked as sent')
 
+  repository.enqueueMock({
+    eventKey: 'test:event-key-conflict',
+    userId: 1,
+    channel: 'websocket',
+    eventName: 'notification',
+    payload: { id: 700, value: 'original' }
+  })
+  assert.throws(function() {
+    repository.enqueueMock({
+      eventKey: 'test:event-key-conflict',
+      userId: 1,
+      channel: 'websocket',
+      eventName: 'notification',
+      payload: { id: 700, value: 'different' }
+    })
+  }, function(err) {
+    return err && err.code === 'OUTBOX_EVENT_CONFLICT'
+  }, 'same event key with different payload must be rejected')
+  tables.notification_outbox = tables.notification_outbox.filter(function(row) {
+    return row.event_key !== 'test:event-key-conflict'
+  })
+
   const firstStart = pump.start({ intervalMs: 600000, batchSize: 1, workerId: 'test-pump' })
   const reusedStart = pump.start({ intervalMs: 600000, batchSize: 1, workerId: 'another-worker' })
   assert.strictEqual(firstStart.reused, false, 'first outbox pump start must create a timer')
