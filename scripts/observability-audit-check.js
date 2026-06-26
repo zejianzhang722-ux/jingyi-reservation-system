@@ -9,6 +9,7 @@ process.env.AUDIT_IP_HASH_SALT = 'test-audit-ip-hash-salt-with-more-than-32-char
 
 const assert = require('assert')
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const db = require('../server/src/config/database')
 const auditTrailService = require('../server/src/services/auditTrailService')
@@ -26,6 +27,7 @@ async function main() {
   const tables = require('../server/src/config/mock-db').__tables
   tables.operation_logs = []
   tables.notification_outbox = []
+  tables.backup_runs = []
   metricsService.resetForTests()
 
   const sanitized = auditTrailService.sanitize({
@@ -136,7 +138,8 @@ async function main() {
     readiness: { ready: false },
     outbox: { pending: 150, processing: 0, failed: 0, dead: 1, oldestPendingSeconds: 600 },
     metrics: { totalRequests: 100, errorRate: 0.1, auditWriteFailures: 1 },
-    audit: { integrity: { valid: false, problems: [{ issue: 'test' }] } }
+    audit: { integrity: { valid: false, problems: [{ issue: 'test' }] } },
+    backup: { lastSuccessAgeSeconds: null, failures24Hours: 0, secondaryCopied: false, lastSuccessAt: null }
   }
   const alerts = operationalHealthService.evaluateAlerts(syntheticSnapshot)
   const codes = alerts.map(function(alert) { return alert.code })
@@ -151,15 +154,22 @@ async function main() {
     REDIS_PASSWORD: process.env.REDIS_PASSWORD,
     OPS_MONITOR_TOKEN: process.env.OPS_MONITOR_TOKEN,
     AUDIT_IP_HASH_SALT: process.env.AUDIT_IP_HASH_SALT,
+    BACKUP_ENCRYPTION_KEY: process.env.BACKUP_ENCRYPTION_KEY,
+    BACKUP_DIR: process.env.BACKUP_DIR,
+    BACKUP_SECONDARY_DIR: process.env.BACKUP_SECONDARY_DIR,
     ALLOW_WECHAT_DISABLED: process.env.ALLOW_WECHAT_DISABLED,
     ALLOW_INSECURE_BASE_URL: process.env.ALLOW_INSECURE_BASE_URL
   }
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'observability-guard-'))
   process.env.NODE_ENV = 'production'
   process.env.JWT_SECRET = 'j'.repeat(40)
   process.env.MYSQL_PASSWORD = 'mysql-strong-password'
   process.env.REDIS_PASSWORD = 'redis-strong-password'
   delete process.env.OPS_MONITOR_TOKEN
   process.env.AUDIT_IP_HASH_SALT = 's'.repeat(40)
+  process.env.BACKUP_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64')
+  process.env.BACKUP_DIR = path.join(tempRoot, 'primary')
+  process.env.BACKUP_SECONDARY_DIR = path.join(tempRoot, 'secondary')
   process.env.ALLOW_WECHAT_DISABLED = 'true'
   process.env.ALLOW_INSECURE_BASE_URL = 'true'
   assert.throws(function() { productionConfigGuard.validate() }, function(err) {
@@ -174,6 +184,7 @@ async function main() {
     if (oldValues[key] === undefined) delete process.env[key]
     else process.env[key] = oldValues[key]
   })
+  fs.rmSync(tempRoot, { recursive: true, force: true })
 
   const root = path.join(__dirname, '..')
   const read = function(relative) { return fs.readFileSync(path.join(root, relative), 'utf8') }

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const backupController = require('../controllers/backupController');
 const secureUploadService = require('../services/secureUploadService');
 const adminScope = require('../middleware/adminScope');
 const { auth, requireAdmin, requireRole } = require('../middleware/auth');
@@ -41,7 +42,9 @@ router.put('/announcements/:id', auth, requireAdmin, adminController.updateAnnou
 router.delete('/announcements/:id', auth, requireAdmin, adminController.deleteAnnouncement);
 
 router.post('/archive', auth, requireRole('super_admin'), adminController.archiveSemester);
-router.post('/backup', auth, requireRole('super_admin'), adminController.backupData);
+router.get('/backups', auth, requireRole('super_admin'), backupController.list);
+router.post('/backup', auth, requireRole('super_admin'), backupController.create);
+router.post('/backups/:fileName/verify', auth, requireRole('super_admin'), backupController.verify);
 
 router.post(
   '/upload',

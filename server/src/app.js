@@ -22,6 +22,7 @@ const socketRedisAdapterService = require('./services/socketRedisAdapterService'
 const realtimeEventService = require('./services/realtimeEventService');
 const dataReadinessService = require('./services/dataReadinessService');
 const auditSchemaService = require('./services/auditSchemaService');
+const backupSchemaService = require('./services/backupSchemaService');
 const productionConfigGuard = require('./services/productionConfigGuard');
 
 const app = express();
@@ -97,6 +98,7 @@ const startServer = async function() {
     productionConfigGuard.validate();
     const readiness = await dataReadinessService.checkDataReadiness();
     const auditSchema = await auditSchemaService.assertReady();
+    const backupSchema = await backupSchemaService.assertReady();
     const socketAdapterState = await socketRedisAdapterService.initSocketAdapter(io);
     logger.info('实时广播适配器已就绪，模式: ' + socketAdapterState.mode);
 
@@ -109,7 +111,7 @@ const startServer = async function() {
         '，通知Outbox: ' + (outboxState.started ? '已启动' : '未启动')
       );
     } else {
-      logger.info('定时任务默认未启动；通知Outbox应由独立Scheduler Worker处理');
+      logger.info('定时任务默认未启动；通知Outbox与自动备份应由独立Scheduler Worker处理');
     }
 
     const monitorState = operationalMonitorService.start();
@@ -118,7 +120,7 @@ const startServer = async function() {
     server.listen(config.port, function() {
       const dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
       const redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
-      const schemaMode = readiness.schema.ready && auditSchema.ready ? '已就绪' : '未完成迁移';
+      const schemaMode = readiness.schema.ready && auditSchema.ready && backupSchema.ready ? '已就绪' : '未完成迁移';
       logger.info(
         '敬一书院预约管理系统服务已启动，端口: ' + config.port +
         '，数据库: ' + dbMode + '，Redis: ' + redisMode +

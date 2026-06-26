@@ -1,4 +1,4 @@
-name: Observability and audit checks
+name: Backup recovery checks
 
 on:
   pull_request:
@@ -9,15 +9,15 @@ permissions:
   contents: read
 
 jobs:
-  observability-audit:
+  backup-recovery:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       mysql:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
+          MYSQL_DATABASE: jingyi_backup_ci
         ports:
           - 3306:3306
         options: >-
@@ -46,25 +46,24 @@ jobs:
       - name: Install server dependencies
         run: npm ci
         working-directory: server
-      - name: Check observability JavaScript syntax
+      - name: Install MySQL client tools
         run: |
-          node --check server/src/utils/auditHash.js
-          node --check server/src/services/metricsService.js
-          node --check server/src/services/auditTrailService.js
-          node --check server/src/services/auditSchemaService.js
+          sudo apt-get update
+          sudo apt-get install -y mysql-client-8.0
+      - name: Check backup JavaScript syntax
+        run: |
+          node --check server/src/utils/backupCrypto.js
+          node --check server/src/services/backupService.js
+          node --check server/src/services/dataRetentionService.js
+          node --check server/src/services/backupScheduleService.js
           node --check server/src/services/backupSchemaService.js
-          node --check server/src/services/operationalHealthService.js
-          node --check server/src/services/operationalMonitorService.js
-          node --check server/src/middleware/requestContext.js
-          node --check server/src/middleware/auditTrail.js
-          node --check server/src/middleware/opsAuth.js
-          node --check server/src/routes/ops.js
-          node --check scripts/apply-observability-audit-migration.js
+          node --check server/src/controllers/backupController.js
           node --check scripts/apply-backup-recovery-migration.js
-          node --check scripts/observability-audit-check.js
-          node --check scripts/mysql-observability-audit-check.js
-      - name: Run isolated observability audit regression
-        run: npm run check:observability-audit
+          node --check scripts/backup-recovery-check.js
+          node --check scripts/mysql-backup-recovery-check.js
+          node --check scripts/disaster-recovery-drill.js
+      - name: Run isolated backup recovery regression
+        run: npm run check:backup-recovery
       - name: Initialize legacy MySQL schema
         env:
           INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
@@ -72,51 +71,47 @@ jobs:
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/initialize-ci-mysql.js
-      - name: Apply reservation consistency migration
+      - name: Apply reservation migration
         env:
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-reservation-consistency-migration.js
-      - name: Apply notification outbox migration
+      - name: Apply notification migration
         env:
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-notification-outbox-migration.js
-      - name: Apply observability audit migration
+      - name: Apply observability migration
         env:
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
-        run: |
-          set -o pipefail
-          node scripts/apply-observability-audit-migration.js 2>&1 | tee observability-migration.log
-      - name: Reapply observability migration
-        env:
-          MYSQL_HOST: 127.0.0.1
-          MYSQL_PORT: 3306
-          MYSQL_USER: root
-          MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
-        run: |
-          set -o pipefail
-          node scripts/apply-observability-audit-migration.js 2>&1 | tee -a observability-migration.log
+          MYSQL_DATABASE: jingyi_backup_ci
+        run: node scripts/apply-observability-audit-migration.js
       - name: Apply backup recovery migration
         env:
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
+          MYSQL_DATABASE: jingyi_backup_ci
+        run: node scripts/apply-backup-recovery-migration.js
+      - name: Reapply backup recovery migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-backup-recovery-migration.js
       - name: Verify production data readiness
         env:
@@ -127,11 +122,11 @@ jobs:
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
+          MYSQL_DATABASE: jingyi_backup_ci
           REDIS_HOST: 127.0.0.1
           REDIS_PORT: 6379
         run: node scripts/production-data-readiness-check.js
-      - name: Run real MySQL observability audit regression
+      - name: Run real MySQL backup and restore regression
         env:
           NODE_ENV: test
           ALLOW_MOCK_DB: 'false'
@@ -139,18 +134,16 @@ jobs:
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_observability_ci
+          MYSQL_DATABASE: jingyi_backup_ci
         run: |
           set -o pipefail
-          node scripts/mysql-observability-audit-check.js 2>&1 | tee mysql-observability-audit.log
-      - name: Upload observability diagnostics
+          node scripts/mysql-backup-recovery-check.js 2>&1 | tee mysql-backup-recovery.log
+      - name: Upload backup diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: observability-audit-diagnostics
-          path: |
-            observability-migration.log
-            mysql-observability-audit.log
+          name: backup-recovery-diagnostics
+          path: mysql-backup-recovery.log
           if-no-files-found: ignore
           retention-days: 7
       - name: Run server integration check

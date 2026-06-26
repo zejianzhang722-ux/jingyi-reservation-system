@@ -2,28 +2,35 @@ const logger = require('./config/logger');
 const db = require('./config/database');
 const redis = require('./config/redis');
 const dataReadinessService = require('./services/dataReadinessService');
+const backupSchemaService = require('./services/backupSchemaService');
 const schedulerService = require('./services/schedulerService');
 const notificationOutboxPumpService = require('./services/notificationOutboxPumpService');
+const backupScheduleService = require('./services/backupScheduleService');
 
 let shuttingDown = false;
 
 const startWorker = async function() {
   const readiness = await dataReadinessService.checkDataReadiness();
+  const backupSchema = await backupSchemaService.assertReady();
   const schedulerState = await schedulerService.initScheduler();
   const outboxState = notificationOutboxPumpService.start();
+  const backupState = backupScheduleService.start();
   logger.info(
     '定时任务Worker已启动，任务数: ' + schedulerState.jobs +
     '，Redis模式: ' + schedulerState.redisMode +
     '，数据库模式: ' + readiness.database.mode +
-    '，通知Outbox: ' + (outboxState.started ? '已启动' : '未启动')
+    '，备份结构: ' + (backupSchema.ready ? '已就绪' : '未就绪') +
+    '，通知Outbox: ' + (outboxState.started ? '已启动' : '未启动') +
+    '，自动备份: ' + (backupState.started ? '已启动' : '未启动')
   );
-  return { readiness, schedulerState, outboxState };
+  return { readiness, backupSchema, schedulerState, outboxState, backupState };
 };
 
 const shutdownWorker = async function(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info('定时任务Worker收到' + signal + '，开始停止');
+  try { backupScheduleService.stop(); } catch (err) { logger.error('停止自动备份任务失败:', err); }
   try {
     const outboxStop = await notificationOutboxPumpService.stop({ timeoutMs: 10000 });
     if (!outboxStop.drained) logger.warn('通知Outbox仍有任务未在关闭窗口内完成');
