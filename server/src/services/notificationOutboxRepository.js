@@ -15,6 +15,51 @@ const retrySeconds = function(attempt) {
   return Math.min(21600, 30 * Math.pow(2, Math.max(0, Number(attempt || 1) - 1)));
 };
 
+const canonicalValue = function(value) {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce(function(result, key) {
+      result[key] = canonicalValue(value[key]);
+      return result;
+    }, {});
+  }
+  return value;
+};
+
+const canonicalPayload = function(value) {
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch (err) {}
+  }
+  return JSON.stringify(canonicalValue(parsed || {}));
+};
+
+const nullableNumber = function(value) {
+  return value === undefined || value === null || value === '' ? null : Number(value);
+};
+
+const nullableText = function(value) {
+  return value === undefined || value === null || value === '' ? null : String(value);
+};
+
+const conflictError = function(key, fields) {
+  const err = new Error('通知事件键已被不同事件占用: ' + key);
+  err.code = 'OUTBOX_EVENT_CONFLICT';
+  err.httpStatus = 409;
+  err.fields = fields;
+  return err;
+};
+
+const assertDuplicateMatches = function(existing, item, key) {
+  const mismatches = [];
+  if (nullableNumber(existing.notification_id) !== nullableNumber(item.notificationId)) mismatches.push('notificationId');
+  if (nullableNumber(existing.user_id) !== nullableNumber(item.userId)) mismatches.push('userId');
+  if (nullableText(existing.channel) !== nullableText(item.channel)) mismatches.push('channel');
+  if (nullableText(existing.event_name) !== nullableText(item.eventName)) mismatches.push('eventName');
+  if (canonicalPayload(existing.payload) !== canonicalPayload(item.payload)) mismatches.push('payload');
+  if (mismatches.length) throw conflictError(key, mismatches);
+};
+
 const tables = function() {
   const mock = require('../config/mock-db').__tables;
   if (!mock.notification_outbox) mock.notification_outbox = [];
@@ -30,10 +75,14 @@ const enqueueTx = async function(connection, item) {
     );
     return { inserted: Number(result.affectedRows || 0) === 1, eventKey: key };
   } catch (err) {
-    if (err && (err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062)) {
-      return { inserted: false, eventKey: key };
-    }
-    throw err;
+    if (!(err && (err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062))) throw err;
+    const [rows] = await connection.execute(
+      'SELECT notification_id,user_id,channel,event_name,payload FROM notification_outbox WHERE event_key = ? FOR UPDATE',
+      [key]
+    );
+    if (!rows.length) throw err;
+    assertDuplicateMatches(rows[0], item, key);
+    return { inserted: false, eventKey: key, row: rows[0] };
   }
 };
 
@@ -41,7 +90,10 @@ const enqueueMock = function(item) {
   const mock = tables();
   const key = eventKey(item.eventKey);
   const duplicate = mock.notification_outbox.find(function(row) { return row.event_key === key; });
-  if (duplicate) return { inserted: false, eventKey: key, row: duplicate };
+  if (duplicate) {
+    assertDuplicateMatches(duplicate, item, key);
+    return { inserted: false, eventKey: key, row: duplicate };
+  }
   const row = {
     id: mock.notification_outbox.reduce(function(max, entry) { return Math.max(max, Number(entry.id || 0)); }, 0) + 1,
     event_key: key,
@@ -173,4 +225,18 @@ const failed = async function(row, err) {
   return Number(result.affectedRows || 0) === 1;
 };
 
-module.exports = { MAX_ATTEMPTS, STALE_SECONDS, eventKey, retrySeconds, enqueueTx, enqueueMock, enqueue, claimMock, claim, sent, failed };
+module.exports = {
+  MAX_ATTEMPTS,
+  STALE_SECONDS,
+  eventKey,
+  retrySeconds,
+  canonicalPayload,
+  assertDuplicateMatches,
+  enqueueTx,
+  enqueueMock,
+  enqueue,
+  claimMock,
+  claim,
+  sent,
+  failed
+};
