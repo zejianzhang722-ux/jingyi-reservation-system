@@ -50,7 +50,7 @@ async function ensureColumn(connection, database, table, column, definition) {
 async function ensureOutboxTable(connection, database) {
   if (!(await tableExists(connection, database, 'notification_outbox'))) {
     await connection.query(
-      "CREATE TABLE notification_outbox (" +
+      "CREATE TABLE IF NOT EXISTS notification_outbox (" +
       "id BIGINT AUTO_INCREMENT PRIMARY KEY,event_key VARCHAR(191) NOT NULL," +
       "notification_id INT DEFAULT NULL,user_id INT DEFAULT NULL," +
       "channel ENUM('websocket','wechat') NOT NULL,event_name VARCHAR(100) DEFAULT NULL," +
