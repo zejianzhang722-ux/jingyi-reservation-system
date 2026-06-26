@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+admin/node_modules
+server/node_modules
+admin/dist
+server/logs
+server/uploads
+server/data
+*.log
+*.jybak
+*.jyarc
+deploy/state

@@ -1,0 +1,181 @@
+name: jingyi-reservation
+
+x-api-environment: &api-environment
+  NODE_ENV: production
+  PORT: 3000
+  MYSQL_HOST: mysql
+  MYSQL_PORT: 3306
+  MYSQL_DATABASE: jingyi_reservation
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  UPLOAD_DIR: /app/server/uploads
+  UPLOADS_DIR: /app/server/uploads
+  BACKUP_DIR: /var/lib/jingyi/backups
+  BACKUP_SECONDARY_DIR: /var/lib/jingyi/backup-secondary
+  APP_VERSION: ${APP_VERSION:-development}
+  GIT_SHA: ${GIT_SHA:-development}
+  BUILD_TIME: ${BUILD_TIME:-development}
+  RELEASE_ID: ${RELEASE_ID:-development}
+
+x-api-base: &api-base
+  image: ${API_IMAGE}:${RELEASE_TAG}
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=128m,mode=1777
+    - /app/server/logs:size=64m,mode=0700,uid=10001,gid=10001
+  env_file:
+    - ${PRODUCTION_ENV_FILE:-.env.production}
+  environment: *api-environment
+  volumes:
+    - uploads:/app/server/uploads
+    - backups:/var/lib/jingyi/backups
+    - backup_secondary:/var/lib/jingyi/backup-secondary
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  healthcheck:
+    test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/api/v1/ops/ready"]
+    interval: 15s
+    timeout: 5s
+    retries: 6
+    start_period: 30s
+  networks:
+    - backend
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    env_file:
+      - ${PRODUCTION_ENV_FILE:-.env.production}
+    environment:
+      MYSQL_DATABASE: jingyi_reservation
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+      - --binlog-expire-logs-seconds=604800
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    env_file:
+      - ${PRODUCTION_ENV_FILE:-.env.production}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  api-blue:
+    <<: *api-base
+    environment:
+      <<: *api-environment
+      DEPLOYMENT_SLOT: blue
+
+  api-green:
+    <<: *api-base
+    environment:
+      <<: *api-environment
+      DEPLOYMENT_SLOT: green
+
+  scheduler:
+    <<: *api-base
+    command: ["node", "server/src/scheduler-worker.js"]
+    environment:
+      <<: *api-environment
+      DEPLOYMENT_SLOT: scheduler
+      ENABLE_AUTOMATED_BACKUPS: ${ENABLE_AUTOMATED_BACKUPS:-true}
+    healthcheck:
+      disable: true
+
+  migrate:
+    <<: *api-base
+    profiles: ["migration"]
+    restart: "no"
+    command: ["sh", "deploy/scripts/migrate.sh"]
+    environment:
+      <<: *api-environment
+      DEPLOYMENT_SLOT: migration
+    healthcheck:
+      disable: true
+
+  admin:
+    image: ${ADMIN_IMAGE}:${RELEASE_TAG}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /var/cache/nginx:size=32m,mode=0700,uid=101,gid=101
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - frontend
+
+  gateway:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      admin:
+        condition: service_started
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    volumes:
+      - ./nginx/gateway.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/active-upstream.conf:/etc/nginx/conf.d/active-upstream.conf:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /var/cache/nginx:size=32m,mode=0700,uid=101,gid=101
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    networks:
+      - frontend
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:
+  uploads:
+  backups:
+  backup_secondary:
+
+networks:
+  frontend:
+  backend:
+    internal: true
