@@ -1,6 +1,20 @@
 const STARTED_AT = Date.now();
 const DURATION_BUCKETS_SECONDS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+const DATABASE_BUCKETS_SECONDS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5];
 const MAX_ROUTE_SERIES = 100;
+const MAX_DATABASE_OPERATIONS = 20;
+
+const createDatabaseState = function() {
+  return {
+    total: 0,
+    errors: 0,
+    slow: 0,
+    durationSecondsSum: 0,
+    durationSecondsMax: 0,
+    operations: {},
+    durationBuckets: DATABASE_BUCKETS_SECONDS.map(function(le) { return { le, count: 0 }; })
+  };
+};
 
 const state = {
   activeRequests: 0,
@@ -12,6 +26,7 @@ const state = {
   methods: {},
   routes: new Map(),
   durationBuckets: DURATION_BUCKETS_SECONDS.map(function(le) { return { le, count: 0 }; }),
+  database: createDatabaseState(),
   auditWriteFailures: 0,
   operationalAlerts: { warning: 0, critical: 0 }
 };
@@ -72,6 +87,27 @@ const beginRequest = function() {
   };
 };
 
+const recordDatabaseQuery = function(operation, durationMs, options) {
+  const settings = options || {};
+  const durationSeconds = Math.max(0, Number(durationMs || 0) / 1000);
+  state.database.total += 1;
+  if (settings.error) state.database.errors += 1;
+  if (settings.slow) state.database.slow += 1;
+  state.database.durationSecondsSum += durationSeconds;
+  state.database.durationSecondsMax = Math.max(state.database.durationSecondsMax, durationSeconds);
+  state.database.durationBuckets.forEach(function(bucket) {
+    if (durationSeconds <= bucket.le) bucket.count += 1;
+  });
+  const normalized = String(operation || 'other').toUpperCase().slice(0, 20);
+  if (Object.prototype.hasOwnProperty.call(state.database.operations, normalized)) {
+    state.database.operations[normalized] += 1;
+  } else if (Object.keys(state.database.operations).length < MAX_DATABASE_OPERATIONS) {
+    state.database.operations[normalized] = 1;
+  } else {
+    state.database.operations.OTHER = Number(state.database.operations.OTHER || 0) + 1;
+  }
+};
+
 const recordAuditFailure = function() {
   state.auditWriteFailures += 1;
 };
@@ -96,6 +132,16 @@ const snapshot = function() {
     statusClasses: Object.assign({}, state.statusClasses),
     methods: Object.assign({}, state.methods),
     routes: Array.from(state.routes.entries()).map(function(entry) { return { route: entry[0], count: entry[1] }; }),
+    database: {
+      total: state.database.total,
+      errors: state.database.errors,
+      slow: state.database.slow,
+      errorRate: state.database.total ? state.database.errors / state.database.total : 0,
+      durationSecondsSum: state.database.durationSecondsSum,
+      durationSecondsMax: state.database.durationSecondsMax,
+      durationBuckets: state.database.durationBuckets.map(function(bucket) { return { le: bucket.le, count: bucket.count }; }),
+      operations: Object.assign({}, state.database.operations)
+    },
     auditWriteFailures: state.auditWriteFailures,
     operationalAlerts: Object.assign({}, state.operationalAlerts),
     memory: {
@@ -149,6 +195,27 @@ const toPrometheus = function(extra) {
   lines.push(metricLine('jingyi_http_request_duration_seconds_bucket', { le: '+Inf' }, snap.totalRequests));
   lines.push(metricLine('jingyi_http_request_duration_seconds_sum', {}, snap.durationSecondsSum));
   lines.push(metricLine('jingyi_http_request_duration_seconds_count', {}, snap.totalRequests));
+
+  lines.push('# HELP jingyi_database_queries_total Database queries by operation.');
+  lines.push('# TYPE jingyi_database_queries_total counter');
+  Object.keys(snap.database.operations).sort().forEach(function(operation) {
+    lines.push(metricLine('jingyi_database_queries_total', { operation }, snap.database.operations[operation]));
+  });
+  lines.push('# HELP jingyi_database_query_errors_total Database query failures.');
+  lines.push('# TYPE jingyi_database_query_errors_total counter');
+  lines.push(metricLine('jingyi_database_query_errors_total', {}, snap.database.errors));
+  lines.push('# HELP jingyi_database_slow_queries_total Queries exceeding the configured threshold.');
+  lines.push('# TYPE jingyi_database_slow_queries_total counter');
+  lines.push(metricLine('jingyi_database_slow_queries_total', {}, snap.database.slow));
+  lines.push('# HELP jingyi_database_query_duration_seconds Database query duration histogram.');
+  lines.push('# TYPE jingyi_database_query_duration_seconds histogram');
+  snap.database.durationBuckets.forEach(function(bucket) {
+    lines.push(metricLine('jingyi_database_query_duration_seconds_bucket', { le: bucket.le }, bucket.count));
+  });
+  lines.push(metricLine('jingyi_database_query_duration_seconds_bucket', { le: '+Inf' }, snap.database.total));
+  lines.push(metricLine('jingyi_database_query_duration_seconds_sum', {}, snap.database.durationSecondsSum));
+  lines.push(metricLine('jingyi_database_query_duration_seconds_count', {}, snap.database.total));
+
   lines.push('# HELP jingyi_audit_write_failures_total Audit persistence failures.');
   lines.push('# TYPE jingyi_audit_write_failures_total counter');
   lines.push(metricLine('jingyi_audit_write_failures_total', {}, snap.auditWriteFailures));
@@ -176,16 +243,20 @@ const resetForTests = function() {
   state.methods = {};
   state.routes = new Map();
   state.durationBuckets = DURATION_BUCKETS_SECONDS.map(function(le) { return { le, count: 0 }; });
+  state.database = createDatabaseState();
   state.auditWriteFailures = 0;
   state.operationalAlerts = { warning: 0, critical: 0 };
 };
 
 module.exports = {
   DURATION_BUCKETS_SECONDS,
+  DATABASE_BUCKETS_SECONDS,
   MAX_ROUTE_SERIES,
+  MAX_DATABASE_OPERATIONS,
   normalizePath,
   routeKey,
   beginRequest,
+  recordDatabaseQuery,
   recordAuditFailure,
   recordOperationalAlert,
   snapshot,
