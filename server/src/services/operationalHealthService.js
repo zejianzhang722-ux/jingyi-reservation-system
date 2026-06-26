@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const dataReadinessService = require('./dataReadinessService');
+const auditSchemaService = require('./auditSchemaService');
 const metricsService = require('./metricsService');
 const auditTrailService = require('./auditTrailService');
 const schedulerService = require('./schedulerService');
@@ -85,8 +86,15 @@ const collectAuditStats = async function() {
 
 const readinessSummary = async function() {
   try {
-    const value = await dataReadinessService.checkDataReadiness();
-    return { ready: !!value.ready, value, error: null };
+    const values = await Promise.all([
+      dataReadinessService.checkDataReadiness(),
+      auditSchemaService.check()
+    ]);
+    return {
+      ready: !!values[0].ready && !!values[1].ready,
+      value: { data: values[0], audit: values[1] },
+      error: null
+    };
   } catch (err) {
     return {
       ready: false,
