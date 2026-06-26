@@ -8,6 +8,7 @@ const ADMIN_ROLES = new Set(['admin', 'super_admin', 'counselor']);
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SENSITIVE_KEY_PATTERN = /(password|passwd|secret|token|authorization|cookie|session|openid|session_key|credential|private[_-]?key)/i;
 const MAX_METADATA_BYTES = 12000;
+const AUDIT_APPEND_LOCK = 'jingyi_audit_chain_append';
 
 const truncate = function(value, max) {
   const text = String(value === undefined || value === null ? '' : value);
@@ -81,7 +82,8 @@ const actionForRequest = function(req) {
 
 const targetForRequest = function(req) {
   const path = normalizePath(req).replace(/^\/api\/v\d+\//, '');
-  const first = path.split('/').filter(Boolean)[0] || 'system';
+  const segments = path.split('/').filter(Boolean);
+  const first = segments[0] === 'admin' && segments[1] ? segments[1] : (segments[0] || 'system');
   const rawId = req && req.params ? (req.params.id || req.params.reservationId || req.params.roomId || null) : null;
   const numeric = rawId !== null && rawId !== undefined && /^\d+$/.test(String(rawId)) ? Number(rawId) : null;
   return { table: truncate(first, 50), id: numeric };
@@ -136,7 +138,15 @@ const appendMysql = async function(event) {
   const connection = await db.getConnection();
   db.assertTransactional(connection);
   const normalized = normalizeEvent(event);
+  let locked = false;
   try {
+    const [lockRows] = await connection.execute('SELECT GET_LOCK(?,5) AS acquired', [AUDIT_APPEND_LOCK]);
+    locked = Number(lockRows[0] && lockRows[0].acquired) === 1;
+    if (!locked) {
+      const err = new Error('无法获取审计哈希链写入锁');
+      err.code = 'AUDIT_APPEND_LOCK_TIMEOUT';
+      throw err;
+    }
     await connection.beginTransaction();
     const [previousRows] = await connection.query(
       'SELECT id, entry_hash FROM operation_logs WHERE entry_hash IS NOT NULL ORDER BY id DESC LIMIT 1 FOR UPDATE'
@@ -174,6 +184,9 @@ const appendMysql = async function(event) {
     try { await connection.rollback(); } catch (rollbackErr) {}
     throw err;
   } finally {
+    if (locked) {
+      try { await connection.execute('SELECT RELEASE_LOCK(?)', [AUDIT_APPEND_LOCK]); } catch (releaseErr) {}
+    }
     connection.release();
   }
 };
@@ -264,6 +277,7 @@ module.exports = {
   MUTATING_METHODS,
   SENSITIVE_KEY_PATTERN,
   MAX_METADATA_BYTES,
+  AUDIT_APPEND_LOCK,
   sanitize,
   boundedMetadata,
   dbTimestamp,
@@ -275,6 +289,7 @@ module.exports = {
   requestMetadata,
   normalizeEvent,
   appendMock,
+  appendMysql,
   record,
   shouldAuditRequest,
   eventFromRequest,
