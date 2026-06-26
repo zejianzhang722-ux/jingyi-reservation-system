@@ -138,7 +138,12 @@ const shutdown = async function(signal) {
   if (shuttingDown) return { stopped: true, reused: true };
   shuttingDown = true;
   logger.info('收到' + signal + '，开始关闭服务');
-  notificationOutboxPumpService.stop();
+  try {
+    const outboxStop = await notificationOutboxPumpService.stop({ timeoutMs: 10000 });
+    if (!outboxStop.drained) logger.warn('通知Outbox仍有任务未在关闭窗口内完成');
+  } catch (err) {
+    logger.error('停止通知Outbox失败:', err);
+  }
   try { await schedulerService.stopScheduler(); } catch (err) { logger.error('停止定时任务失败:', err); }
   try { await closeSocketServer(); } catch (err) { logger.error('关闭HTTP与WebSocket服务失败:', err); }
   try { await socketRedisAdapterService.closeSocketAdapter(); } catch (err) { logger.error('关闭实时广播适配器失败:', err); }
