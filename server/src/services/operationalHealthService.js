@@ -2,11 +2,13 @@ const db = require('../config/database');
 const dataReadinessService = require('./dataReadinessService');
 const auditSchemaService = require('./auditSchemaService');
 const backupSchemaService = require('./backupSchemaService');
+const performanceSchemaService = require('./performanceSchemaService');
 const metricsService = require('./metricsService');
 const auditTrailService = require('./auditTrailService');
 const schedulerService = require('./schedulerService');
 const notificationOutboxPumpService = require('./notificationOutboxPumpService');
 const backupScheduleService = require('./backupScheduleService');
+const versionService = require('./versionService');
 
 const threshold = function(name, fallback, minimum) {
   const value = Number(process.env[name]);
@@ -20,6 +22,10 @@ const alertThresholds = function() {
     outboxDeadCritical: threshold('OPS_OUTBOX_DEAD_CRITICAL', 1, 1),
     httpErrorRateWarning: threshold('OPS_HTTP_5XX_RATE_WARNING', 0.05, 0),
     httpMinimumSamples: threshold('OPS_HTTP_ERROR_MINIMUM_SAMPLES', 20, 1),
+    databaseErrorRateWarning: threshold('OPS_DATABASE_ERROR_RATE_WARNING', 0.02, 0),
+    databaseMinimumSamples: threshold('OPS_DATABASE_MINIMUM_SAMPLES', 20, 1),
+    databaseSlowRateWarning: threshold('OPS_DATABASE_SLOW_RATE_WARNING', 0.1, 0),
+    databaseQueueWarning: threshold('OPS_DATABASE_QUEUE_WARNING', 5, 1),
     auditFailureCritical: threshold('OPS_AUDIT_FAILURE_CRITICAL', 1, 1),
     backupMaxAgeSeconds: threshold('OPS_BACKUP_MAX_AGE_SECONDS', 26 * 60 * 60, 60),
     backupFailureCritical: threshold('OPS_BACKUP_FAILURE_CRITICAL', 1, 1)
@@ -124,11 +130,12 @@ const readinessSummary = async function() {
     const values = await Promise.all([
       dataReadinessService.checkDataReadiness(),
       auditSchemaService.check(),
-      backupSchemaService.check()
+      backupSchemaService.check(),
+      performanceSchemaService.check()
     ]);
     return {
-      ready: !!values[0].ready && !!values[1].ready && !!values[2].ready,
-      value: { data: values[0], audit: values[1], backup: values[2] },
+      ready: !!values[0].ready && !!values[1].ready && !!values[2].ready && !!values[3].ready,
+      value: { data: values[0], audit: values[1], backup: values[2], performance: values[3] },
       error: null
     };
   } catch (err) {
@@ -149,6 +156,19 @@ const evaluateAlerts = function(snapshot) {
   if (backlog >= limits.outboxBacklogWarning) alerts.push({ code: 'OUTBOX_BACKLOG', severity: 'warning', message: '通知Outbox积压达到阈值', value: backlog });
   if (snapshot.outbox.oldestPendingSeconds >= limits.outboxOldestWarningSeconds) alerts.push({ code: 'OUTBOX_OLDEST_PENDING', severity: 'warning', message: '最旧待投递通知等待时间过长', value: snapshot.outbox.oldestPendingSeconds });
   if (snapshot.metrics.totalRequests >= limits.httpMinimumSamples && snapshot.metrics.errorRate >= limits.httpErrorRateWarning) alerts.push({ code: 'HTTP_5XX_RATE', severity: 'warning', message: 'HTTP 5xx错误率达到阈值', value: snapshot.metrics.errorRate });
+
+  const database = snapshot.metrics.database || { total: 0, errors: 0, slow: 0, errorRate: 0 };
+  if (database.total >= limits.databaseMinimumSamples && database.errorRate >= limits.databaseErrorRateWarning) {
+    alerts.push({ code: 'DATABASE_ERROR_RATE', severity: 'warning', message: '数据库查询错误率达到阈值', value: database.errorRate });
+  }
+  const slowRate = database.total ? database.slow / database.total : 0;
+  if (database.total >= limits.databaseMinimumSamples && slowRate >= limits.databaseSlowRateWarning) {
+    alerts.push({ code: 'DATABASE_SLOW_RATE', severity: 'warning', message: '慢查询比例达到阈值', value: slowRate });
+  }
+  if (snapshot.databasePool && Number(snapshot.databasePool.queuedRequests || 0) >= limits.databaseQueueWarning) {
+    alerts.push({ code: 'DATABASE_POOL_QUEUE', severity: 'warning', message: '数据库连接池等待队列达到阈值', value: snapshot.databasePool.queuedRequests });
+  }
+
   if (snapshot.metrics.auditWriteFailures >= limits.auditFailureCritical) alerts.push({ code: 'AUDIT_WRITE_FAILURES', severity: 'critical', message: '审计日志写入失败', value: snapshot.metrics.auditWriteFailures });
   if (!snapshot.audit.integrity.valid) alerts.push({ code: 'AUDIT_CHAIN_INVALID', severity: 'critical', message: '审计日志哈希链校验失败', value: snapshot.audit.integrity.problems.length });
 
@@ -174,9 +194,11 @@ const collectSnapshot = async function() {
     audit: results[2],
     backup: results[3],
     metrics: metricsService.snapshot(),
+    databasePool: db.poolState(),
     scheduler: schedulerService.getSchedulerState(),
     backupSchedule: backupScheduleService.state(),
     outboxPump: notificationOutboxPumpService.state(),
+    version: versionService.snapshot(),
     process: { pid: process.pid, nodeVersion: process.version, environment: process.env.NODE_ENV || 'development' }
   };
   snapshot.alerts = evaluateAlerts(snapshot);
@@ -196,6 +218,9 @@ const prometheusGauges = function(snapshot) {
     { name: 'jingyi_backup_last_success_age_seconds', help: 'Age of the latest successful encrypted backup.', value: snapshot.backup.lastSuccessAgeSeconds || 0 },
     { name: 'jingyi_backup_failures_24h', help: 'Backup failures during the last 24 hours.', value: snapshot.backup.failures24Hours },
     { name: 'jingyi_backup_secondary_copy', help: 'Whether the latest successful backup has a secondary copy.', value: snapshot.backup.secondaryCopied ? 1 : 0 },
+    { name: 'jingyi_database_pool_connections', help: 'Current MySQL pool connections.', value: snapshot.databasePool.allConnections || 0 },
+    { name: 'jingyi_database_pool_free_connections', help: 'Free MySQL pool connections.', value: snapshot.databasePool.freeConnections || 0 },
+    { name: 'jingyi_database_pool_queued_requests', help: 'Requests queued for a MySQL connection.', value: snapshot.databasePool.queuedRequests || 0 },
     { name: 'jingyi_operational_active_alerts', help: 'Current operational alerts.', value: snapshot.alerts.length }
   ];
 };

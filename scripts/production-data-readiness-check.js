@@ -8,11 +8,13 @@ const redis = require('../server/src/config/redis')
 const dataReadinessService = require('../server/src/services/dataReadinessService')
 const auditSchemaService = require('../server/src/services/auditSchemaService')
 const backupSchemaService = require('../server/src/services/backupSchemaService')
+const performanceSchemaService = require('../server/src/services/performanceSchemaService')
 
 async function main() {
   const readiness = await dataReadinessService.checkDataReadiness()
   const auditSchema = await auditSchemaService.assertReady()
   const backupSchema = await backupSchemaService.assertReady()
+  const performanceSchema = await performanceSchemaService.assertReady()
 
   assert.strictEqual(readiness.database.mode, 'mysql', 'production readiness must use MySQL')
   assert.strictEqual(readiness.redis.mode, 'redis', 'production readiness must use Redis')
@@ -23,6 +25,8 @@ async function main() {
   assert.deepStrictEqual(auditSchema.invalid, [], 'observability audit schema must have no invalid objects')
   assert.strictEqual(backupSchema.ready, true, 'backup recovery schema must be complete')
   assert.deepStrictEqual(backupSchema.missing, [], 'backup recovery schema must have no missing objects')
+  assert.strictEqual(performanceSchema.ready, true, 'performance indexes must be complete')
+  assert.deepStrictEqual(performanceSchema.missing, [], 'performance indexes must have no missing objects')
   assert.strictEqual(db.isMock(), false, 'production database must never use mock mode')
   assert.strictEqual(redis.isMock(), false, 'production Redis must never use in-memory mock mode')
 

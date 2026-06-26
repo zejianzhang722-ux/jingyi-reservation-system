@@ -45,6 +45,7 @@ function main() {
   assert(/Database migrations were not reversed/.test(rollback), 'rollback must explicitly preserve additive migrations')
   assert(/run-backup\.js/.test(releaseGate) && /verify-backup\.js/.test(releaseGate), 'release gate must create and verify a pre-release backup')
   assert(/apply-backup-recovery-migration/.test(migration), 'release migration sequence must include backup schema')
+  assert(/apply-performance-indexes-migration/.test(migration), 'release migration sequence must include performance indexes')
   assert(/router\.get\('\/version'/.test(routes), 'public version endpoint must be available')
 
   console.log('release-preflight-check passed')

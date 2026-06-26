@@ -1,10 +1,13 @@
 const config = require('./index');
+const logger = require('./logger');
+const metricsService = require('../services/metricsService');
 
 let pool = null;
 let useMock = false;
 let initializationError = null;
 const isProduction = process.env.NODE_ENV === 'production';
 const allowMock = !isProduction && process.env.ALLOW_MOCK_DB !== 'false';
+const slowQueryMs = Math.max(10, Number(process.env.DB_SLOW_QUERY_MS || 250));
 
 const CONNECTION_ERROR_CODES = new Set([
   'ECONNREFUSED',
@@ -27,6 +30,38 @@ const isConnectionFailure = function(err) {
   const fatal = err.fatal === true;
   const syscall = String(err.syscall || '').toLowerCase();
   return fatal && ['connect', 'read', 'write'].includes(syscall);
+};
+
+const sqlOperation = function(sql) {
+  const match = String(sql || '').trim().match(/^([A-Za-z]+)/);
+  return match ? match[1].toUpperCase() : 'OTHER';
+};
+
+const sqlFingerprint = function(sql) {
+  return String(sql || '')
+    .replace(/'(?:''|[^'])*'/g, '?')
+    .replace(/"(?:""|[^"])*"/g, '?')
+    .replace(/\b\d+(?:\.\d+)?\b/g, '?')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+};
+
+const recordQuery = function(sql, started, err) {
+  const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
+  const slow = durationMs >= slowQueryMs;
+  metricsService.recordDatabaseQuery(sqlOperation(sql), durationMs, { error: !!err, slow });
+  if (slow) {
+    logger.warn('database_slow_query', {
+      operation: sqlOperation(sql),
+      fingerprint: sqlFingerprint(sql),
+      durationMs: Math.round(durationMs * 100) / 100,
+      thresholdMs: slowQueryMs,
+      failed: !!err,
+      errorCode: err && err.code
+    });
+  }
+  return durationMs;
 };
 
 const switchToMock = function(err, context) {
@@ -80,10 +115,13 @@ const query = async function(sql, params) {
     if (useMock) return require('./mock-db').query(sql, params);
   }
 
+  const started = process.hrtime.bigint();
   try {
-    return await pool.execute(sql, params);
+    const result = await pool.query(sql, params);
+    recordQuery(sql, started, null);
+    return result;
   } catch (err) {
-    // 约束、语法和业务 SQL 错误必须原样返回，不能静默切换到另一套数据源。
+    recordQuery(sql, started, err);
     if (!isConnectionFailure(err)) throw err;
     if (isProduction || !allowMock) {
       err.code = err.code || 'DATABASE_QUERY_FAILED';
@@ -118,6 +156,18 @@ const getConnection = async function() {
   }
 };
 
+const poolState = function() {
+  if (!pool || useMock || !pool.pool) return { mode: useMock ? 'mock' : 'unavailable' };
+  const raw = pool.pool;
+  return {
+    mode: 'mysql',
+    connectionLimit: Number(config.mysql.connectionLimit || 0),
+    allConnections: raw._allConnections ? raw._allConnections.length : null,
+    freeConnections: raw._freeConnections ? raw._freeConnections.length : null,
+    queuedRequests: raw._connectionQueue ? raw._connectionQueue.length : null
+  };
+};
+
 const assertTransactional = function(connection) {
   if (!connection || connection.isMock || typeof connection.beginTransaction !== 'function' || typeof connection.execute !== 'function') {
     const err = new Error('当前数据库模式不支持事务操作');
@@ -140,8 +190,13 @@ module.exports = {
   getConnection,
   ready,
   close,
+  poolState,
   assertTransactional,
   isConnectionFailure,
+  sqlOperation,
+  sqlFingerprint,
+  recordQuery,
+  slowQueryMs,
   isMock: function() { return useMock; },
   isProduction,
   allowMock

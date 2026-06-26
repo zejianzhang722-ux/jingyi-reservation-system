@@ -1,0 +1,157 @@
+name: Performance and capacity checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  performance-capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_performance_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Check performance JavaScript syntax
+        run: |
+          node --check server/src/config/database.js
+          node --check server/src/services/metricsService.js
+          node --check server/src/services/performanceSchemaService.js
+          node --check scripts/apply-performance-indexes-migration.js
+          node --check scripts/performance-observability-check.js
+          node --check scripts/mysql-performance-index-check.js
+          node --check scripts/http-performance-smoke.js
+      - name: Run isolated performance regression
+        run: npm run check:performance
+      - name: Initialize legacy MySQL schema
+        env:
+          INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_performance_ci
+        run: node scripts/initialize-ci-mysql.js
+      - name: Apply all production migrations
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_performance_ci
+        run: |
+          node scripts/apply-reservation-consistency-migration.js
+          node scripts/apply-notification-outbox-migration.js
+          node scripts/apply-observability-audit-migration.js
+          node scripts/apply-backup-recovery-migration.js
+          node scripts/apply-performance-indexes-migration.js
+          node scripts/apply-performance-indexes-migration.js
+      - name: Verify production readiness
+        env:
+          NODE_ENV: production
+          ALLOW_MOCK_DB: 'false'
+          ALLOW_MOCK_REDIS: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_performance_ci
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: node scripts/production-data-readiness-check.js
+      - name: Verify indexes, query plans and database latency
+        env:
+          NODE_ENV: test
+          ALLOW_MOCK_DB: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_performance_ci
+          PERF_DB_P95_LIMIT_MS: 500
+          PERF_DB_REPORT_FILE: performance-db-report.json
+        run: npm run check:performance:mysql
+      - name: Start API and run bounded HTTP performance smoke
+        env:
+          NODE_ENV: test
+          ALLOW_MOCK_DB: 'false'
+          ALLOW_MOCK_REDIS: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_performance_ci
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          JWT_SECRET: performance-ci-jwt-secret-with-more-than-32-characters
+          AUDIT_IP_HASH_SALT: performance-ci-audit-salt-with-more-than-32-characters
+          ENABLE_SCHEDULER: 'false'
+          PORT: 3000
+          PERF_BASE_URL: http://127.0.0.1:3000/api/v1
+          PERF_HTTP_P95_LIMIT_MS: 1500
+          PERF_HTTP_REPORT_FILE: performance-http-report.json
+        run: |
+          node server/src/app.js > performance-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:3000/api/v1/ops/ready >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 40 ]; then
+              cat performance-server.log
+              exit 1
+            fi
+            sleep 1
+          done
+          export PERF_STUDENT_TOKEN=$(node -e "const jwt=require('./server/node_modules/jsonwebtoken'); process.stdout.write(jwt.sign({id:1,role:'student',tokenType:'access'}, process.env.JWT_SECRET, {expiresIn:'15m'}))")
+          export PERF_ADMIN_TOKEN=$(node -e "const jwt=require('./server/node_modules/jsonwebtoken'); process.stdout.write(jwt.sign({id:2,role:'super_admin',tokenType:'access'}, process.env.JWT_SECRET, {expiresIn:'15m'}))")
+          npm run check:performance:http
+      - name: Upload performance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-capacity-evidence
+          path: |
+            performance-db-report.json
+            performance-http-report.json
+            performance-server.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Run server integration check
+        run: npm run test:integration
+        working-directory: server
