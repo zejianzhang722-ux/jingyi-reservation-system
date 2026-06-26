@@ -118,12 +118,30 @@ async function main() {
   const wechatRow = tables.notification_outbox.find(function(row) { return row.event_key === 'test:wechat:no-openid' })
   assert.strictEqual(wechatRow.status, 'sent', 'openid-missing row must be finalized')
 
+  repository.enqueueMock({
+    eventKey: 'test:wechat:missing-ack',
+    userId: 1,
+    channel: 'wechat',
+    eventName: 'template-2',
+    maxAttempts: 2,
+    payload: { userId: 1, templateId: 'template-2', templateData: {}, page: 'pages/index/index' }
+  })
+  const missingAck = await dispatcher.processBatch({
+    workerId: 'mock-wechat-missing-ack',
+    dbClient: { query: async function() { return [[{ openid: 'test-openid' }]] } },
+    wechatClient: { sendSubscribeMessage: async function() { return undefined } }
+  })
+  assert.strictEqual(missingAck.failed, 1, 'missing WeChat acknowledgement must remain retryable')
+  const missingAckRow = tables.notification_outbox.find(function(row) { return row.event_key === 'test:wechat:missing-ack' })
+  assert.strictEqual(missingAckRow.status, 'failed', 'missing acknowledgement must not be marked as sent')
+
   const firstStart = pump.start({ intervalMs: 600000, batchSize: 1, workerId: 'test-pump' })
   const reusedStart = pump.start({ intervalMs: 600000, batchSize: 1, workerId: 'another-worker' })
   assert.strictEqual(firstStart.reused, false, 'first outbox pump start must create a timer')
   assert.strictEqual(reusedStart.reused, true, 'second outbox pump start must reuse existing timer')
   assert.strictEqual(pump.state().started, true, 'outbox pump state must report started')
-  pump.stop()
+  const stopped = await pump.stop({ timeoutMs: 2000 })
+  assert.strictEqual(stopped.drained, true, 'outbox pump stop must drain an active tick')
   assert.strictEqual(pump.state().started, false, 'outbox pump stop must clear the timer')
 
   const root = path.join(__dirname, '..')
@@ -136,8 +154,9 @@ async function main() {
   const socketAuthSource = read('server/src/services/socketAuthService.js')
 
   assert(/notificationOutboxPumpService\.start\(\)/.test(workerSource), 'dedicated worker must start the outbox pump')
-  assert(/notificationOutboxPumpService\.stop\(\)/.test(workerSource), 'dedicated worker must stop the outbox pump')
+  assert(/await notificationOutboxPumpService\.stop/.test(workerSource), 'dedicated worker must drain the outbox pump')
   assert(/notificationOutboxPumpService\.start\(\)/.test(appSource), 'in-process scheduler mode must also start the outbox pump')
+  assert(/await notificationOutboxPumpService\.stop/.test(appSource), 'application shutdown must drain the outbox pump')
   assert(/notification_outbox/.test(readinessSource) && /uk_notification_user_dedupe/.test(readinessSource), 'production readiness must require outbox schema')
   assert(/GET_LOCK/.test(migrationSource) && /CREATE TABLE IF NOT EXISTS notification_outbox/.test(migrationSource), 'outbox migration must be locked and repeatable')
   assert(!/require\('\.\.\/app'\)/.test(notificationSource), 'notification service must not import the application entrypoint')
