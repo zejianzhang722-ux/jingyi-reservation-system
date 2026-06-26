@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const dataReadinessService = require('../services/dataReadinessService');
 const operationalHealthService = require('../services/operationalHealthService');
 const metricsService = require('../services/metricsService');
 const auditTrailService = require('../services/auditTrailService');
@@ -22,7 +21,7 @@ const ready = async function(req, res) {
   const timestamp = new Date().toISOString();
   const production = process.env.NODE_ENV === 'production';
   try {
-    const readiness = await dataReadinessService.checkDataReadiness();
+    const readiness = await operationalHealthService.readinessSummary();
     if (!readiness.ready) {
       return res.status(503).json({
         code: 503,
@@ -35,7 +34,7 @@ const ready = async function(req, res) {
       message: 'success',
       data: production
         ? { status: 'ready', timestamp }
-        : { status: 'ready', timestamp, details: readiness }
+        : { status: 'ready', timestamp, details: readiness.value }
     });
   } catch (err) {
     return res.status(503).json({
