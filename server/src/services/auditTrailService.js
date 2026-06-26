@@ -102,7 +102,7 @@ const normalizeEvent = function(event) {
   const createdAt = auditHash.normalizeCreatedAt(item.createdAt || dbTimestamp());
   return {
     operator_id: item.operatorId === undefined || item.operatorId === null ? null : Number(item.operatorId),
-    request_id: truncate(item.requestId || '', 64) || null,
+    request_id: truncate(item.requestId || crypto.randomUUID(), 64),
     actor_role: truncate(item.actorRole || 'system', 32),
     action: truncate(item.action || 'unknown', 100),
     target_table: truncate(item.targetTable || '', 50),
@@ -123,7 +123,8 @@ const appendMock = function(event) {
   const tables = require('../config/mock-db').__tables;
   if (!tables.operation_logs) tables.operation_logs = [];
   const normalized = normalizeEvent(event);
-  const previous = tables.operation_logs.length ? tables.operation_logs[tables.operation_logs.length - 1] : null;
+  const hashedRows = tables.operation_logs.filter(function(row) { return !!row.entry_hash; });
+  const previous = hashedRows.length ? hashedRows[hashedRows.length - 1] : null;
   normalized.id = tables.operation_logs.reduce(function(max, row) { return Math.max(max, Number(row.id || 0)); }, 0) + 1;
   normalized.prev_hash = previous ? previous.entry_hash : null;
   normalized.entry_hash = auditHash.computeEntryHash(normalized.prev_hash, normalized);
@@ -138,7 +139,7 @@ const appendMysql = async function(event) {
   try {
     await connection.beginTransaction();
     const [previousRows] = await connection.query(
-      'SELECT id, entry_hash FROM operation_logs ORDER BY id DESC LIMIT 1 FOR UPDATE'
+      'SELECT id, entry_hash FROM operation_logs WHERE entry_hash IS NOT NULL ORDER BY id DESC LIMIT 1 FOR UPDATE'
     );
     normalized.prev_hash = previousRows.length ? previousRows[0].entry_hash : null;
     normalized.entry_hash = auditHash.computeEntryHash(normalized.prev_hash, normalized);
@@ -220,7 +221,8 @@ const eventFromRequest = function(req, res) {
 };
 
 const verifyRows = function(rows) {
-  const ordered = (rows || []).slice().sort(function(a, b) { return Number(a.id) - Number(b.id); });
+  const allRows = (rows || []).slice().sort(function(a, b) { return Number(a.id) - Number(b.id); });
+  const ordered = allRows.filter(function(row) { return !!row.entry_hash; });
   const problems = [];
   let previous = null;
   ordered.forEach(function(row, index) {
@@ -234,6 +236,7 @@ const verifyRows = function(rows) {
   return {
     valid: problems.length === 0,
     checked: ordered.length,
+    unhashed: allRows.length - ordered.length,
     firstId: ordered.length ? ordered[0].id : null,
     lastId: ordered.length ? ordered[ordered.length - 1].id : null,
     problems
