@@ -72,6 +72,8 @@ jobs:
         run: node scripts/reservation-consistency-check.js
       - name: Run isolated observability audit regression
         run: npm run check:observability-audit
+      - name: Run isolated backup recovery regression
+        run: npm run check:backup-recovery
       - name: Initialize legacy MySQL reservation database
         env:
           INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
@@ -121,6 +123,14 @@ jobs:
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_reservation_ci
         run: node scripts/apply-observability-audit-migration.js
+      - name: Apply backup recovery migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/apply-backup-recovery-migration.js
       - name: Run strict migration postcheck
         env:
           REQUIRE_SLOT_CONSISTENCY: 'true'
