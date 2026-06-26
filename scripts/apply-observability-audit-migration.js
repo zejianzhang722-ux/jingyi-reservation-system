@@ -44,12 +44,17 @@ async function ensureColumn(connection, database, table, column, definition) {
 
 async function operatorForeignKeys(connection, database) {
   const [rows] = await connection.execute(
-    "SELECT k.constraint_name, r.delete_rule FROM information_schema.key_column_usage k " +
-    "JOIN information_schema.referential_constraints r ON r.constraint_schema=k.constraint_schema AND r.constraint_name=k.constraint_name " +
-    "WHERE k.table_schema=? AND k.table_name='operation_logs' AND k.column_name='operator_id' AND k.referenced_table_name='admins'",
+    "SELECT k.CONSTRAINT_NAME AS fk_name, r.DELETE_RULE AS delete_rule_value FROM information_schema.KEY_COLUMN_USAGE k " +
+    "JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME " +
+    "WHERE k.TABLE_SCHEMA=? AND k.TABLE_NAME='operation_logs' AND k.COLUMN_NAME='operator_id' AND k.REFERENCED_TABLE_NAME='admins'",
     [database]
   )
-  return rows
+  return rows.map(function(row) {
+    return {
+      name: row.fk_name === undefined ? row.FK_NAME : row.fk_name,
+      deleteRule: row.delete_rule_value === undefined ? row.DELETE_RULE_VALUE : row.delete_rule_value
+    }
+  })
 }
 
 async function createAuditTable(connection) {
@@ -87,9 +92,10 @@ async function migrateAuditTable(connection, database) {
   for (const item of columns) await ensureColumn(connection, database, 'operation_logs', item[0], item[1])
 
   const foreignKeys = await operatorForeignKeys(connection, database)
-  for (const row of foreignKeys) {
-    if (row.constraint_name !== 'fk_operation_logs_operator' || String(row.delete_rule).toUpperCase() !== 'SET NULL') {
-      await connection.query('ALTER TABLE operation_logs DROP FOREIGN KEY ' + safeName(row.constraint_name))
+  for (const foreignKey of foreignKeys) {
+    if (!foreignKey.name) throw new Error('Could not resolve operation_logs operator foreign key name')
+    if (foreignKey.name !== 'fk_operation_logs_operator' || String(foreignKey.deleteRule).toUpperCase() !== 'SET NULL') {
+      await connection.query('ALTER TABLE operation_logs DROP FOREIGN KEY ' + safeName(foreignKey.name))
     }
   }
 
