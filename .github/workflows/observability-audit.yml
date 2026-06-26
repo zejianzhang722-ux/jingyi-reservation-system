@@ -1,0 +1,142 @@
+name: Observability and audit checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observability-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Check observability JavaScript syntax
+        run: |
+          node --check server/src/utils/auditHash.js
+          node --check server/src/services/metricsService.js
+          node --check server/src/services/auditTrailService.js
+          node --check server/src/services/auditSchemaService.js
+          node --check server/src/services/operationalHealthService.js
+          node --check server/src/services/operationalMonitorService.js
+          node --check server/src/middleware/requestContext.js
+          node --check server/src/middleware/auditTrail.js
+          node --check server/src/middleware/opsAuth.js
+          node --check server/src/routes/ops.js
+          node --check scripts/apply-observability-audit-migration.js
+          node --check scripts/observability-audit-check.js
+          node --check scripts/mysql-observability-audit-check.js
+      - name: Run isolated observability audit regression
+        run: npm run check:observability-audit
+      - name: Initialize legacy MySQL schema
+        env:
+          INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+        run: node scripts/initialize-ci-mysql.js
+      - name: Apply reservation consistency migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+        run: node scripts/apply-reservation-consistency-migration.js
+      - name: Apply notification outbox migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+        run: node scripts/apply-notification-outbox-migration.js
+      - name: Apply observability audit migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+        run: node scripts/apply-observability-audit-migration.js
+      - name: Reapply observability migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+        run: node scripts/apply-observability-audit-migration.js
+      - name: Verify production data readiness
+        env:
+          NODE_ENV: production
+          ALLOW_MOCK_DB: 'false'
+          ALLOW_MOCK_REDIS: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: node scripts/production-data-readiness-check.js
+      - name: Run real MySQL observability audit regression
+        env:
+          NODE_ENV: test
+          ALLOW_MOCK_DB: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_observability_ci
+        run: |
+          set -o pipefail
+          node scripts/mysql-observability-audit-check.js 2>&1 | tee mysql-observability-audit.log
+      - name: Upload observability diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observability-audit-diagnostics
+          path: mysql-observability-audit.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Run server integration check
+        run: npm run test:integration
+        working-directory: server
