@@ -74,7 +74,7 @@ jobs:
           MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/initialize-ci-mysql.js
       - name: Apply reservation migration
-        env: &mysql-env
+        env:
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
@@ -82,16 +82,36 @@ jobs:
           MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-reservation-consistency-migration.js
       - name: Apply notification migration
-        env: *mysql-env
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-notification-outbox-migration.js
       - name: Apply observability migration
-        env: *mysql-env
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-observability-audit-migration.js
       - name: Apply backup recovery migration
-        env: *mysql-env
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-backup-recovery-migration.js
       - name: Reapply backup recovery migration
-        env: *mysql-env
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_backup_ci
         run: node scripts/apply-backup-recovery-migration.js
       - name: Verify production data readiness
         env:
