@@ -116,7 +116,17 @@ jobs:
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_notification_ci
-        run: node scripts/mysql-notification-outbox-check.js
+        run: |
+          set -o pipefail
+          node scripts/mysql-notification-outbox-check.js 2>&1 | tee mysql-notification-outbox.log
+      - name: Upload notification outbox diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notification-outbox-diagnostics
+          path: mysql-notification-outbox.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Run server integration check
         run: npm run test:integration
         working-directory: server
