@@ -3,7 +3,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
 const config = require('./config');
 const logger = require('./config/logger');
 const db = require('./config/database');
@@ -12,13 +11,17 @@ const routes = require('./routes');
 const mediaRouter = require('./routes/media');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
+const requestContext = require('./middleware/requestContext');
+const auditTrail = require('./middleware/auditTrail');
 const schedulerService = require('./services/schedulerService');
 const notificationOutboxPumpService = require('./services/notificationOutboxPumpService');
+const operationalMonitorService = require('./services/operationalMonitorService');
 const socketConnectionRateLimitService = require('./services/socketConnectionRateLimitService');
 const socketAuthService = require('./services/socketAuthService');
 const socketRedisAdapterService = require('./services/socketRedisAdapterService');
 const realtimeEventService = require('./services/realtimeEventService');
 const dataReadinessService = require('./services/dataReadinessService');
+const auditSchemaService = require('./services/auditSchemaService');
 const productionConfigGuard = require('./services/productionConfigGuard');
 
 const app = express();
@@ -33,6 +36,8 @@ const io = new Server(server, {
 });
 let shuttingDown = false;
 
+app.use(requestContext.middleware);
+
 const corsOptions = {
   origin: function(origin, callback) {
     if (!origin || config.corsOrigins.indexOf(origin) !== -1) callback(null, true);
@@ -40,7 +45,11 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Idempotency-Key']
+  allowedHeaders: [
+    'Content-Type', 'Authorization', 'Idempotency-Key', 'X-Idempotency-Key',
+    'X-Request-Id', 'X-Ops-Token'
+  ],
+  exposedHeaders: ['X-Request-Id']
 };
 app.use(cors(corsOptions));
 app.use(helmet({
@@ -49,7 +58,7 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(morgan('combined', { stream: { write: function(msg) { logger.info(msg.trim()); } } }));
+app.use(auditTrail.middleware);
 app.use(checkTokenBlacklist);
 app.use(apiLimiter);
 
@@ -61,14 +70,20 @@ app.use('/api', function(req, res) {
 });
 
 app.use(function(err, req, res, next) {
-  logger.error('未捕获异常:', err);
+  const requestLogger = req && req.log ? req.log : logger;
+  requestLogger.error('unhandled_request_error', {
+    error: err && err.message,
+    code: err && err.code,
+    stack: err && err.stack
+  });
   if (res.headersSent) return next(err);
   const status = Number(err.httpStatus) >= 400 && Number(err.httpStatus) <= 599 ? Number(err.httpStatus) : 500;
   const isProduction = process.env.NODE_ENV === 'production';
   res.status(status).json({
     code: status,
     message: isProduction && status === 500 ? '服务器内部错误' : (err.message || '服务器内部错误'),
-    data: null
+    data: null,
+    requestId: req && req.requestId ? req.requestId : undefined
   });
 });
 
@@ -81,6 +96,7 @@ const startServer = async function() {
   try {
     productionConfigGuard.validate();
     const readiness = await dataReadinessService.checkDataReadiness();
+    const auditSchema = await auditSchemaService.assertReady();
     const socketAdapterState = await socketRedisAdapterService.initSocketAdapter(io);
     logger.info('实时广播适配器已就绪，模式: ' + socketAdapterState.mode);
 
@@ -96,14 +112,17 @@ const startServer = async function() {
       logger.info('定时任务默认未启动；通知Outbox应由独立Scheduler Worker处理');
     }
 
+    const monitorState = operationalMonitorService.start();
+    logger.info('运行监控已启动，间隔毫秒: ' + monitorState.intervalMs);
+
     server.listen(config.port, function() {
       const dbMode = db.isMock() ? '模拟数据' : '生产环境(MySQL)';
       const redisMode = redis.isMock() ? '模拟数据' : '生产环境(Redis)';
-      const schemaMode = readiness.schema.ready ? '已就绪' : '未完成迁移';
+      const schemaMode = readiness.schema.ready && auditSchema.ready ? '已就绪' : '未完成迁移';
       logger.info(
         '敬一书院预约管理系统服务已启动，端口: ' + config.port +
         '，数据库: ' + dbMode + '，Redis: ' + redisMode +
-        '，预约结构: ' + schemaMode + '，实时广播: ' + socketAdapterState.mode
+        '，数据结构: ' + schemaMode + '，实时广播: ' + socketAdapterState.mode
       );
     });
   } catch (err) {
@@ -138,6 +157,12 @@ const shutdown = async function(signal) {
   if (shuttingDown) return { stopped: true, reused: true };
   shuttingDown = true;
   logger.info('收到' + signal + '，开始关闭服务');
+  try {
+    const monitorStop = await operationalMonitorService.stop({ timeoutMs: 10000 });
+    if (!monitorStop.drained) logger.warn('运行监控仍有任务未在关闭窗口内完成');
+  } catch (err) {
+    logger.error('停止运行监控失败:', err);
+  }
   try {
     const outboxStop = await notificationOutboxPumpService.stop({ timeoutMs: 10000 });
     if (!outboxStop.drained) logger.warn('通知Outbox仍有任务未在关闭窗口内完成');

@@ -17,6 +17,12 @@ const validate = function() {
   if (!process.env.REDIS_PASSWORD || process.env.REDIS_PASSWORD.length < 8) {
     fail('生产环境必须配置Redis密码', 'REDIS_PASSWORD_REQUIRED');
   }
+  if (!process.env.OPS_MONITOR_TOKEN || process.env.OPS_MONITOR_TOKEN.length < 32) {
+    fail('生产环境必须配置至少32字符的OPS_MONITOR_TOKEN', 'OPS_MONITOR_TOKEN_REQUIRED');
+  }
+  if (!process.env.AUDIT_IP_HASH_SALT || process.env.AUDIT_IP_HASH_SALT.length < 32) {
+    fail('生产环境必须配置至少32字符的AUDIT_IP_HASH_SALT', 'AUDIT_IP_HASH_SALT_REQUIRED');
+  }
   if (process.env.ALLOW_WECHAT_DISABLED !== 'true' && (!process.env.WECHAT_APPID || !process.env.WECHAT_APPSECRET)) {
     fail('生产环境必须配置微信应用凭据', 'WECHAT_SECRET_REQUIRED');
   }
