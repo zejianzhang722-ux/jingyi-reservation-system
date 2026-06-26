@@ -24,7 +24,12 @@ const shutdownWorker = async function(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info('定时任务Worker收到' + signal + '，开始停止');
-  notificationOutboxPumpService.stop();
+  try {
+    const outboxStop = await notificationOutboxPumpService.stop({ timeoutMs: 10000 });
+    if (!outboxStop.drained) logger.warn('通知Outbox仍有任务未在关闭窗口内完成');
+  } catch (err) {
+    logger.error('停止通知Outbox失败:', err);
+  }
   try {
     await schedulerService.stopScheduler();
   } catch (err) {
