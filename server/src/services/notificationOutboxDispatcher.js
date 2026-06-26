@@ -23,6 +23,12 @@ const websocket = async function(row, payload, dependencies) {
   return { mode: 'redis' };
 };
 
+const isWechatAccepted = function(result) {
+  if (result === true) return true;
+  if (!result || typeof result !== 'object') return false;
+  return Number(result.errcode) === 0;
+};
+
 const wechat = async function(row, payload, dependencies) {
   const userId = Number(row.user_id || payload.userId);
   if (!userId) throw new Error('微信通知缺少用户编号');
@@ -35,9 +41,12 @@ const wechat = async function(row, payload, dependencies) {
     payload.templateData || {},
     payload.page || ''
   );
-  if (accepted === false || (accepted && accepted.errcode && Number(accepted.errcode) !== 0)) {
-    const err = new Error('微信订阅消息被平台拒绝');
+  if (!isWechatAccepted(accepted)) {
+    const err = new Error('微信订阅消息未得到成功确认');
     err.code = 'WECHAT_DELIVERY_REJECTED';
+    if (accepted && typeof accepted === 'object' && accepted.errcode !== undefined) {
+      err.platformCode = Number(accepted.errcode);
+    }
     throw err;
   }
   return { sent: true };
@@ -81,4 +90,4 @@ const processBatch = async function(options) {
   return result;
 };
 
-module.exports = { parsePayload, websocket, wechat, dispatch, processBatch };
+module.exports = { parsePayload, isWechatAccepted, websocket, wechat, dispatch, processBatch };
