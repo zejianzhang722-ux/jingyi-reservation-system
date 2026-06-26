@@ -55,8 +55,10 @@ jobs:
           node --check server/src/services/socketAuthService.js
           node --check server/src/services/socketRedisAdapterService.js
           node --check server/src/services/dataReadinessService.js
+          node --check server/src/services/auditSchemaService.js
           node --check server/src/scheduler-worker.js
           node --check scripts/apply-notification-outbox-migration.js
+          node --check scripts/apply-observability-audit-migration.js
           node --check scripts/notification-outbox-check.js
           node --check scripts/mysql-notification-outbox-check.js
       - name: Run isolated notification outbox regression
@@ -94,6 +96,14 @@ jobs:
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_notification_ci
         run: node scripts/apply-notification-outbox-migration.js
+      - name: Apply observability audit migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: node scripts/apply-observability-audit-migration.js
       - name: Verify production data readiness
         env:
           NODE_ENV: production
