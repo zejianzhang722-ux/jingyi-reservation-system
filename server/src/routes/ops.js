@@ -3,6 +3,7 @@ const router = express.Router();
 const operationalHealthService = require('../services/operationalHealthService');
 const metricsService = require('../services/metricsService');
 const auditTrailService = require('../services/auditTrailService');
+const versionService = require('../services/versionService');
 const opsAuth = require('../middleware/opsAuth');
 
 const live = function(req, res) {
@@ -47,6 +48,10 @@ const ready = async function(req, res) {
 
 router.get('/live', live);
 router.get('/ready', ready);
+router.get('/version', function(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ code: 200, message: 'success', data: versionService.snapshot() });
+});
 
 router.use(opsAuth.middleware);
 
