@@ -1,5 +1,22 @@
 name: jingyi-reservation
 
+x-api-environment: &api-environment
+  NODE_ENV: production
+  PORT: 3000
+  MYSQL_HOST: mysql
+  MYSQL_PORT: 3306
+  MYSQL_DATABASE: jingyi_reservation
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  UPLOAD_DIR: /app/server/uploads
+  UPLOADS_DIR: /app/server/uploads
+  BACKUP_DIR: /var/lib/jingyi/backups
+  BACKUP_SECONDARY_DIR: /var/lib/jingyi/backup-secondary
+  APP_VERSION: ${APP_VERSION:-development}
+  GIT_SHA: ${GIT_SHA:-development}
+  BUILD_TIME: ${BUILD_TIME:-development}
+  RELEASE_ID: ${RELEASE_ID:-development}
+
 x-api-base: &api-base
   image: ${API_IMAGE}:${RELEASE_TAG}
   restart: unless-stopped
@@ -9,22 +26,7 @@ x-api-base: &api-base
     - /app/server/logs:size=64m,mode=0700,uid=10001,gid=10001
   env_file:
     - ${PRODUCTION_ENV_FILE:-.env.production}
-  environment:
-    NODE_ENV: production
-    PORT: 3000
-    MYSQL_HOST: mysql
-    MYSQL_PORT: 3306
-    MYSQL_DATABASE: jingyi_reservation
-    REDIS_HOST: redis
-    REDIS_PORT: 6379
-    UPLOAD_DIR: /app/server/uploads
-    UPLOADS_DIR: /app/server/uploads
-    BACKUP_DIR: /var/lib/jingyi/backups
-    BACKUP_SECONDARY_DIR: /var/lib/jingyi/backup-secondary
-    APP_VERSION: ${APP_VERSION:-development}
-    GIT_SHA: ${GIT_SHA:-development}
-    BUILD_TIME: ${BUILD_TIME:-development}
-    RELEASE_ID: ${RELEASE_ID:-development}
+  environment: *api-environment
   volumes:
     - uploads:/app/server/uploads
     - backups:/var/lib/jingyi/backups
@@ -94,30 +96,20 @@ services:
   api-blue:
     <<: *api-base
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      MYSQL_HOST: mysql
-      REDIS_HOST: redis
+      <<: *api-environment
       DEPLOYMENT_SLOT: blue
-      RELEASE_ID: ${RELEASE_ID:-development}
 
   api-green:
     <<: *api-base
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      MYSQL_HOST: mysql
-      REDIS_HOST: redis
+      <<: *api-environment
       DEPLOYMENT_SLOT: green
-      RELEASE_ID: ${RELEASE_ID:-development}
 
   scheduler:
     <<: *api-base
     command: ["node", "server/src/scheduler-worker.js"]
     environment:
-      NODE_ENV: production
-      MYSQL_HOST: mysql
-      REDIS_HOST: redis
+      <<: *api-environment
       DEPLOYMENT_SLOT: scheduler
       ENABLE_AUTOMATED_BACKUPS: ${ENABLE_AUTOMATED_BACKUPS:-true}
     healthcheck:
@@ -129,9 +121,7 @@ services:
     restart: "no"
     command: ["sh", "deploy/scripts/migrate.sh"]
     environment:
-      NODE_ENV: production
-      MYSQL_HOST: mysql
-      REDIS_HOST: redis
+      <<: *api-environment
       DEPLOYMENT_SLOT: migration
     healthcheck:
       disable: true
