@@ -2,7 +2,6 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
-const wechatService = require('../services/wechatService');
 const lifecycleService = require('../services/reservationLifecycleService');
 const realtimeEventService = require('../services/realtimeEventService');
 
@@ -39,22 +38,31 @@ const createNotificationSafely = async function(userId, type, title, content, da
   }
 };
 
+const enqueueWechatSafely = async function(userId, templateId, templateData, dedupeKey) {
+  if (!templateId) return;
+  try {
+    await notificationService.sendWechatNotification(
+      userId,
+      templateId,
+      templateData,
+      'pages/my-reservations/my-reservations',
+      { dedupeKey }
+    );
+  } catch (err) {
+    logger.error('写入审批微信通知Outbox失败:', err);
+  }
+};
+
 const pending = async function(req, res) {
   try {
     const allowedStatuses = allowedStatusesForRole(req.user.role);
-    if (allowedStatuses.length === 0) {
-      return response.error(res, '权限不足', 403);
-    }
-
+    if (allowedStatuses.length === 0) return response.error(res, '权限不足', 403);
     const placeholders = allowedStatuses.map(function() { return '?'; }).join(',');
     const [reservations] = await db.query(
       'SELECT r.*, rm.name AS roomName, rm.name AS room_name, ' +
       'u.real_name AS userName, u.real_name AS user_name, u.student_id, u.student_no ' +
-      'FROM reservations r ' +
-      'JOIN rooms rm ON r.room_id = rm.id ' +
-      'JOIN users u ON r.user_id = u.id ' +
-      'WHERE r.status IN (' + placeholders + ') ' +
-      'ORDER BY r.created_at DESC LIMIT 50',
+      'FROM reservations r JOIN rooms rm ON r.room_id = rm.id JOIN users u ON r.user_id = u.id ' +
+      'WHERE r.status IN (' + placeholders + ') ORDER BY r.created_at DESC LIMIT 50',
       allowedStatuses
     );
     return response.success(res, reservations);
@@ -67,10 +75,7 @@ const pending = async function(req, res) {
 const pendingCount = async function(req, res) {
   try {
     const allowedStatuses = allowedStatusesForRole(req.user.role);
-    if (allowedStatuses.length === 0) {
-      return response.error(res, '权限不足', 403);
-    }
-
+    if (allowedStatuses.length === 0) return response.error(res, '权限不足', 403);
     const placeholders = allowedStatuses.map(function() { return '?'; }).join(',');
     const [result] = await db.query(
       'SELECT COUNT(*) AS count FROM reservations WHERE status IN (' + placeholders + ')',
@@ -87,21 +92,15 @@ const approve = async function(req, res) {
   try {
     const id = Number(req.params.id);
     const [reservations] = await db.query(
-      'SELECT r.*, rm.name AS room_name, u.openid FROM reservations r ' +
-      'JOIN rooms rm ON r.room_id = rm.id ' +
-      'JOIN users u ON r.user_id = u.id WHERE r.id = ?',
+      'SELECT r.*, rm.name AS room_name FROM reservations r JOIN rooms rm ON r.room_id = rm.id WHERE r.id = ?',
       [id]
     );
-    if (reservations.length === 0) {
-      return response.error(res, '预约不存在', 404);
-    }
+    if (reservations.length === 0) return response.error(res, '预约不存在', 404);
 
     const reservation = reservations[0];
     if (!ensureApprovalScope(req, res, reservation)) return;
-
     const [updateResult] = await db.query(
-      "UPDATE reservations SET status = 'approved', audited_by = ?, audited_at = NOW() " +
-      'WHERE id = ? AND status = ?',
+      "UPDATE reservations SET status = 'approved', audited_by = ?, audited_at = NOW() WHERE id = ? AND status = ?",
       [req.user.id, id, reservation.status]
     );
     if (!updateResult || updateResult.affectedRows === 0) {
@@ -115,18 +114,16 @@ const approve = async function(req, res) {
       '您在' + reservation.room_name + '的预约已通过审批',
       { reservationId: id }
     );
-
-    if (reservation.openid) {
-      wechatService.sendReservationApproved(
-        reservation.openid,
-        reservation.room_name || '',
-        reservation.date || '',
-        reservation.start_time || '',
-        reservation.end_time || ''
-      ).catch(function(err) {
-        logger.warn('发送审批通过订阅消息失败: ' + err.message);
-      });
-    }
+    await enqueueWechatSafely(
+      reservation.user_id,
+      process.env.WX_TEMPLATE_APPROVED || '',
+      {
+        thing1: { value: reservation.room_name || '' },
+        date2: { value: (reservation.date || '') + ' ' + (reservation.start_time || '') + '-' + (reservation.end_time || '') },
+        thing3: { value: '您的预约已通过审批' }
+      },
+      'reservation-approved:' + id
+    );
 
     await realtimeEventService.publishRoomStatusSafely(reservation.room_id, 'reservation-approved');
     return response.success(res, null, '审批通过');
@@ -140,23 +137,16 @@ const reject = async function(req, res) {
   try {
     const id = Number(req.params.id);
     const reason = String((req.body && req.body.reason) || '').trim();
-    if (!reason) {
-      return response.error(res, '请填写拒绝原因', 400);
-    }
+    if (!reason) return response.error(res, '请填写拒绝原因', 400);
 
     const [reservations] = await db.query(
-      'SELECT r.*, rm.name AS room_name, u.openid FROM reservations r ' +
-      'JOIN rooms rm ON r.room_id = rm.id ' +
-      'JOIN users u ON r.user_id = u.id WHERE r.id = ?',
+      'SELECT r.*, rm.name AS room_name FROM reservations r JOIN rooms rm ON r.room_id = rm.id WHERE r.id = ?',
       [id]
     );
-    if (reservations.length === 0) {
-      return response.error(res, '预约不存在', 404);
-    }
+    if (reservations.length === 0) return response.error(res, '预约不存在', 404);
 
     const reservation = reservations[0];
     if (!ensureApprovalScope(req, res, reservation)) return;
-
     await lifecycleService.releaseAndPromote({
       reservationId: id,
       nextStatus: 'rejected',
@@ -172,17 +162,16 @@ const reject = async function(req, res) {
       '您在' + reservation.room_name + '的预约未通过，原因：' + reason,
       { reservationId: id }
     );
-
-    if (reservation.openid) {
-      wechatService.sendReservationRejected(
-        reservation.openid,
-        reservation.room_name || '',
-        reservation.date || '',
-        reason
-      ).catch(function(err) {
-        logger.warn('发送审批拒绝订阅消息失败: ' + err.message);
-      });
-    }
+    await enqueueWechatSafely(
+      reservation.user_id,
+      process.env.WX_TEMPLATE_REJECTED || '',
+      {
+        thing1: { value: reservation.room_name || '' },
+        date2: { value: reservation.date || '' },
+        thing3: { value: reason || '预约未通过审批' }
+      },
+      'reservation-rejected:' + id
+    );
 
     return response.success(res, null, '已拒绝');
   } catch (err) {
