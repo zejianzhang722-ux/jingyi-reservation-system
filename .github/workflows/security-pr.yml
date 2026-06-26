@@ -70,6 +70,8 @@ jobs:
         run: npm run check:admin-miniapp
       - name: Run mock reservation consistency regression
         run: node scripts/reservation-consistency-check.js
+      - name: Run isolated observability audit regression
+        run: npm run check:observability-audit
       - name: Initialize legacy MySQL reservation database
         env:
           INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
@@ -111,6 +113,14 @@ jobs:
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_reservation_ci
         run: node scripts/apply-notification-outbox-migration.js
+      - name: Apply observability audit migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/apply-observability-audit-migration.js
       - name: Run strict migration postcheck
         env:
           REQUIRE_SLOT_CONSISTENCY: 'true'
@@ -143,6 +153,16 @@ jobs:
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_reservation_ci
         run: node scripts/mysql-reservation-concurrency-check.js > mysql-concurrency.log 2>&1
+      - name: Run MySQL observability audit regression
+        env:
+          NODE_ENV: test
+          ALLOW_MOCK_DB: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_reservation_ci
+        run: node scripts/mysql-observability-audit-check.js
       - name: Upload MySQL regression log
         if: always()
         uses: actions/upload-artifact@v4
