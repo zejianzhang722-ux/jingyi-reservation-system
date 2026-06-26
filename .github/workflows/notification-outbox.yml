@@ -1,0 +1,122 @@
+name: Notification outbox checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notification-outbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Check notification JavaScript syntax
+        run: |
+          node --check server/src/services/notificationService.js
+          node --check server/src/services/notificationOutboxRepository.js
+          node --check server/src/services/notificationOutboxDispatcher.js
+          node --check server/src/services/notificationOutboxPumpService.js
+          node --check server/src/services/socketAuthService.js
+          node --check server/src/services/socketRedisAdapterService.js
+          node --check server/src/services/dataReadinessService.js
+          node --check server/src/scheduler-worker.js
+          node --check scripts/apply-notification-outbox-migration.js
+          node --check scripts/notification-outbox-check.js
+          node --check scripts/mysql-notification-outbox-check.js
+      - name: Run isolated notification outbox regression
+        run: npm run check:notification-outbox
+      - name: Initialize pre-consistency MySQL schema
+        env:
+          INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: node scripts/initialize-ci-mysql.js
+      - name: Apply reservation consistency migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: node scripts/apply-reservation-consistency-migration.js
+      - name: Apply notification outbox migration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: node scripts/apply-notification-outbox-migration.js
+      - name: Reapply notification migration to verify resumability
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: node scripts/apply-notification-outbox-migration.js
+      - name: Verify production data readiness
+        env:
+          NODE_ENV: production
+          ALLOW_MOCK_DB: 'false'
+          ALLOW_MOCK_REDIS: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: node scripts/production-data-readiness-check.js
+      - name: Run real MySQL notification outbox regression
+        env:
+          NODE_ENV: test
+          ALLOW_MOCK_DB: 'false'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: node scripts/mysql-notification-outbox-check.js
+      - name: Run server integration check
+        run: npm run test:integration
+        working-directory: server
