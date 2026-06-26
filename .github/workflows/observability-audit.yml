@@ -95,7 +95,9 @@ jobs:
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_observability_ci
-        run: node scripts/apply-observability-audit-migration.js
+        run: |
+          set -o pipefail
+          node scripts/apply-observability-audit-migration.js 2>&1 | tee observability-migration.log
       - name: Reapply observability migration
         env:
           MYSQL_HOST: 127.0.0.1
@@ -103,7 +105,9 @@ jobs:
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: jingyi_observability_ci
-        run: node scripts/apply-observability-audit-migration.js
+        run: |
+          set -o pipefail
+          node scripts/apply-observability-audit-migration.js 2>&1 | tee -a observability-migration.log
       - name: Verify production data readiness
         env:
           NODE_ENV: production
@@ -134,7 +138,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: observability-audit-diagnostics
-          path: mysql-observability-audit.log
+          path: |
+            observability-migration.log
+            mysql-observability-audit.log
           if-no-files-found: ignore
           retention-days: 7
       - name: Run server integration check
