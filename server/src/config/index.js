@@ -1,5 +1,11 @@
 const crypto = require('crypto');
 
+const boundedInteger = function(value, fallback, minimum, maximum) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.floor(parsed)));
+};
+
 const config = {
   port: process.env.PORT || 3000,
   jwt: {
@@ -14,8 +20,11 @@ const config = {
     password: process.env.MYSQL_PASSWORD || '',
     database: process.env.MYSQL_DATABASE || 'jingyi_reservation',
     waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
+    connectionLimit: boundedInteger(process.env.MYSQL_CONNECTION_LIMIT, 10, 2, 100),
+    maxIdle: boundedInteger(process.env.MYSQL_MAX_IDLE, 10, 1, 100),
+    idleTimeout: boundedInteger(process.env.MYSQL_IDLE_TIMEOUT_MS, 60000, 1000, 600000),
+    queueLimit: boundedInteger(process.env.MYSQL_QUEUE_LIMIT, 1000, 0, 100000),
+    connectTimeout: boundedInteger(process.env.MYSQL_CONNECT_TIMEOUT_MS, 10000, 1000, 60000),
     dateStrings: true
   },
   redis: {
@@ -68,3 +77,4 @@ const config = {
 };
 
 module.exports = config;
+module.exports.boundedInteger = boundedInteger;
