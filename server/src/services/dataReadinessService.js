@@ -4,7 +4,16 @@ const redis = require('../config/redis');
 const requiredReservationColumns = ['idempotency_key', 'request_hash'];
 const requiredWaitlistColumns = ['waiting_seat_scope'];
 const requiredNotificationColumns = ['dedupe_key'];
+const requiredOutboxColumns = [
+  'id', 'event_key', 'notification_id', 'user_id', 'channel', 'event_name', 'payload',
+  'status', 'attempts', 'max_attempts', 'available_at', 'locked_at', 'locked_by',
+  'last_error', 'sent_at', 'created_at', 'updated_at'
+];
 const requiredTables = ['reservation_slots', 'reservation_waitlist', 'notification_outbox'];
+const requiredForeignKeys = [
+  'fk_notification_outbox_notification',
+  'fk_notification_outbox_user'
+];
 const requiredIndexDefinitions = {
   uk_reservation_user_idempotency: {
     table: 'reservations',
@@ -34,6 +43,11 @@ const requiredIndexDefinitions = {
   idx_notification_outbox_claim: {
     table: 'notification_outbox',
     columns: 'status,available_at,id',
+    unique: false
+  },
+  idx_notification_outbox_notification: {
+    table: 'notification_outbox',
+    columns: 'notification_id',
     unique: false
   }
 };
@@ -78,6 +92,11 @@ const checkReservationSchema = async function() {
     'generation_expression AS generated_expression'
   ]);
   const notificationColumnRows = await readColumns(databaseName, 'notifications', requiredNotificationColumns);
+  const outboxColumnRows = await readColumns(databaseName, 'notification_outbox', requiredOutboxColumns, [
+    'is_nullable AS column_nullable',
+    'data_type AS column_data_type',
+    'column_type AS full_column_type'
+  ]);
 
   const presentReservationColumns = reservationColumnRows.map(function(row) {
     return valueOf(row, 'schema_column', 'SCHEMA_COLUMN');
@@ -86,6 +105,9 @@ const checkReservationSchema = async function() {
     return valueOf(row, 'schema_column', 'SCHEMA_COLUMN');
   });
   const presentNotificationColumns = notificationColumnRows.map(function(row) {
+    return valueOf(row, 'schema_column', 'SCHEMA_COLUMN');
+  });
+  const presentOutboxColumns = outboxColumnRows.map(function(row) {
     return valueOf(row, 'schema_column', 'SCHEMA_COLUMN');
   });
 
@@ -115,6 +137,15 @@ const checkReservationSchema = async function() {
     };
   });
 
+  const [foreignKeyRows] = await db.query(
+    "SELECT constraint_name AS foreign_key_name FROM information_schema.table_constraints " +
+    "WHERE constraint_schema = ? AND table_name = 'notification_outbox' AND constraint_type = 'FOREIGN KEY'",
+    [databaseName]
+  );
+  const presentForeignKeys = foreignKeyRows.map(function(row) {
+    return valueOf(row, 'foreign_key_name', 'FOREIGN_KEY_NAME');
+  });
+
   const missing = [];
   const invalid = [];
   requiredReservationColumns.forEach(function(column) {
@@ -126,8 +157,14 @@ const checkReservationSchema = async function() {
   requiredNotificationColumns.forEach(function(column) {
     if (!presentNotificationColumns.includes(column)) missing.push('notifications.' + column);
   });
+  requiredOutboxColumns.forEach(function(column) {
+    if (!presentOutboxColumns.includes(column)) missing.push('notification_outbox.' + column);
+  });
   requiredTables.forEach(function(table) {
     if (!presentTables.includes(table)) missing.push('table:' + table);
+  });
+  requiredForeignKeys.forEach(function(constraint) {
+    if (!presentForeignKeys.includes(constraint)) missing.push('foreign-key:' + constraint);
   });
 
   const waitlistGeneratedColumn = waitlistColumnRows.find(function(row) {
@@ -140,6 +177,30 @@ const checkReservationSchema = async function() {
     if (!expression.includes('status') || !expression.includes('waiting') || !expression.includes('seat_id')) {
       invalid.push('reservation_waitlist.waiting_seat_scope:unexpected_expression');
     }
+  }
+
+  const outboxMap = {};
+  outboxColumnRows.forEach(function(row) {
+    outboxMap[valueOf(row, 'schema_column', 'SCHEMA_COLUMN')] = row;
+  });
+  ['event_key', 'channel', 'payload', 'status', 'attempts', 'max_attempts', 'available_at'].forEach(function(column) {
+    const row = outboxMap[column];
+    if (row && String(valueOf(row, 'column_nullable', 'COLUMN_NULLABLE')).toUpperCase() !== 'NO') {
+      invalid.push('notification_outbox.' + column + ':nullable');
+    }
+  });
+  if (outboxMap.payload && String(valueOf(outboxMap.payload, 'column_data_type', 'COLUMN_DATA_TYPE')).toLowerCase() !== 'json') {
+    invalid.push('notification_outbox.payload:not_json');
+  }
+  if (outboxMap.channel) {
+    const type = String(valueOf(outboxMap.channel, 'full_column_type', 'FULL_COLUMN_TYPE') || '').toLowerCase();
+    if (!type.includes('websocket') || !type.includes('wechat')) invalid.push('notification_outbox.channel:unexpected_enum');
+  }
+  if (outboxMap.status) {
+    const type = String(valueOf(outboxMap.status, 'full_column_type', 'FULL_COLUMN_TYPE') || '').toLowerCase();
+    ['pending', 'processing', 'sent', 'failed', 'dead'].forEach(function(status) {
+      if (!type.includes(status)) invalid.push('notification_outbox.status:missing_' + status);
+    });
   }
 
   indexNames.forEach(function(indexName) {
@@ -182,7 +243,9 @@ module.exports = {
   requiredReservationColumns,
   requiredWaitlistColumns,
   requiredNotificationColumns,
+  requiredOutboxColumns,
   requiredTables,
+  requiredForeignKeys,
   requiredIndexDefinitions,
   checkReservationSchema,
   checkDataReadiness,
