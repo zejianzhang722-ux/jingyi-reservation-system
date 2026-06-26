@@ -3,6 +3,7 @@ const db = require('./config/database');
 const redis = require('./config/redis');
 const dataReadinessService = require('./services/dataReadinessService');
 const backupSchemaService = require('./services/backupSchemaService');
+const performanceSchemaService = require('./services/performanceSchemaService');
 const schedulerService = require('./services/schedulerService');
 const notificationOutboxPumpService = require('./services/notificationOutboxPumpService');
 const backupScheduleService = require('./services/backupScheduleService');
@@ -12,6 +13,7 @@ let shuttingDown = false;
 const startWorker = async function() {
   const readiness = await dataReadinessService.checkDataReadiness();
   const backupSchema = await backupSchemaService.assertReady();
+  const performanceSchema = await performanceSchemaService.assertReady();
   const schedulerState = await schedulerService.initScheduler();
   const outboxState = notificationOutboxPumpService.start();
   const backupState = backupScheduleService.start();
@@ -20,10 +22,11 @@ const startWorker = async function() {
     '，Redis模式: ' + schedulerState.redisMode +
     '，数据库模式: ' + readiness.database.mode +
     '，备份结构: ' + (backupSchema.ready ? '已就绪' : '未就绪') +
+    '，性能索引: ' + (performanceSchema.ready ? '已就绪' : '未就绪') +
     '，通知Outbox: ' + (outboxState.started ? '已启动' : '未启动') +
     '，自动备份: ' + (backupState.started ? '已启动' : '未启动')
   );
-  return { readiness, backupSchema, schedulerState, outboxState, backupState };
+  return { readiness, backupSchema, performanceSchema, schedulerState, outboxState, backupState };
 };
 
 const shutdownWorker = async function(signal) {
