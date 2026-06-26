@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
 const roleAuth = require('../middleware/roleAuth');
-const dataReadinessService = require('../services/dataReadinessService');
+const opsRoutes = require('./ops');
 
 router.use('/auth', require('./auth'));
 router.use('/user', require('./user'));
@@ -18,34 +18,10 @@ router.use('/notification', require('./notification'));
 router.use('/admin', auth, roleAuth.requireRole('admin', 'super_admin'), require('./admin'));
 router.use('/rules', require('./rules'));
 router.use('/feedback', require('./feedback'));
+router.use('/ops', opsRoutes);
 
-router.get('/health', function(req, res) {
-  res.json({ code: 200, message: 'success', data: { status: 'ok', timestamp: new Date().toISOString() } });
-});
-
-router.get('/ready', async function(req, res) {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const timestamp = new Date().toISOString();
-  try {
-    const readiness = await dataReadinessService.checkDataReadiness();
-    if (!readiness.ready) {
-      return res.status(503).json({
-        code: 503,
-        message: '服务依赖或数据库结构尚未就绪',
-        data: isProduction ? { status: 'not_ready', timestamp } : readiness
-      });
-    }
-
-    const publicData = { status: 'ready', timestamp };
-    if (!isProduction) publicData.details = readiness;
-    return res.json({ code: 200, message: 'success', data: publicData });
-  } catch (err) {
-    return res.status(503).json({
-      code: 503,
-      message: isProduction ? '服务依赖尚未就绪' : (err.message || '服务依赖尚未就绪'),
-      data: isProduction ? { status: 'not_ready', timestamp } : (err.details || null)
-    });
-  }
-});
+// 兼容现有部署探针；详细状态和指标统一放在 /ops 下。
+router.get('/health', opsRoutes.live);
+router.get('/ready', opsRoutes.ready);
 
 module.exports = router;
