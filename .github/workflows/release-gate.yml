@@ -1,0 +1,70 @@
+name: Container release gate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            admin/package-lock.json
+      - name: Install dependencies
+        run: |
+          npm ci --prefix server
+          npm ci --prefix admin
+      - name: Run release preflight
+        run: |
+          node --check server/src/services/versionService.js
+          node --check scripts/release-preflight-check.js
+          sh -n deploy/docker-entrypoint.sh
+          sh -n deploy/scripts/migrate.sh
+          sh -n deploy/scripts/wait-ready.sh
+          sh -n deploy/scripts/release-gate.sh
+          sh -n deploy/scripts/deploy-blue-green.sh
+          sh -n deploy/scripts/rollback-blue-green.sh
+          npm run check:release
+      - name: Validate compose topology
+        env:
+          API_IMAGE: local/jingyi-api
+          ADMIN_IMAGE: local/jingyi-admin
+          RELEASE_TAG: ci
+          RELEASE_ID: ci-release
+          GIT_SHA: ci-sha
+          APP_VERSION: ci
+          BUILD_TIME: 2026-01-01T00:00:00Z
+          PRODUCTION_ENV_FILE: production.env.example
+        run: docker compose -f deploy/docker-compose.production.yml config > compose-rendered.yml
+      - name: Build API image
+        run: docker build --build-arg APP_VERSION=ci --build-arg GIT_SHA=ci-sha --build-arg BUILD_TIME=2026-01-01T00:00:00Z -t local/jingyi-api:ci .
+      - name: Validate API image
+        run: |
+          test "$(docker image inspect local/jingyi-api:ci --format '{{.Config.User}}')" = "10001:10001"
+          test "$(docker image inspect local/jingyi-api:ci --format '{{json .Config.Healthcheck.Test}}')" != "null"
+          docker run --rm --entrypoint node local/jingyi-api:ci --version
+      - name: Build admin image
+        run: docker build -t local/jingyi-admin:ci admin
+      - name: Validate admin image
+        run: |
+          test -n "$(docker image inspect local/jingyi-admin:ci --format '{{.Config.User}}')"
+          test "$(docker image inspect local/jingyi-admin:ci --format '{{json .Config.Healthcheck.Test}}')" != "null"
+      - name: Upload rendered topology
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-compose-rendered
+          path: compose-rendered.yml
+          retention-days: 7
