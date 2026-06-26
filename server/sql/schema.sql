@@ -200,10 +200,37 @@ CREATE TABLE notifications (
   title VARCHAR(100) NOT NULL,
   content TEXT,
   data JSON DEFAULT NULL,
+  dedupe_key VARCHAR(191) DEFAULT NULL,
   is_read TINYINT(1) DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX idx_user_read (user_id, is_read)
+  INDEX idx_user_read (user_id, is_read),
+  UNIQUE KEY uk_notification_user_dedupe (user_id, dedupe_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE notification_outbox (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  event_key VARCHAR(191) NOT NULL,
+  notification_id INT DEFAULT NULL,
+  user_id INT DEFAULT NULL,
+  channel ENUM('websocket', 'wechat') NOT NULL,
+  event_name VARCHAR(100) DEFAULT NULL,
+  payload JSON NOT NULL,
+  status ENUM('pending', 'processing', 'sent', 'failed', 'dead') NOT NULL DEFAULT 'pending',
+  attempts INT NOT NULL DEFAULT 0,
+  max_attempts INT NOT NULL DEFAULT 8,
+  available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  locked_at DATETIME DEFAULT NULL,
+  locked_by VARCHAR(100) DEFAULT NULL,
+  last_error VARCHAR(1000) DEFAULT NULL,
+  sent_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_notification_outbox_event (event_key),
+  INDEX idx_notification_outbox_claim (status, available_at, id),
+  INDEX idx_notification_outbox_notification (notification_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE feedbacks (

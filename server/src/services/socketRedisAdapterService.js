@@ -165,6 +165,26 @@ const initSocketAdapter = async function(io, options) {
   }
 };
 
+const publishExternalBroadcast = async function(rooms, eventName, data, options) {
+  const settings = options || {};
+  const redisClient = settings.redisClient || redis;
+  const state = await redisClient.ready();
+  if (state.mode !== 'redis' || (typeof redisClient.isMock === 'function' && redisClient.isMock())) {
+    const err = new Error('跨实例通知广播需要真实Redis');
+    err.code = 'SOCKET_EXTERNAL_REDIS_REQUIRED';
+    throw err;
+  }
+  const namespace = settings.namespace || '/';
+  const packet = { type: 2, nsp: namespace, data: [eventName, data] };
+  const payload = encodeBroadcast(
+    settings.uid || ('external-' + crypto.randomUUID()),
+    packet,
+    { rooms: new Set(rooms || []), except: new Set(), flags: {} }
+  );
+  await redisClient.publish((settings.prefix || DEFAULT_PREFIX) + namespace, payload);
+  return { published: true, rooms: Array.from(rooms || []), eventName };
+};
+
 const closeSocketAdapter = async function() {
   const clients = [pubClient, subClient].filter(Boolean);
   pubClient = null;
@@ -188,6 +208,7 @@ module.exports = {
   RedisBroadcastAdapter,
   createAdapterFactory,
   initSocketAdapter,
+  publishExternalBroadcast,
   closeSocketAdapter,
   getSocketAdapterState
 };

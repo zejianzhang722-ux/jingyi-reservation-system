@@ -13,6 +13,7 @@ const mediaRouter = require('./routes/media');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { checkTokenBlacklist } = require('./middleware/auth');
 const schedulerService = require('./services/schedulerService');
+const notificationOutboxPumpService = require('./services/notificationOutboxPumpService');
 const socketConnectionRateLimitService = require('./services/socketConnectionRateLimitService');
 const socketAuthService = require('./services/socketAuthService');
 const socketRedisAdapterService = require('./services/socketRedisAdapterService');
@@ -85,9 +86,14 @@ const startServer = async function() {
 
     if (process.env.ENABLE_SCHEDULER === 'true') {
       const schedulerState = await schedulerService.initScheduler();
-      logger.info('定时任务协调已就绪，任务数: ' + schedulerState.jobs + '，Redis模式: ' + schedulerState.redisMode);
+      const outboxState = notificationOutboxPumpService.start();
+      logger.info(
+        '定时任务协调已就绪，任务数: ' + schedulerState.jobs +
+        '，Redis模式: ' + schedulerState.redisMode +
+        '，通知Outbox: ' + (outboxState.started ? '已启动' : '未启动')
+      );
     } else {
-      logger.info('定时任务默认未启动；如需启用请设置 ENABLE_SCHEDULER=true');
+      logger.info('定时任务默认未启动；通知Outbox应由独立Scheduler Worker处理');
     }
 
     server.listen(config.port, function() {
@@ -132,6 +138,12 @@ const shutdown = async function(signal) {
   if (shuttingDown) return { stopped: true, reused: true };
   shuttingDown = true;
   logger.info('收到' + signal + '，开始关闭服务');
+  try {
+    const outboxStop = await notificationOutboxPumpService.stop({ timeoutMs: 10000 });
+    if (!outboxStop.drained) logger.warn('通知Outbox仍有任务未在关闭窗口内完成');
+  } catch (err) {
+    logger.error('停止通知Outbox失败:', err);
+  }
   try { await schedulerService.stopScheduler(); } catch (err) { logger.error('停止定时任务失败:', err); }
   try { await closeSocketServer(); } catch (err) { logger.error('关闭HTTP与WebSocket服务失败:', err); }
   try { await socketRedisAdapterService.closeSocketAdapter(); } catch (err) { logger.error('关闭实时广播适配器失败:', err); }

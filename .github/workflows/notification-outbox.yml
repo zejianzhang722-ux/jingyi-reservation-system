@@ -1,4 +1,4 @@
-name: Security PR checks
+name: Notification outbox checks
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  notification-outbox:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -17,7 +17,7 @@ jobs:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
+          MYSQL_DATABASE: jingyi_notification_ci
         ports:
           - 3306:3306
         options: >-
@@ -42,66 +42,41 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            server/package-lock.json
-            admin/package-lock.json
+          cache-dependency-path: server/package-lock.json
       - name: Install server dependencies
         run: npm ci
         working-directory: server
-      - name: Install admin dependencies
-        run: npm ci
-        working-directory: admin
-      - name: Check JavaScript syntax
-        shell: bash
+      - name: Check notification JavaScript syntax
         run: |
-          find server/src scripts miniapp -type f -name '*.js' -print0 |
-          while IFS= read -r -d '' file; do
-            node --check "$file"
-          done
-      - name: Run security regression checks
-        run: npm run check:security
-      - name: Run dynamic credential unit regression
-        run: node scripts/checkin-credential-ready-check.js
-      - name: Run dynamic QR endpoint regression
-        run: node scripts/checkin-credential-runtime-check.js
-      - name: Run request refresh regression
-        run: npm run check:request-refresh
-      - name: Run administrator miniapp regression
-        run: npm run check:admin-miniapp
-      - name: Run mock reservation consistency regression
-        run: node scripts/reservation-consistency-check.js
-      - name: Initialize legacy MySQL reservation database
+          node --check server/src/services/notificationService.js
+          node --check server/src/services/notificationOutboxRepository.js
+          node --check server/src/services/notificationOutboxDispatcher.js
+          node --check server/src/services/notificationOutboxPumpService.js
+          node --check server/src/services/socketAuthService.js
+          node --check server/src/services/socketRedisAdapterService.js
+          node --check server/src/services/dataReadinessService.js
+          node --check server/src/scheduler-worker.js
+          node --check scripts/apply-notification-outbox-migration.js
+          node --check scripts/notification-outbox-check.js
+          node --check scripts/mysql-notification-outbox-check.js
+      - name: Run isolated notification outbox regression
+        run: npm run check:notification-outbox
+      - name: Initialize pre-consistency MySQL schema
         env:
           INITIALIZE_LEGACY_RESERVATION_SCHEMA: 'true'
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
+          MYSQL_DATABASE: jingyi_notification_ci
         run: node scripts/initialize-ci-mysql.js
-      - name: Seed partial slot migration state
+      - name: Apply reservation consistency migration
         env:
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
-        run: node scripts/seed-partial-reservation-slots.js
-      - name: Run migration precheck
-        env:
-          MYSQL_HOST: 127.0.0.1
-          MYSQL_PORT: 3306
-          MYSQL_USER: root
-          MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
-        run: node scripts/reservation-migration-precheck.js
-      - name: Apply resumable reservation migration
-        env:
-          MYSQL_HOST: 127.0.0.1
-          MYSQL_PORT: 3306
-          MYSQL_USER: root
-          MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
+          MYSQL_DATABASE: jingyi_notification_ci
         run: node scripts/apply-reservation-consistency-migration.js
       - name: Apply notification outbox migration
         env:
@@ -109,17 +84,16 @@ jobs:
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
+          MYSQL_DATABASE: jingyi_notification_ci
         run: node scripts/apply-notification-outbox-migration.js
-      - name: Run strict migration postcheck
+      - name: Reapply notification migration to verify resumability
         env:
-          REQUIRE_SLOT_CONSISTENCY: 'true'
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
-        run: node scripts/reservation-migration-precheck.js
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: node scripts/apply-notification-outbox-migration.js
       - name: Verify production data readiness
         env:
           NODE_ENV: production
@@ -129,11 +103,11 @@ jobs:
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
+          MYSQL_DATABASE: jingyi_notification_ci
           REDIS_HOST: 127.0.0.1
           REDIS_PORT: 6379
         run: node scripts/production-data-readiness-check.js
-      - name: Run MySQL reservation concurrency regression
+      - name: Run real MySQL notification outbox regression
         env:
           NODE_ENV: test
           ALLOW_MOCK_DB: 'false'
@@ -141,18 +115,18 @@ jobs:
           MYSQL_PORT: 3306
           MYSQL_USER: root
           MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: jingyi_reservation_ci
-        run: node scripts/mysql-reservation-concurrency-check.js > mysql-concurrency.log 2>&1
-      - name: Upload MySQL regression log
+          MYSQL_DATABASE: jingyi_notification_ci
+        run: |
+          set -o pipefail
+          node scripts/mysql-notification-outbox-check.js 2>&1 | tee mysql-notification-outbox.log
+      - name: Upload notification outbox diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mysql-concurrency-log
-          path: mysql-concurrency.log
+          name: notification-outbox-diagnostics
+          path: mysql-notification-outbox.log
           if-no-files-found: ignore
+          retention-days: 7
       - name: Run server integration check
         run: npm run test:integration
         working-directory: server
-      - name: Build admin web app
-        run: npm run build
-        working-directory: admin
