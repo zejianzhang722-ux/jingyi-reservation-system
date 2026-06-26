@@ -156,18 +156,19 @@ const failed = async function(row, err) {
   const terminal = attempts >= Number(row.max_attempts || MAX_ATTEMPTS);
   const message = String((err && err.message) || err || 'unknown').slice(0, 1000);
   const delay = retrySeconds(attempts);
+  const availableAt = new Date(Date.now() + delay * 1000);
   if (db.isMock()) {
     return markMock(row, {
       status: terminal ? 'dead' : 'failed',
-      available_at: new Date(Date.now() + delay * 1000).toISOString(),
+      available_at: availableAt.toISOString(),
       locked_at: null,
       locked_by: null,
       last_error: message
     });
   }
   const [result] = await db.query(
-    "UPDATE notification_outbox SET status=?,available_at=DATE_ADD(NOW(),INTERVAL ? SECOND),locked_at=NULL,locked_by=NULL,last_error=?,updated_at=NOW() WHERE id=? AND status='processing' AND locked_by=?",
-    [terminal ? 'dead' : 'failed', delay, message, row.id, row.locked_by]
+    "UPDATE notification_outbox SET status=?,available_at=?,locked_at=NULL,locked_by=NULL,last_error=?,updated_at=NOW() WHERE id=? AND status='processing' AND locked_by=?",
+    [terminal ? 'dead' : 'failed', availableAt, message, row.id, row.locked_by]
   );
   return Number(result.affectedRows || 0) === 1;
 };
