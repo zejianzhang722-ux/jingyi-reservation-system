@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database');
 
 const MAX_ATTEMPTS = 8;
+const STALE_SECONDS = 300;
 
 const eventKey = function(value) {
   const raw = String(value || '').trim();
@@ -22,11 +23,18 @@ const tables = function() {
 
 const enqueueTx = async function(connection, item) {
   const key = eventKey(item.eventKey);
-  const [result] = await connection.execute(
-    "INSERT IGNORE INTO notification_outbox (event_key,notification_id,user_id,channel,event_name,payload,status,attempts,max_attempts,available_at,created_at,updated_at) VALUES (?,?,?,?,?,?,'pending',0,?,NOW(),NOW(),NOW())",
-    [key, item.notificationId || null, item.userId || null, item.channel, item.eventName || null, JSON.stringify(item.payload || {}), Number(item.maxAttempts || MAX_ATTEMPTS)]
-  );
-  return { inserted: Number(result.affectedRows || 0) === 1, eventKey: key };
+  try {
+    const [result] = await connection.execute(
+      "INSERT INTO notification_outbox (event_key,notification_id,user_id,channel,event_name,payload,status,attempts,max_attempts,available_at,created_at,updated_at) VALUES (?,?,?,?,?,?,'pending',0,?,NOW(),NOW(),NOW())",
+      [key, item.notificationId || null, item.userId || null, item.channel, item.eventName || null, JSON.stringify(item.payload || {}), Number(item.maxAttempts || MAX_ATTEMPTS)]
+    );
+    return { inserted: Number(result.affectedRows || 0) === 1, eventKey: key };
+  } catch (err) {
+    if (err && (err.code === 'ER_DUP_ENTRY' || Number(err.errno) === 1062)) {
+      return { inserted: false, eventKey: key };
+    }
+    throw err;
+  }
 };
 
 const enqueueMock = function(item) {
@@ -78,7 +86,7 @@ const claimMock = function(limit, workerId) {
   const now = Date.now();
   const rows = tables().notification_outbox.filter(function(row) {
     const available = !row.available_at || new Date(row.available_at).getTime() <= now;
-    const stale = row.status === 'processing' && row.locked_at && now - new Date(row.locked_at).getTime() > 300000;
+    const stale = row.status === 'processing' && row.locked_at && now - new Date(row.locked_at).getTime() > STALE_SECONDS * 1000;
     return available && Number(row.attempts) < Number(row.max_attempts) && (row.status === 'pending' || row.status === 'failed' || stale);
   }).sort(function(a, b) { return Number(a.id) - Number(b.id); }).slice(0, limit);
   rows.forEach(function(row) {
@@ -86,6 +94,7 @@ const claimMock = function(limit, workerId) {
     row.attempts = Number(row.attempts || 0) + 1;
     row.locked_at = new Date().toISOString();
     row.locked_by = workerId;
+    row.updated_at = new Date().toISOString();
   });
   return rows.map(function(row) { return Object.assign({}, row); });
 };
@@ -99,7 +108,7 @@ const claim = async function(options) {
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      "SELECT * FROM notification_outbox WHERE available_at<=NOW() AND attempts<max_attempts AND (status IN ('pending','failed') OR (status='processing' AND locked_at<DATE_SUB(NOW(),INTERVAL 5 MINUTE))) ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
+      "SELECT * FROM notification_outbox WHERE available_at<=NOW() AND attempts<max_attempts AND (status IN ('pending','failed') OR (status='processing' AND locked_at<DATE_SUB(NOW(),INTERVAL " + STALE_SECONDS + " SECOND))) ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
       [limit]
     );
     if (rows.length) {
@@ -108,7 +117,11 @@ const claim = async function(options) {
         "UPDATE notification_outbox SET status='processing',attempts=attempts+1,locked_at=NOW(),locked_by=?,updated_at=NOW() WHERE id IN (" + ids.map(function() { return '?'; }).join(',') + ')',
         [workerId].concat(ids)
       );
-      rows.forEach(function(row) { row.attempts = Number(row.attempts || 0) + 1; });
+      rows.forEach(function(row) {
+        row.status = 'processing';
+        row.attempts = Number(row.attempts || 0) + 1;
+        row.locked_by = workerId;
+      });
     }
     await connection.commit();
     return rows;
@@ -120,14 +133,22 @@ const claim = async function(options) {
   }
 };
 
-const markMock = function(id, changes) {
-  const row = tables().notification_outbox.find(function(entry) { return Number(entry.id) === Number(id); });
-  if (row) Object.assign(row, changes, { updated_at: new Date().toISOString() });
+const markMock = function(row, changes) {
+  const stored = tables().notification_outbox.find(function(entry) { return Number(entry.id) === Number(row.id); });
+  if (!stored || stored.status !== 'processing' || stored.locked_by !== row.locked_by) return false;
+  Object.assign(stored, changes, { updated_at: new Date().toISOString() });
+  return true;
 };
 
 const sent = async function(row) {
-  if (db.isMock()) return markMock(row.id, { status: 'sent', sent_at: new Date().toISOString(), locked_at: null, locked_by: null, last_error: null });
-  await db.query("UPDATE notification_outbox SET status='sent',sent_at=NOW(),locked_at=NULL,locked_by=NULL,last_error=NULL,updated_at=NOW() WHERE id=? AND status='processing'", [row.id]);
+  if (db.isMock()) {
+    return markMock(row, { status: 'sent', sent_at: new Date().toISOString(), locked_at: null, locked_by: null, last_error: null });
+  }
+  const [result] = await db.query(
+    "UPDATE notification_outbox SET status='sent',sent_at=NOW(),locked_at=NULL,locked_by=NULL,last_error=NULL,updated_at=NOW() WHERE id=? AND status='processing' AND locked_by=?",
+    [row.id, row.locked_by]
+  );
+  return Number(result.affectedRows || 0) === 1;
 };
 
 const failed = async function(row, err) {
@@ -135,8 +156,20 @@ const failed = async function(row, err) {
   const terminal = attempts >= Number(row.max_attempts || MAX_ATTEMPTS);
   const message = String((err && err.message) || err || 'unknown').slice(0, 1000);
   const delay = retrySeconds(attempts);
-  if (db.isMock()) return markMock(row.id, { status: terminal ? 'dead' : 'failed', available_at: new Date(Date.now() + delay * 1000).toISOString(), locked_at: null, locked_by: null, last_error: message });
-  await db.query("UPDATE notification_outbox SET status=?,available_at=DATE_ADD(NOW(),INTERVAL ? SECOND),locked_at=NULL,locked_by=NULL,last_error=?,updated_at=NOW() WHERE id=?", [terminal ? 'dead' : 'failed', delay, message, row.id]);
+  if (db.isMock()) {
+    return markMock(row, {
+      status: terminal ? 'dead' : 'failed',
+      available_at: new Date(Date.now() + delay * 1000).toISOString(),
+      locked_at: null,
+      locked_by: null,
+      last_error: message
+    });
+  }
+  const [result] = await db.query(
+    "UPDATE notification_outbox SET status=?,available_at=DATE_ADD(NOW(),INTERVAL ? SECOND),locked_at=NULL,locked_by=NULL,last_error=?,updated_at=NOW() WHERE id=? AND status='processing' AND locked_by=?",
+    [terminal ? 'dead' : 'failed', delay, message, row.id, row.locked_by]
+  );
+  return Number(result.affectedRows || 0) === 1;
 };
 
-module.exports = { MAX_ATTEMPTS, eventKey, retrySeconds, enqueueTx, enqueueMock, enqueue, claimMock, claim, sent, failed };
+module.exports = { MAX_ATTEMPTS, STALE_SECONDS, eventKey, retrySeconds, enqueueTx, enqueueMock, enqueue, claimMock, claim, sent, failed };
