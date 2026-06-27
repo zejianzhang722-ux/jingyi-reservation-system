@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
+const devAvatarStore = require('../services/devAvatarStore');
 
 const uploadAvatar = async function(req, res) {
   try {
@@ -15,10 +16,15 @@ const uploadAvatar = async function(req, res) {
       return response.error(res, '用户不存在或头像未更新', 404);
     }
 
+    const [users] = await db.query('SELECT id, openid, student_id, student_no, avatar FROM users WHERE id = ?', [req.user.id]);
+    const user = users && users[0] ? users[0] : req.user;
+    devAvatarStore.saveAvatar(Object.assign({}, req.user, user), avatarUrl);
+    const savedAvatar = devAvatarStore.getAvatar(user) || (user && user.avatar) || avatarUrl;
+
     return response.success(res, {
-      avatar: avatarUrl,
-      avatarUrl: avatarUrl,
-      url: avatarUrl,
+      avatar: savedAvatar,
+      avatarUrl: savedAvatar,
+      url: savedAvatar,
       filename: secureFile.filename || '',
       mime: secureFile.mimetype || '',
       width: secureFile.width || 0,
