@@ -187,15 +187,27 @@ const bindStudent = async function(req, res) {
 
 const uploadAvatar = async function(req, res) {
   try {
-    if (!req.file) {
+    const secureFile = req.secureFile || req.file;
+    if (!secureFile || !secureFile.url) {
       return response.error(res, '请上传头像图片', 400);
     }
-    if (!/^image\//.test(req.file.mimetype || '')) {
-      return response.error(res, '头像必须是图片文件', 400);
+    const avatarUrl = secureFile.url;
+    const [result] = await db.query('UPDATE users SET avatar = ? WHERE id = ?', [avatarUrl, req.user.id]);
+    if (result && result.affectedRows === 0) {
+      return response.error(res, '用户不存在，头像未保存', 404);
     }
-    const avatarUrl = '/uploads/' + req.file.filename;
-    await db.query('UPDATE users SET avatar = ? WHERE id = ?', [avatarUrl, req.user.id]);
-    return response.success(res, { avatar: avatarUrl, url: avatarUrl }, '头像更新成功');
+    const [users] = await db.query('SELECT avatar FROM users WHERE id = ?', [req.user.id]);
+    const savedAvatar = users && users[0] && users[0].avatar ? users[0].avatar : avatarUrl;
+    return response.success(res, {
+      avatar: savedAvatar,
+      avatarUrl: savedAvatar,
+      url: savedAvatar,
+      filename: secureFile.filename,
+      mime: secureFile.mimetype,
+      width: secureFile.width,
+      height: secureFile.height,
+      size: secureFile.size
+    }, '头像更新成功');
   } catch (err) {
     logger.error('上传头像异常:', err);
     return response.error(res, err.message);
