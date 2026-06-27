@@ -42,4 +42,28 @@
       <view class="menu-arrow"></view>
     </view>
   </view>
+
+  <view class="avatar-source-panel" wx:if="{{showAvatarSourcePanel}}">
+    <view class="avatar-source-mask" bindtap="closeAvatarSourcePanel"></view>
+    <view class="avatar-source-sheet">
+      <view class="avatar-source-handle"></view>
+      <text class="avatar-source-title">更换头像</text>
+      <text class="avatar-source-desc">可以使用微信头像，也可以上传本地图片作为头像。</text>
+      <button class="avatar-source-item avatar-source-wechat" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+        <view class="avatar-source-icon avatar-source-icon-wechat"></view>
+        <view class="avatar-source-copy">
+          <text class="avatar-source-name">使用微信头像</text>
+          <text class="avatar-source-hint">选择当前微信账号头像并保存</text>
+        </view>
+      </button>
+      <view class="avatar-source-item" bindtap="onAvatarSourceLocalTap">
+        <view class="avatar-source-icon avatar-source-icon-local"></view>
+        <view class="avatar-source-copy">
+          <text class="avatar-source-name">上传本地图片</text>
+          <text class="avatar-source-hint">从相册选择或拍照，可裁切后上传</text>
+        </view>
+      </view>
+      <view class="avatar-source-cancel" bindtap="closeAvatarSourcePanel">取消</view>
+    </view>
+  </view>
 </view>
