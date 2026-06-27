@@ -1,7 +1,8 @@
 <view class="container page-fade-in">
   <view class="profile-header">
     <view class="profile-avatar-wrap avatar-choose-button" bindtap="onAvatarTap">
-      <image class="profile-avatar-img" src="{{avatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" wx:if="{{!avatarLoadError}}" />
+      <image class="profile-avatar-img" src="{{avatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" wx:if="{{!avatarLoadError && avatarUrl}}" />
+      <open-data class="profile-avatar-img" type="userAvatarUrl" wx:elif="{{useWechatAvatarFallback}}"></open-data>
       <view class="profile-avatar-fallback" wx:else>{{avatarFallbackText}}</view>
       <view class="profile-avatar-edit"></view>
     </view>
