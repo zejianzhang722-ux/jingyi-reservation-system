@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
+const avatarController = require('../controllers/avatarController');
 const scopedQueryController = require('../controllers/scopedQueryController');
 const secureUploadService = require('../services/secureUploadService');
 const { auth, requireAdmin } = require('../middleware/auth');
@@ -23,7 +24,7 @@ router.post(
   auth,
   studentOnly,
   secureUploadService.imageUpload('avatar', 'avatar'),
-  userController.uploadAvatar
+  avatarController.uploadAvatar
 );
 router.get('/credit', auth, studentOnly, userController.getCredit);
 router.get('/stats', auth, studentOnly, userController.getStats);
