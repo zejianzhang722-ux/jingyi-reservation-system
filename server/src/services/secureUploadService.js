@@ -7,8 +7,8 @@ const response = require('../utils/response');
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const ALLOWED_TYPES = {
-  png: { mime: 'image/png', extensions: ['.png'] },
-  jpeg: { mime: 'image/jpeg', extensions: ['.jpg', '.jpeg'] }
+  png: { mime: 'image/png', aliases: ['image/png', 'application/octet-stream'], extensions: ['.png'] },
+  jpeg: { mime: 'image/jpeg', aliases: ['image/jpeg', 'image/jpg', 'image/pjpeg', 'application/octet-stream'], extensions: ['.jpg', '.jpeg'] }
 };
 const DANGEROUS_EXTENSIONS = new Set([
   '.html', '.htm', '.svg', '.xml', '.js', '.mjs', '.cjs', '.php', '.jsp', '.asp', '.aspx',
@@ -31,23 +31,39 @@ const detectType = function(buffer) {
   return null;
 };
 
+const isGenericMultipartMime = function(mime) {
+  const value = String(mime || '').toLowerCase().trim();
+  return value === '' || value === 'application/octet-stream' || value === 'binary/octet-stream';
+};
+
 const validateOriginalName = function(originalName, detectedType, declaredMime) {
-  const safeBase = path.basename(String(originalName || '')).toLowerCase();
-  if (!safeBase || safeBase !== String(originalName || '').replace(/\\/g, '/').split('/').pop().toLowerCase()) {
+  const original = String(originalName || '').trim();
+  const normalized = original.replace(/\\/g, '/');
+  const basename = path.basename(normalized).toLowerCase();
+  if (original && basename !== normalized.split('/').pop().toLowerCase()) {
     throw uploadError('文件名包含非法路径', 400, 'UPLOAD_PATH_INVALID');
   }
-  const parts = safeBase.split('.');
-  const finalExtension = path.extname(safeBase);
+
   const expected = ALLOWED_TYPES[detectedType];
-  if (!expected || !expected.extensions.includes(finalExtension)) {
-    throw uploadError('文件扩展名与图片内容不一致', 400, 'UPLOAD_EXTENSION_MISMATCH');
-  }
+  if (!expected) throw uploadError('仅支持真实的PNG或JPEG图片', 400, 'UPLOAD_TYPE_UNSUPPORTED');
+
+  const finalExtension = path.extname(basename);
+  const parts = basename.split('.');
   for (let index = 1; index < parts.length - 1; index += 1) {
     if (DANGEROUS_EXTENSIONS.has('.' + parts[index])) {
       throw uploadError('不允许使用危险的双扩展名', 400, 'UPLOAD_DOUBLE_EXTENSION');
     }
   }
-  if (String(declaredMime || '').toLowerCase() !== expected.mime) {
+
+  if (finalExtension && !expected.extensions.includes(finalExtension)) {
+    throw uploadError('文件扩展名与图片内容不一致', 400, 'UPLOAD_EXTENSION_MISMATCH');
+  }
+  if (!finalExtension && parts.some(function(part) { return DANGEROUS_EXTENSIONS.has('.' + part); })) {
+    throw uploadError('不允许使用危险的文件名', 400, 'UPLOAD_DOUBLE_EXTENSION');
+  }
+
+  const mime = String(declaredMime || '').toLowerCase().trim();
+  if (!isGenericMultipartMime(mime) && !expected.aliases.includes(mime)) {
     throw uploadError('文件MIME类型与图片内容不一致', 400, 'UPLOAD_MIME_MISMATCH');
   }
 };
