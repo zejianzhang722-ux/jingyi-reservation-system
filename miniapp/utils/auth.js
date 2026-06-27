@@ -1,14 +1,33 @@
 var request = require('./request')
 
+function getAssetBaseUrl() {
+  var baseUrl = request.getBaseUrl() || ''
+  return String(baseUrl).replace(/\/+$/, '').replace(/\/api\/v\d+$/i, '')
+}
+
+function isRemoteUrl(url) {
+  return /^https?:\/\//i.test(String(url || ''))
+}
+
+function normalizeAssetUrl(url) {
+  var value = String(url || '').trim()
+  if (!value) return ''
+  if (isRemoteUrl(value)) return value
+  var assetBaseUrl = getAssetBaseUrl()
+  if (!assetBaseUrl) return value
+  if (value.indexOf('/uploads/') === 0) return assetBaseUrl + value
+  if (value.indexOf('uploads/') === 0) return assetBaseUrl + '/' + value
+  return value
+}
+
 function normalizeUserInfo(userInfo) {
   var data = Object.assign({}, userInfo || {})
   if (!data.name && data.real_name) data.name = data.real_name
   if (!data.name && data.realName) data.name = data.realName
   if (!data.student_no && data.student_id) data.student_no = data.student_id
   if (!data.student_no && data.studentNo) data.student_no = data.studentNo
-  if (data.avatar && data.avatar.indexOf('/') === 0) {
-    data.avatar = request.getBaseUrl().replace(/\/api\/v\d+$/, '') + data.avatar
-  }
+  if (data.avatar) data.avatar = normalizeAssetUrl(data.avatar)
+  if (data.avatarUrl) data.avatarUrl = normalizeAssetUrl(data.avatarUrl)
   return data
 }
 
@@ -166,6 +185,8 @@ module.exports = {
   setAuthData: setAuthData,
   setUserInfo: setUserInfo,
   normalizeUserInfo: normalizeUserInfo,
+  normalizeAssetUrl: normalizeAssetUrl,
+  getAssetBaseUrl: getAssetBaseUrl,
   getToken: getToken,
   getRefreshToken: getRefreshToken,
   getUserInfo: getUserInfo,
