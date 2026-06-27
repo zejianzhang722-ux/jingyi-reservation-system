@@ -78,7 +78,29 @@ async function main() {
   })
   assert.strictEqual(sanitizedJpeg.width, 2)
   assert.strictEqual(sanitizedJpeg.height, 3)
+  assert.strictEqual(sanitizedJpeg.extension, '.jpg')
   assert.strictEqual(sanitizedJpeg.buffer.includes(Buffer.from('Exif')), false, 'JPEG EXIF metadata must be removed')
+
+  const miniappJpeg = uploadService.sanitizeImage({
+    buffer: jpeg,
+    originalname: 'wxfile.jpeg',
+    mimetype: 'application/octet-stream'
+  })
+  assert.strictEqual(miniappJpeg.mime, 'image/jpeg', 'miniapp JPEG uploads with generic multipart MIME must be accepted')
+
+  const extensionlessMiniappJpeg = uploadService.sanitizeImage({
+    buffer: jpeg,
+    originalname: 'tmp_abcdef',
+    mimetype: 'application/octet-stream'
+  })
+  assert.strictEqual(extensionlessMiniappJpeg.extension, '.jpg', 'extensionless miniapp JPEG temp files must be sanitized to jpg')
+
+  const miniappPng = uploadService.sanitizeImage({
+    buffer: png,
+    originalname: 'tmp_png_upload',
+    mimetype: 'application/octet-stream'
+  })
+  assert.strictEqual(miniappPng.extension, '.png', 'extensionless miniapp PNG temp files must still be accepted')
 
   let mismatch = null
   try {
@@ -122,11 +144,15 @@ async function main() {
   const statsRoutes = source('server/src/routes/stats.js')
   const posterRoutes = source('server/src/routes/poster.js')
   const configSource = source('server/src/config/index.js')
+  const profileSource = source('miniapp/pages/profile/profile.js')
+  const authSource = source('miniapp/utils/auth.js')
 
   assert(!/express\.static\(uploadsDir/.test(appSource), 'raw upload directory must not be served with unrestricted express.static')
   assert(/app\.use\('\/uploads', mediaRouter\)/.test(appSource), 'sanitized media router must serve public images')
   assert(/Content-Security-Policy/.test(mediaSource) && /nosniff/.test(mediaSource), 'media responses must set restrictive security headers')
   assert(/secureUploadService\.imageUpload\('avatar'/.test(userRoutes), 'avatar upload must use the secure image pipeline')
+  assert(/normalizeAssetUrl/.test(authSource) && /\/uploads\//.test(authSource), 'miniapp must normalize uploaded relative media URLs to absolute server URLs')
+  assert(/applyUploadedAvatar/.test(profileSource) && !/that\.loadUserInfo\(\)\s*\n\s*}/.test(profileSource), 'avatar upload should update local profile immediately without stale reload overwrite')
   assert(/requireAdmin, adminScope\.loadAdminScope, scopedQueryController\.users/.test(userRoutes), 'user listing must require administrator scope')
   assert(/forceBuildingQuery/.test(adminRoutes) && /roomFromParam/.test(adminRoutes), 'room administration must apply building scope')
   assert(/reservationBatchFromBody/.test(auditRoutes), 'batch audit must validate every reservation building')
