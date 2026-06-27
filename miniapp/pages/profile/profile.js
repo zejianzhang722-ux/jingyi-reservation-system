@@ -19,6 +19,7 @@ Page({
     avatarFallbackText: '我',
     avatarLoadError: false,
     avatarUploading: false,
+    showAvatarSourcePanel: false,
     creditScore: 100,
     creditColor: 'credit-green',
     creditColorValue: '#52C41A',
@@ -87,30 +88,14 @@ Page({
   onMenuTap: function (e) {
     var key = e.currentTarget.dataset.key
     switch (key) {
-      case 'editProfile':
-        wx.navigateTo({ url: '/pages/profile-edit/profile-edit' })
-        break
-      case 'creditDetail':
-        wx.navigateTo({ url: '/pages/credit-detail/credit-detail' })
-        break
-      case 'usageStats':
-        wx.navigateTo({ url: '/pages/credit-detail/credit-detail?tab=stats' })
-        break
-      case 'rules':
-        wx.navigateTo({ url: '/pages/rules/rules' })
-        break
-      case 'feedback':
-        wx.navigateTo({ url: '/pages/feedback/feedback' })
-        break
-      case 'network':
-        wx.navigateTo({ url: '/pages/network-settings/network-settings' })
-        break
-      case 'subscribe':
-        wx.navigateTo({ url: '/pages/subscribe-settings/subscribe-settings' })
-        break
-      case 'about':
-        wx.showModal({ title: '关于系统', content: '敬一书院功能房预约管理系统 v1.0.0', showCancel: false })
-        break
+      case 'editProfile': wx.navigateTo({ url: '/pages/profile-edit/profile-edit' }); break
+      case 'creditDetail': wx.navigateTo({ url: '/pages/credit-detail/credit-detail' }); break
+      case 'usageStats': wx.navigateTo({ url: '/pages/credit-detail/credit-detail?tab=stats' }); break
+      case 'rules': wx.navigateTo({ url: '/pages/rules/rules' }); break
+      case 'feedback': wx.navigateTo({ url: '/pages/feedback/feedback' }); break
+      case 'network': wx.navigateTo({ url: '/pages/network-settings/network-settings' }); break
+      case 'subscribe': wx.navigateTo({ url: '/pages/subscribe-settings/subscribe-settings' }); break
+      case 'about': wx.showModal({ title: '关于系统', content: '敬一书院功能房预约管理系统 v1.0.0', showCancel: false }); break
       case 'logout':
         wx.showModal({
           title: '确认退出',
@@ -121,17 +106,35 @@ Page({
     }
   },
 
+  onAvatarTap: function () {
+    if (this.data.avatarUploading) {
+      wx.showToast({ title: '头像正在上传，请稍候', icon: 'none' })
+      return
+    }
+    this.setData({ showAvatarSourcePanel: true })
+  },
+
+  closeAvatarSourcePanel: function () {
+    this.setData({ showAvatarSourcePanel: false })
+  },
+
   onChooseAvatar: function (e) {
     var avatarUrl = e && e.detail ? e.detail.avatarUrl : ''
+    this.setData({ showAvatarSourcePanel: false })
     if (avatarUrl) {
       this._avatarRetried = false
       this.uploadAvatar(avatarUrl)
       return
     }
-    this.onAvatarTap()
+    wx.showToast({ title: '未获取到微信头像', icon: 'none' })
   },
 
-  onAvatarTap: function () {
+  onAvatarSourceLocalTap: function () {
+    this.setData({ showAvatarSourcePanel: false })
+    this.chooseLocalAvatar()
+  },
+
+  chooseLocalAvatar: function () {
     if (this.data.avatarUploading) {
       wx.showToast({ title: '头像正在上传，请稍候', icon: 'none' })
       return
