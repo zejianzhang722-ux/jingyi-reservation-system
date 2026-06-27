@@ -1,6 +1,19 @@
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 
+function pickList(data) {
+  if (Array.isArray(data)) return data
+  return (data && (data.list || data.reservations || data.items || data.records)) || []
+}
+
+function pickCount(data, key, fallback) {
+  if (!data) return fallback || 0
+  if (typeof data[key] === 'number') return data[key]
+  if (typeof data.count === 'number') return data.count
+  if (typeof data.total === 'number') return data.total
+  return fallback || 0
+}
+
 Page({
   data: {
     pendingCount: 0,
@@ -38,23 +51,25 @@ Page({
   loadStats: function () {
     var that = this
     request.get('/reservation/pending-count', {}, { silent: true }).then(function (data) {
-      that.setData({ pendingCount: data.count || 0 })
+      that.setData({ pendingCount: pickCount(data, 'pendingCount', 0) })
     }).catch(function () {})
     request.get('/room/stats', {}, { silent: true }).then(function (data) {
-      that.setData({ activeRooms: data.activeRooms || 12, todayReservations: data.todayReservations || 0 })
+      that.setData({
+        activeRooms: pickCount(data, 'activeRooms', 0),
+        todayReservations: pickCount(data, 'todayReservations', 0)
+      })
     }).catch(function () {
-      that.setData({ activeRooms: 12 })
+      that.setData({ activeRooms: 0, todayReservations: 0 })
     })
     request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
-      that.setData({ feedbackCount: data.total || 0 })
+      var list = pickList(data)
+      that.setData({ feedbackCount: typeof data.total === 'number' ? data.total : list.length })
     }).catch(function () {})
   },
   loadPendingList: function () {
     var that = this
     request.get('/reservation/pending', {}, { silent: true }).then(function (data) {
-      var list = data
-      if (!Array.isArray(list)) list = []
-      that.setData({ pendingList: list.slice(0, 10) })
+      that.setData({ pendingList: pickList(data).slice(0, 10) })
     }).catch(function () {
       that.setData({ pendingList: [] })
     })
@@ -133,7 +148,12 @@ Page({
       placeholderText: '请输入拒绝理由',
       success: function (res) {
         if (res.confirm) {
-          request.put('/reservation/' + id + '/reject', { reason: res.content || '' }).then(function () {
+          var reason = String(res.content || '').trim()
+          if (!reason) {
+            wx.showToast({ title: '请填写拒绝理由', icon: 'none' })
+            return
+          }
+          request.put('/reservation/' + id + '/reject', { reason: reason }).then(function () {
             wx.showToast({ title: '已拒绝', icon: 'success' })
             that.loadPendingList()
             that.loadStats()
