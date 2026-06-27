@@ -1,21 +1,232 @@
-.container { padding: 20rpx 30rpx; background: #f5f7fa; min-height: 100vh; }
-.header { padding: 20rpx 0; }
-.title { font-size: 36rpx; font-weight: 700; color: #1a1a2e; display: block; margin-bottom: 20rpx; }
-.search-bar { background: #fff; border-radius: 30rpx; padding: 0 24rpx; }
-.search-input { height: 72rpx; font-size: 26rpx; color: #333; }
-.user-list { margin-top: 20rpx; }
-.user-item { display: flex; align-items: center; background: #fff; border-radius: 16rpx; padding: 24rpx 30rpx; margin-bottom: 12rpx; }
-.user-avatar { width: 72rpx; height: 72rpx; border-radius: 50%; background: linear-gradient(135deg, #0077ff, #00d4ff); color: #fff; font-size: 28rpx; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.user-info { flex: 1; margin-left: 20rpx; }
-.user-name { display: block; font-size: 28rpx; font-weight: 500; color: #333; }
-.user-detail { display: block; font-size: 22rpx; color: #999; margin-top: 4rpx; }
-.user-credit { display: block; font-size: 22rpx; color: #0077ff; margin-top: 4rpx; }
-.user-status { font-size: 22rpx; padding: 4rpx 12rpx; border-radius: 6rpx; flex-shrink: 0; }
-.user-status.active { color: #52c41a; background: #f6ffed; }
-.user-status.banned { color: #ff4d4f; background: #fff1f0; }
-.empty { text-align: center; padding: 100rpx 0; color: #999; font-size: 28rpx; }
-.user-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
-.action-btns { display: flex; gap: 8rpx; }
-.btn-credit { font-size: 22rpx; padding: 6rpx 16rpx; background: #e6f7ff; color: #1890ff; border-radius: 4rpx; }
-.btn-ban { font-size: 22rpx; padding: 6rpx 16rpx; background: #fff1f0; color: #ff4d4f; border-radius: 4rpx; }
-.btn-unban { background: #f6ffed; color: #52c41a; }
+.container {
+  min-height: 100vh;
+  padding: 24rpx 24rpx calc(120rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 90% 4%, rgba(79,213,232,0.16), transparent 30%),
+    radial-gradient(circle at 2% 24%, rgba(47,128,255,0.10), transparent 28%),
+    linear-gradient(180deg, #f8fbff 0%, #f0f3f8 48%, #edf1f7 100%);
+}
+
+.header {
+  padding: 10rpx 0 22rpx;
+}
+
+.title {
+  display: block;
+  margin-bottom: 18rpx;
+  font-size: 40rpx;
+  line-height: 1.22;
+  font-weight: 880;
+  color: #1f2a3d;
+  letter-spacing: 0.6rpx;
+}
+
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 82rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(238,244,252,0.92));
+  border: 1rpx solid rgba(255,255,255,0.92);
+  box-shadow: 12rpx 14rpx 28rpx rgba(154,170,196,0.20), -8rpx -8rpx 20rpx rgba(255,255,255,0.88), inset 0 2rpx 0 rgba(255,255,255,0.88);
+  box-sizing: border-box;
+}
+
+.search-bar::before {
+  content: '';
+  width: 30rpx;
+  height: 30rpx;
+  margin-right: 14rpx;
+  border: 4rpx solid #2f80ff;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.search-bar::after {
+  content: '';
+  position: absolute;
+  left: 49rpx;
+  top: 48rpx;
+  width: 16rpx;
+  height: 4rpx;
+  border-radius: 4rpx;
+  background: #2f80ff;
+  transform: rotate(45deg);
+}
+
+.search-input {
+  flex: 1;
+  min-height: 72rpx;
+  font-size: 27rpx;
+  color: #1f2a3d;
+}
+
+.user-list {
+  margin-top: 12rpx;
+}
+
+.user-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 18rpx;
+  padding: 26rpx;
+  overflow: hidden;
+  border-radius: 32rpx;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(79,213,232,0.12), transparent 32%),
+    linear-gradient(145deg, rgba(255,255,255,0.99), rgba(242,246,252,0.95));
+  border: 1rpx solid rgba(255,255,255,0.94);
+  box-shadow: 14rpx 16rpx 34rpx rgba(154,170,196,0.22), -10rpx -10rpx 24rpx rgba(255,255,255,0.86), inset 0 2rpx 0 rgba(255,255,255,0.92);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  box-sizing: border-box;
+}
+
+.user-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 28rpx;
+  bottom: 28rpx;
+  width: 7rpx;
+  border-radius: 0 8rpx 8rpx 0;
+  background: linear-gradient(180deg, #2f80ff, #39c6df);
+  box-shadow: 4rpx 0 14rpx rgba(47,128,255,0.20);
+}
+
+.user-item:active {
+  transform: translateY(3rpx) scale(0.985);
+}
+
+.user-avatar {
+  flex-shrink: 0;
+  width: 78rpx;
+  height: 78rpx;
+  border-radius: 28rpx;
+  background: linear-gradient(145deg, #2f80ff, #39c6df);
+  color: #fff;
+  font-size: 29rpx;
+  font-weight: 820;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 14rpx 26rpx rgba(47,128,255,0.24), inset 0 4rpx 8rpx rgba(255,255,255,0.30);
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  display: block;
+  font-size: 30rpx;
+  line-height: 1.35;
+  font-weight: 820;
+  color: #1f2a3d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-detail {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  color: #8d9ab0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-credit {
+  display: inline-flex;
+  margin-top: 8rpx;
+  padding: 6rpx 13rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 760;
+  color: #2f80ff;
+  background: #eaf3ff;
+  box-shadow: inset 0 2rpx 0 rgba(255,255,255,0.72), 0 8rpx 16rpx rgba(47,128,255,0.08);
+}
+
+.user-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10rpx;
+}
+
+.user-status {
+  font-size: 22rpx;
+  padding: 7rpx 15rpx;
+  border-radius: 999rpx;
+  font-weight: 760;
+  box-shadow: inset 0 2rpx 0 rgba(255,255,255,0.72), 0 8rpx 16rpx rgba(117,132,161,0.10);
+}
+
+.user-status.active {
+  color: #22a86e;
+  background: #e9fbf3;
+}
+
+.user-status.banned {
+  color: #ec4e58;
+  background: #fff0f1;
+}
+
+.action-btns {
+  display: flex;
+  gap: 8rpx;
+}
+
+.btn-credit,
+.btn-ban {
+  min-width: 66rpx;
+  padding: 8rpx 15rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 760;
+  text-align: center;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.btn-credit:active,
+.btn-ban:active {
+  transform: scale(0.95);
+  opacity: 0.88;
+}
+
+.btn-credit {
+  background: linear-gradient(145deg, #ffffff, #eaf3ff);
+  color: #2f80ff;
+  box-shadow: 6rpx 8rpx 16rpx rgba(164,178,202,0.14), inset 0 2rpx 0 rgba(255,255,255,0.84);
+}
+
+.btn-ban {
+  background: #fff0f1;
+  color: #ec4e58;
+}
+
+.btn-unban {
+  background: #e9fbf3;
+  color: #22a86e;
+}
+
+.empty {
+  margin-top: 80rpx;
+  padding: 110rpx 0;
+  text-align: center;
+  color: #8d9ab0;
+  font-size: 28rpx;
+  border-radius: 32rpx;
+  background: linear-gradient(145deg, rgba(255,255,255,0.96), rgba(242,246,252,0.90));
+  border: 1rpx solid rgba(255,255,255,0.88);
+  box-shadow: 12rpx 14rpx 28rpx rgba(164,178,202,0.18), -8rpx -8rpx 18rpx rgba(255,255,255,0.80);
+}
