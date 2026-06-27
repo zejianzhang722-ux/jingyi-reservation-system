@@ -5,7 +5,7 @@ const dataDir = path.join(__dirname, '..', '..', 'data');
 const storeFile = path.join(dataDir, 'mock-avatars.json');
 
 function isEnabled() {
-  return process.env.NODE_ENV !== 'production' && String(process.env.ALLOW_MOCK_DB || '').toLowerCase() === 'true';
+  return process.env.NODE_ENV !== 'production' && String(process.env.ALLOW_MOCK_DB || '').toLowerCase() !== 'false';
 }
 
 function readStore() {
