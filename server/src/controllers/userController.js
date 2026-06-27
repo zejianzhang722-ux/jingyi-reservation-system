@@ -2,6 +2,7 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const config = require('../config');
+const devAvatarStore = require('../services/devAvatarStore');
 
 const calculateCreditScore = async function(userId, fallbackScore) {
   const [logsAsc] = await db.query(
@@ -39,6 +40,7 @@ const getProfile = async function(req, res) {
     if (users.length === 0) {
       return response.error(res, '用户不存在', 404);
     }
+    users[0] = devAvatarStore.applyAvatar(users[0]);
     const credit = await calculateCreditScore(req.user.id, users[0].credit_score);
     users[0].credit_score = credit.score;
     users[0].creditScore = credit.score;
@@ -73,6 +75,7 @@ const updateProfile = async function(req, res) {
 
     params.push(req.user.id);
     await db.query('UPDATE users SET ' + updates.join(', ') + ' WHERE id = ?', params);
+    if (avatar !== undefined) devAvatarStore.saveAvatar(req.user, avatar);
 
     return response.success(res, null, '更新成功');
   } catch (err) {
@@ -196,8 +199,10 @@ const uploadAvatar = async function(req, res) {
     if (result && result.affectedRows === 0) {
       return response.error(res, '用户不存在，头像未保存', 404);
     }
-    const [users] = await db.query('SELECT avatar FROM users WHERE id = ?', [req.user.id]);
-    const savedAvatar = users && users[0] && users[0].avatar ? users[0].avatar : avatarUrl;
+    const [users] = await db.query('SELECT id, openid, student_id, student_no, avatar FROM users WHERE id = ?', [req.user.id]);
+    const user = users && users[0] ? users[0] : req.user;
+    devAvatarStore.saveAvatar(Object.assign({}, req.user, user), avatarUrl);
+    const savedAvatar = devAvatarStore.getAvatar(user) || (user && user.avatar) || avatarUrl;
     return response.success(res, {
       avatar: savedAvatar,
       avatarUrl: savedAvatar,
