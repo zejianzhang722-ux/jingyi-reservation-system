@@ -2,6 +2,16 @@ var request = require('../../utils/request')
 var util = require('../../utils/util')
 var auth = require('../../utils/auth')
 
+function cacheBust(url) {
+  if (!url) return ''
+  return url + (url.indexOf('?') === -1 ? '?t=' : '&t=') + Date.now()
+}
+
+function pickAvatarFromResponse(payload) {
+  payload = payload || {}
+  return payload.avatar || payload.avatarUrl || payload.url || ''
+}
+
 Page({
   data: {
     userInfo: null,
@@ -50,8 +60,8 @@ Page({
     var score = Number(userInfo.credit_score !== undefined ? userInfo.credit_score : userInfo.creditScore)
     if (isNaN(score)) score = 100
     var name = userInfo.name || userInfo.real_name || userInfo.realName || userInfo.nickname || '我'
-    var avatar = userInfo.avatar || ''
-    var avatarUrl = avatar ? avatar + (avatar.indexOf('?') === -1 ? '?t=' : '&t=') + Date.now() : '/images/default-avatar.png'
+    var avatar = auth.normalizeAssetUrl(userInfo.avatar || userInfo.avatarUrl || '')
+    var avatarUrl = avatar ? cacheBust(avatar) : '/images/default-avatar.png'
     this.setData({
       userInfo: userInfo,
       avatarUrl: avatarUrl,
@@ -133,7 +143,11 @@ Page({
       mediaType: ['image'],
       sourceType: ['album', 'camera'],
       success: function (res) {
-        var tempFilePath = res.tempFiles[0].tempFilePath
+        var tempFilePath = res.tempFiles && res.tempFiles[0] ? res.tempFiles[0].tempFilePath : ''
+        if (!tempFilePath) {
+          wx.showToast({ title: '未获取到图片文件', icon: 'none' })
+          return
+        }
         that._avatarRetried = false
         that.cropAndUploadAvatar(tempFilePath)
       }
@@ -171,6 +185,20 @@ Page({
     this.setData({ avatarLoadError: true })
   },
 
+  applyUploadedAvatar: function (avatar) {
+    var normalizedAvatar = auth.normalizeAssetUrl(avatar)
+    if (!normalizedAvatar) return false
+    var userInfo = auth.setUserInfo(Object.assign({}, this.data.userInfo || {}, { avatar: normalizedAvatar }))
+    var name = userInfo.name || userInfo.real_name || userInfo.realName || userInfo.nickname || '我'
+    this.setData({
+      userInfo: userInfo,
+      avatarUrl: cacheBust(normalizedAvatar),
+      avatarFallbackText: String(name).slice(0, 1) || '我',
+      avatarLoadError: false
+    })
+    return true
+  },
+
   uploadAvatar: function (filePath) {
     var that = this
     if (!filePath) {
@@ -182,8 +210,10 @@ Page({
       url: request.getBaseUrl() + '/user/avatar',
       filePath: filePath,
       name: 'avatar',
+      formData: { purpose: 'avatar' },
       header: {
-        Authorization: 'Bearer ' + auth.getToken()
+        Authorization: 'Bearer ' + auth.getToken(),
+        Accept: 'application/json'
       },
       success: function (res) {
         var data = {}
@@ -204,23 +234,18 @@ Page({
           return
         }
 
-        if (data.code === 0 || data.code === 200) {
-          if (data.data && data.data.avatar) {
-            var userInfo = auth.setUserInfo(Object.assign({}, that.data.userInfo || {}, { avatar: data.data.avatar }))
-            var name = userInfo.name || userInfo.real_name || userInfo.realName || userInfo.nickname || '我'
-            that.setData({
-              userInfo: userInfo,
-              avatarUrl: userInfo.avatar + (userInfo.avatar.indexOf('?') === -1 ? '?t=' : '&t=') + Date.now(),
-              avatarFallbackText: String(name).slice(0, 1) || '我',
-              avatarLoadError: false
-            })
+        if (res.statusCode >= 200 && res.statusCode < 300 && (data.code === 0 || data.code === 200)) {
+          var avatar = pickAvatarFromResponse(data.data)
+          if (!that.applyUploadedAvatar(avatar)) {
+            wx.showToast({ title: '头像地址异常，请重新上传', icon: 'none' })
+            return
           }
           wx.showToast({ title: '头像更新成功', icon: 'success' })
           that._avatarRetried = false
-          that.loadUserInfo()
-        } else {
-          wx.showToast({ title: data.message || '上传失败', icon: 'none' })
+          return
         }
+
+        wx.showToast({ title: data.message || '上传失败', icon: 'none' })
       },
       fail: function () {
         wx.showToast({ title: '上传失败', icon: 'none' })
