@@ -1,12 +1,18 @@
 .timeline-wrapper {
-  background-color: #FFFFFF;
-  border-radius: 12rpx;
+  position: relative;
   overflow: hidden;
+  border-radius: 30rpx;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(79,213,232,0.10), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,0.99), rgba(242,246,252,0.95));
+  border: 1rpx solid rgba(255,255,255,0.94);
+  box-shadow: 14rpx 16rpx 34rpx rgba(154,170,196,0.20), -9rpx -9rpx 22rpx rgba(255,255,255,0.84), inset 0 2rpx 0 rgba(255,255,255,0.92);
 }
 
 .timeline-scroll-x {
   width: 100%;
   white-space: nowrap;
+  background: rgba(255,255,255,0.18);
 }
 
 .timeline-inner {
@@ -20,19 +26,21 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: #FAFAFA;
-  border-bottom: 2rpx solid #E8E8E8;
+  background: linear-gradient(145deg, rgba(255,255,255,0.94), rgba(234,242,252,0.88));
+  border-bottom: 1rpx solid rgba(139,154,178,0.12);
+  box-shadow: 0 8rpx 18rpx rgba(154,168,192,0.10);
 }
 
 .timeline-header-label {
   flex-shrink: 0;
   padding: 18rpx 8rpx;
   font-size: 22rpx;
-  color: #666666;
-  font-weight: 600;
+  color: #61708a;
+  font-weight: 780;
   text-align: center;
-  border-right: 2rpx solid #E8E8E8;
-  background-color: #FAFAFA;
+  border-right: 1rpx solid rgba(139,154,178,0.12);
+  background: rgba(255,255,255,0.58);
+  box-sizing: border-box;
 }
 
 .timeline-header-hours {
@@ -45,8 +53,9 @@
   text-align: center;
   padding: 18rpx 0 14rpx;
   font-size: 22rpx;
-  color: #666666;
-  border-right: 1rpx solid #F0F0F0;
+  color: #61708a;
+  font-weight: 720;
+  border-right: 1rpx solid rgba(139,154,178,0.08);
   box-sizing: border-box;
 }
 
@@ -56,71 +65,84 @@
 
 .timeline-body {
   position: relative;
+  background:
+    repeating-linear-gradient(90deg, rgba(47,128,255,0.035) 0, rgba(47,128,255,0.035) 1rpx, transparent 1rpx, transparent 64rpx);
 }
 
 .timeline-row {
   display: flex;
   flex-direction: row;
   align-items: center;
-  border-bottom: 1rpx solid #F0F0F0;
-  min-height: 72rpx;
+  min-height: 76rpx;
+  border-bottom: 1rpx solid rgba(139,154,178,0.08);
+}
+
+.timeline-row:last-child {
+  border-bottom: none;
 }
 
 .timeline-seat-label {
   flex-shrink: 0;
   padding: 12rpx 8rpx;
   font-size: 22rpx;
-  color: #666666;
+  color: #61708a;
+  font-weight: 720;
   text-align: center;
-  background-color: #FAFAFA;
-  border-right: 2rpx solid #E8E8E8;
+  background: rgba(255,255,255,0.66);
+  border-right: 1rpx solid rgba(139,154,178,0.12);
   white-space: normal;
   word-break: break-all;
+  box-sizing: border-box;
 }
 
 .timeline-blocks {
   position: relative;
-  height: 64rpx;
+  height: 68rpx;
   display: flex;
   align-items: center;
 }
 
 .timeline-block {
   position: absolute;
-  top: 8rpx;
+  top: 10rpx;
   height: 48rpx;
-  border-radius: 6rpx;
+  border-radius: 12rpx;
+  box-sizing: border-box;
+  box-shadow: inset 0 2rpx 0 rgba(255,255,255,0.72), 0 6rpx 12rpx rgba(45,70,110,0.08);
 }
 
 .timeline-block-free {
-  background-color: #F6FFED;
-  border: 1rpx solid #52C41A;
+  background: linear-gradient(145deg, #efffe9, #dcffd6);
+  border: 1rpx solid rgba(82,196,26,0.55);
 }
 
 .timeline-block-occupied {
-  background-color: #FFF2F0;
-  border: 1rpx solid #FF4D4F;
+  background: linear-gradient(145deg, #fff2f3, #ffdfe2);
+  border: 1rpx solid rgba(255,95,104,0.45);
 }
 
 .timeline-block-mine {
-  background-color: #E6F0FF;
-  border: 1rpx solid #0066CC;
+  background: linear-gradient(145deg, #eaf3ff, #cfe5ff);
+  border: 1rpx solid rgba(47,128,255,0.58);
 }
 
 .timeline-block-unavailable {
-  background-color: #F5F5F5;
-  border: 1rpx solid #D9D9D9;
+  background: linear-gradient(145deg, #f5f7fb, #e7edf5);
+  border: 1rpx dashed rgba(154,166,184,0.45);
+  opacity: 0.72;
 }
 
 .timeline-block-ended {
-  background-color: #FAFAFA;
-  border: 1rpx dashed #E8E8E8;
+  background: linear-gradient(145deg, #f7f8fb, #eceff5);
+  border: 1rpx dashed rgba(154,166,184,0.35);
+  opacity: 0.52;
 }
 
 .timeline-block-selected {
-  background-color: rgba(0, 102, 204, 0.25);
-  border: 2rpx solid #0066CC;
+  background: linear-gradient(145deg, rgba(47,128,255,0.30), rgba(79,213,232,0.30));
+  border: 2rpx solid rgba(47,128,255,0.72);
   z-index: 5;
+  box-shadow: 0 8rpx 16rpx rgba(47,128,255,0.20), inset 0 2rpx 0 rgba(255,255,255,0.58);
 }
 
 .timeline-current-line {
@@ -128,29 +150,34 @@
   top: 0;
   bottom: 0;
   width: 4rpx;
-  background-color: #FF4D4F;
+  border-radius: 4rpx;
+  background: linear-gradient(180deg, #ff7a83, #ec4e58);
+  box-shadow: 0 0 16rpx rgba(236,78,88,0.32);
   z-index: 8;
 }
 
 .timeline-current-line::before {
   content: '';
   position: absolute;
-  top: -6rpx;
-  left: -6rpx;
-  width: 16rpx;
-  height: 16rpx;
+  top: -7rpx;
+  left: -7rpx;
+  width: 18rpx;
+  height: 18rpx;
   border-radius: 50%;
-  background-color: #FF4D4F;
+  background: #ec4e58;
+  border: 3rpx solid #ffffff;
+  box-shadow: 0 0 14rpx rgba(236,78,88,0.35);
 }
 
 .timeline-legend {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   justify-content: center;
-  padding: 16rpx 24rpx;
-  gap: 32rpx;
-  border-top: 1rpx solid #F0F0F0;
-  background-color: #FFFFFF;
+  padding: 16rpx 18rpx 18rpx;
+  gap: 16rpx 24rpx;
+  border-top: 1rpx solid rgba(139,154,178,0.10);
+  background: rgba(255,255,255,0.54);
 }
 
 .legend-item {
@@ -163,30 +190,31 @@
 .legend-dot {
   width: 20rpx;
   height: 20rpx;
-  border-radius: 4rpx;
+  border-radius: 7rpx;
+  box-shadow: inset 0 2rpx 0 rgba(255,255,255,0.72);
 }
 
 .legend-free {
-  background-color: #F6FFED;
-  border: 1rpx solid #52C41A;
+  background: #dcffd6;
+  border: 1rpx solid rgba(82,196,26,0.55);
 }
 
 .legend-occupied {
-  background-color: #FFF2F0;
-  border: 1rpx solid #FF4D4F;
+  background: #ffdfe2;
+  border: 1rpx solid rgba(255,95,104,0.45);
 }
 
 .legend-mine {
-  background-color: #E6F0FF;
-  border: 1rpx solid #0066CC;
+  background: #cfe5ff;
+  border: 1rpx solid rgba(47,128,255,0.58);
 }
 
 .legend-unavailable {
-  background-color: #F5F5F5;
-  border: 1rpx solid #D9D9D9;
+  background: #e7edf5;
+  border: 1rpx dashed rgba(154,166,184,0.45);
 }
 
 .legend-text {
-  font-size: 20rpx;
-  color: #999999;
+  font-size: 21rpx;
+  color: #8d9ab0;
 }
