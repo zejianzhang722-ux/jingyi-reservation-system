@@ -1,6 +1,40 @@
 var request = require('../../utils/request')
 var util = require('../../utils/util')
 
+function parseTime(value) {
+  if (!value) return null
+  if (value instanceof Date) return value
+  var text = String(value).replace('T', ' ').replace('Z', '')
+  var date = new Date(text.replace(/-/g, '/'))
+  if (isNaN(date.getTime())) date = new Date(value)
+  return isNaN(date.getTime()) ? null : date
+}
+
+function formatNotificationTime(value) {
+  var date = parseTime(value)
+  if (!date) return value || ''
+  var now = new Date()
+  var diff = now.getTime() - date.getTime()
+  if (diff >= 0 && diff < 60 * 1000) return '刚刚'
+  if (diff >= 0 && diff < 60 * 60 * 1000) return Math.floor(diff / 60000) + '分钟前'
+  if (diff >= 0 && diff < 24 * 60 * 60 * 1000) return Math.floor(diff / 3600000) + '小时前'
+  var y = date.getFullYear()
+  var m = date.getMonth() + 1
+  var d = date.getDate()
+  var hh = date.getHours()
+  var mm = date.getMinutes()
+  var prefix = now.getFullYear() === y ? '' : y + '-'
+  return prefix + (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d) + ' ' + (hh < 10 ? '0' + hh : hh) + ':' + (mm < 10 ? '0' + mm : mm)
+}
+
+function normalizeNotification(item) {
+  item = item || {}
+  var rawTime = item.timeAgo || item.createdAt || item.created_at
+  return Object.assign({}, item, {
+    displayTime: formatNotificationTime(rawTime)
+  })
+}
+
 Page({
   data: {
     categories: [
@@ -46,11 +80,12 @@ Page({
     request.get('/notification', params, { silent: true }).then(function (data) {
       var list = data && data.list ? data.list : (Array.isArray(data) ? data : [])
       var unreadCount = 0
-      ;(list || []).forEach(function (n) {
+      list = (list || []).map(function (n) {
         if (!n.isRead && !n.is_read) unreadCount++
+        return normalizeNotification(n)
       })
       that.setData({
-        notifications: list || [],
+        notifications: list,
         loading: false,
         unreadCount: unreadCount
       })
@@ -80,13 +115,9 @@ Page({
     if (item.relatedId || item.related_id) {
       var relatedId = item.relatedId || item.related_id
       if (item.category === 'audit' || item.category === 'reminder') {
-        wx.navigateTo({
-          url: '/pages/reservation-detail/reservation-detail?id=' + relatedId
-        })
+        wx.navigateTo({ url: '/pages/reservation-detail/reservation-detail?id=' + relatedId })
       } else if (item.category === 'credit') {
-        wx.navigateTo({
-          url: '/pages/credit-detail/credit-detail'
-        })
+        wx.navigateTo({ url: '/pages/credit-detail/credit-detail' })
       }
     }
   },
