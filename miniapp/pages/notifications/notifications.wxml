@@ -25,7 +25,7 @@
       <view class="notification-content">
         <view class="notification-title-row">
           <text class="notification-title">{{item.title}}</text>
-          <text class="notification-time">{{item.timeAgo || item.createdAt || item.created_at}}</text>
+          <text class="notification-time">{{item.displayTime}}</text>
         </view>
         <text class="notification-body">{{item.content}}</text>
       </view>
