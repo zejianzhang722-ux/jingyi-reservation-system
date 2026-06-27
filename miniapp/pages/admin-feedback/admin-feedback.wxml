@@ -20,7 +20,7 @@
         <text class="reply-content">{{item.reply}}</text>
       </view>
       <view class="item-footer">
-        <text class="item-time">{{item.createdAt || item.created_at}}</text>
+        <text class="item-time">{{item.displayTime}}</text>
         <view class="item-actions" wx:if="{{item.status !== 'resolved'}}">
           <view class="btn-reply" data-id="{{item.id}}" bindtap="showReply">回复</view>
           <view class="btn-resolve" data-id="{{item.id}}" bindtap="onResolve">标记已处理</view>
