@@ -19,7 +19,6 @@ Page({
     avatarFallbackText: '我',
     avatarLoadError: false,
     avatarUploading: false,
-    showAvatarSourcePanel: false,
     creditScore: 100,
     creditColor: 'credit-green',
     creditColorValue: '#52C41A',
@@ -32,7 +31,7 @@ Page({
       { key: 'network', name: '网络设置', icon: 'network', tone: 'purple' },
       { key: 'subscribe', name: '订阅消息管理', icon: 'bell', tone: 'gold' },
       { key: 'about', name: '关于系统', icon: 'info', tone: 'gray' },
-      { key: 'logout', name: '退出登录', icon: 'logout', tone: 'red' }
+      { key: 'logout', name: 'logout', name: '退出登录', icon: 'logout', tone: 'red' }
     ]
   },
 
@@ -106,72 +105,18 @@ Page({
     }
   },
 
-  onAvatarTap: function () {
+  onChooseAvatar: function (e) {
     if (this.data.avatarUploading) {
       wx.showToast({ title: '头像正在上传，请稍候', icon: 'none' })
       return
     }
-    this.setData({ showAvatarSourcePanel: true })
-  },
-
-  closeAvatarSourcePanel: function () {
-    this.setData({ showAvatarSourcePanel: false })
-  },
-
-  onChooseAvatar: function (e) {
     var avatarUrl = e && e.detail ? e.detail.avatarUrl : ''
-    this.setData({ showAvatarSourcePanel: false })
     if (avatarUrl) {
       this._avatarRetried = false
       this.uploadAvatar(avatarUrl)
       return
     }
-    wx.showToast({ title: '未获取到微信头像', icon: 'none' })
-  },
-
-  onAvatarSourceLocalTap: function () {
-    this.setData({ showAvatarSourcePanel: false })
-    this.chooseLocalAvatar()
-  },
-
-  chooseLocalAvatar: function () {
-    if (this.data.avatarUploading) {
-      wx.showToast({ title: '头像正在上传，请稍候', icon: 'none' })
-      return
-    }
-    var that = this
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      sourceType: ['album', 'camera'],
-      success: function (res) {
-        var tempFilePath = res.tempFiles && res.tempFiles[0] ? res.tempFiles[0].tempFilePath : ''
-        if (!tempFilePath) {
-          wx.showToast({ title: '未获取到图片文件', icon: 'none' })
-          return
-        }
-        that._avatarRetried = false
-        that.cropAndUploadAvatar(tempFilePath)
-      }
-    })
-  },
-
-  cropAndUploadAvatar: function (filePath) {
-    var that = this
-    if (typeof wx.cropImage === 'function') {
-      wx.cropImage({
-        src: filePath,
-        cropScale: '1:1',
-        success: function (res) { that.uploadAvatar(res.tempFilePath || filePath) },
-        fail: function () {
-          wx.showToast({ title: '已取消裁切，使用原图上传', icon: 'none' })
-          that.uploadAvatar(filePath)
-        }
-      })
-    } else {
-      wx.showToast({ title: '当前微信版本不支持裁切，将直接上传', icon: 'none' })
-      that.uploadAvatar(filePath)
-    }
+    wx.showToast({ title: '未选择头像', icon: 'none' })
   },
 
   onAvatarLoadError: function () {
