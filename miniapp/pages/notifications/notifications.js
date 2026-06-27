@@ -27,10 +27,53 @@ function formatNotificationTime(value) {
   return prefix + (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d) + ' ' + (hh < 10 ? '0' + hh : hh) + ':' + (mm < 10 ? '0' + mm : mm)
 }
 
+function canonicalCategory(value) {
+  var key = String(value || '').trim().toLowerCase()
+  var map = {
+    approve: 'audit',
+    approval: 'audit',
+    reservation_audit: 'audit',
+    reservation_review: 'audit',
+    audit_notice: 'audit',
+    use_reminder: 'reminder',
+    usage_reminder: 'reminder',
+    reservation_reminder: 'reminder',
+    checkin_reminder: 'reminder',
+    noshow: 'noshow_warning',
+    no_show: 'noshow_warning',
+    no_show_warning: 'noshow_warning',
+    noshow_warning: 'noshow_warning',
+    credit_change: 'credit',
+    credit_update: 'credit',
+    poster_notice: 'poster',
+    announcement: 'system',
+    system_notice: 'system',
+    violation_notice: 'violation'
+  }
+  return map[key] || key
+}
+
+function inferCategory(item) {
+  item = item || {}
+  var direct = item.category || item.type || item.notificationType || item.notification_type || item.eventType || item.event_type
+  var key = canonicalCategory(direct)
+  if (key) return key
+  var text = [item.title, item.content, item.message, item.body].join(' ')
+  if (/审核|通过|驳回|拒绝|审批/.test(text)) return 'audit'
+  if (/提醒|签到|开始|即将|使用/.test(text)) return 'reminder'
+  if (/爽约|未签到|逾期|警告/.test(text)) return 'noshow_warning'
+  if (/信用|扣分|加分|积分/.test(text)) return 'credit'
+  if (/海报|张贴|宣传/.test(text)) return 'poster'
+  if (/违规|违约|处罚/.test(text)) return 'violation'
+  return 'system'
+}
+
 function normalizeNotification(item) {
   item = item || {}
   var rawTime = item.timeAgo || item.createdAt || item.created_at
+  var category = inferCategory(item)
   return Object.assign({}, item, {
+    category: category,
     displayTime: formatNotificationTime(rawTime)
   })
 }
@@ -72,25 +115,30 @@ Page({
 
   loadNotifications: function () {
     var that = this
+    var currentCategory = this.data.currentCategory
     var params = {}
-    if (this.data.currentCategory !== 'all') {
-      params.category = this.data.currentCategory
+    if (currentCategory !== 'all') {
+      params.category = currentCategory
+      params.type = currentCategory
     }
 
     request.get('/notification', params, { silent: true }).then(function (data) {
-      var list = data && data.list ? data.list : (Array.isArray(data) ? data : [])
+      var rawList = data && data.list ? data.list : (Array.isArray(data) ? data : [])
+      var normalizedList = (rawList || []).map(function (n) { return normalizeNotification(n) })
+      var filteredList = currentCategory === 'all'
+        ? normalizedList
+        : normalizedList.filter(function (n) { return n.category === currentCategory })
       var unreadCount = 0
-      list = (list || []).map(function (n) {
+      filteredList.forEach(function (n) {
         if (!n.isRead && !n.is_read) unreadCount++
-        return normalizeNotification(n)
       })
       that.setData({
-        notifications: list,
+        notifications: filteredList,
         loading: false,
         unreadCount: unreadCount
       })
     }).catch(function () {
-      that.setData({ loading: false, notifications: [] })
+      that.setData({ loading: false, notifications: [], unreadCount: 0 })
     })
   },
 
