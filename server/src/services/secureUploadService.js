@@ -10,6 +10,7 @@ const ALLOWED_TYPES = {
   png: { mime: 'image/png', aliases: ['image/png', 'application/octet-stream'], extensions: ['.png'] },
   jpeg: { mime: 'image/jpeg', aliases: ['image/jpeg', 'image/jpg', 'image/pjpeg', 'application/octet-stream'], extensions: ['.jpg', '.jpeg'] }
 };
+const KNOWN_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
 const DANGEROUS_EXTENSIONS = new Set([
   '.html', '.htm', '.svg', '.xml', '.js', '.mjs', '.cjs', '.php', '.jsp', '.asp', '.aspx',
   '.exe', '.dll', '.bat', '.cmd', '.sh', '.ps1', '.py', '.jar', '.com', '.scr'
@@ -48,15 +49,17 @@ const validateOriginalName = function(originalName, detectedType, declaredMime) 
   if (!expected) throw uploadError('仅支持真实的PNG或JPEG图片', 400, 'UPLOAD_TYPE_UNSUPPORTED');
 
   const finalExtension = path.extname(basename);
-  const parts = basename.split('.');
+  const parts = basename ? basename.split('.') : [];
   for (let index = 1; index < parts.length - 1; index += 1) {
     if (DANGEROUS_EXTENSIONS.has('.' + parts[index])) {
       throw uploadError('不允许使用危险的双扩展名', 400, 'UPLOAD_DOUBLE_EXTENSION');
     }
   }
-
-  if (finalExtension && !expected.extensions.includes(finalExtension)) {
-    throw uploadError('文件扩展名与图片内容不一致', 400, 'UPLOAD_EXTENSION_MISMATCH');
+  if (finalExtension && DANGEROUS_EXTENSIONS.has(finalExtension)) {
+    throw uploadError('不允许使用危险的文件扩展名', 400, 'UPLOAD_EXTENSION_DANGEROUS');
+  }
+  if (finalExtension && !KNOWN_IMAGE_EXTENSIONS.has(finalExtension)) {
+    throw uploadError('仅支持PNG或JPEG图片扩展名', 400, 'UPLOAD_EXTENSION_UNSUPPORTED');
   }
   if (!finalExtension && parts.some(function(part) { return DANGEROUS_EXTENSIONS.has('.' + part); })) {
     throw uploadError('不允许使用危险的文件名', 400, 'UPLOAD_DOUBLE_EXTENSION');
