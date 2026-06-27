@@ -7,17 +7,40 @@
     linear-gradient(180deg, #f8fbff 0%, #f0f3f8 48%, #edf1f7 100%);
 }
 
+.compare-hero {
+  margin: 24rpx 24rpx 16rpx;
+  padding: 30rpx 32rpx;
+  border-radius: 34rpx;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 82% 8%, rgba(255,255,255,0.28), transparent 28%),
+    linear-gradient(135deg, #2f80ff 0%, #39c6df 100%);
+  border: 1rpx solid rgba(255,255,255,0.45);
+  box-shadow: 0 20rpx 40rpx rgba(47,128,255,0.22), inset 0 2rpx 0 rgba(255,255,255,0.34);
+}
+
+.compare-title {
+  display: block;
+  font-size: 38rpx;
+  line-height: 1.25;
+  font-weight: 880;
+  letter-spacing: 0.8rpx;
+}
+
+.compare-subtitle {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: rgba(255,255,255,0.82);
+}
+
 .selected-rooms {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  padding: 24rpx;
+  padding: 8rpx 24rpx 18rpx;
   gap: 14rpx;
-  background: rgba(248,251,255,0.86);
-  border-bottom: 1rpx solid rgba(255,255,255,0.72);
-  box-shadow: 0 14rpx 32rpx rgba(99,117,150,0.08);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 }
 
 .selected-room {
@@ -25,7 +48,8 @@
   flex-direction: row;
   align-items: center;
   gap: 8rpx;
-  padding: 12rpx 20rpx;
+  max-width: 320rpx;
+  padding: 12rpx 18rpx;
   border-radius: 999rpx;
   background: linear-gradient(145deg, #ffffff, #eaf3ff);
   border: 1rpx solid rgba(255,255,255,0.88);
@@ -33,12 +57,17 @@
 }
 
 .selected-room-name {
-  font-size: 26rpx;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 25rpx;
   font-weight: 760;
   color: #2f80ff;
 }
 
 .selected-room-remove {
+  flex-shrink: 0;
   font-size: 24rpx;
   color: #8d9ab0;
   padding: 4rpx;
@@ -51,17 +80,22 @@
   padding: 12rpx 24rpx;
   border: 2rpx dashed rgba(47,128,255,0.24);
   border-radius: 999rpx;
-  background: rgba(255,255,255,0.46);
+  background: rgba(255,255,255,0.62);
 }
 
 .add-room-text {
-  font-size: 26rpx;
+  font-size: 25rpx;
   color: #2f80ff;
   font-weight: 760;
 }
 
+.compare-scroll {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .compare-table {
-  margin: 24rpx;
+  margin: 8rpx 24rpx 24rpx;
   overflow: hidden;
   border-radius: 34rpx;
   background:
@@ -82,15 +116,16 @@
 }
 
 .compare-header {
-  background: linear-gradient(145deg, rgba(255,255,255,0.60), rgba(232,242,253,0.60));
+  background: linear-gradient(145deg, rgba(255,255,255,0.72), rgba(232,242,253,0.72));
 }
 
 .compare-label {
   flex-shrink: 0;
   width: 160rpx;
-  padding: 22rpx 16rpx;
+  padding: 24rpx 16rpx;
   font-size: 25rpx;
   color: #8d9ab0;
+  font-weight: 720;
   border-right: 1rpx solid rgba(139,154,178,0.10);
   box-sizing: border-box;
 }
@@ -101,21 +136,24 @@
 }
 
 .compare-value {
-  flex: 1;
-  min-width: 150rpx;
-  padding: 22rpx 16rpx;
+  flex-shrink: 0;
+  width: 210rpx;
+  min-height: 76rpx;
+  padding: 22rpx 18rpx;
   font-size: 25rpx;
+  line-height: 1.5;
   color: #1f2a3d;
   text-align: center;
   border-right: 1rpx solid rgba(139,154,178,0.10);
   box-sizing: border-box;
+  word-break: break-all;
 }
 
 .compare-value:last-child {
   border-right: none;
 }
 
-.compare-header .compare-value {
+.compare-room-title {
   font-weight: 850;
   color: #2f80ff;
 }
@@ -212,10 +250,33 @@
   border-radius: 5rpx;
 }
 
+.picker-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 28rpx;
+  color: #1f2a3d;
+  font-weight: 760;
+}
+
+.picker-item-number {
+  font-size: 24rpx;
+  color: #8d9ab0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 150rpx 0;
+}
+
 .empty-icon {
   width: 106rpx;
   height: 106rpx;
-  margin: 160rpx auto 24rpx;
+  margin-bottom: 24rpx;
   border-radius: 34rpx;
   background: linear-gradient(145deg, #ffffff, #e8f0fb);
   box-shadow: 12rpx 14rpx 26rpx rgba(164,178,202,0.22), -10rpx -10rpx 20rpx rgba(255,255,255,0.90), inset 0 2rpx 0 rgba(255,255,255,0.86);
@@ -245,14 +306,7 @@
   border-radius: 999rpx;
 }
 
-.picker-item-name {
-  flex: 1;
+.empty-text {
   font-size: 28rpx;
-  color: #1f2a3d;
-  font-weight: 760;
-}
-
-.picker-item-number {
-  font-size: 24rpx;
   color: #8d9ab0;
 }
