@@ -39,10 +39,8 @@ Page({
 
   onLoad: function (options) {
     var roomIdentity = options.roomId || options.roomName || options.room || options.name || options.roomCode || options.room_number || ''
-    var roomId = Number(localData.resolveRoomId(roomIdentity))
-    if (!roomId) {
-      this.setData({ loading: false })
-      wx.showToast({ title: '请重新选择功能房', icon: 'none' })
+    var roomId = this.normalizeRoomId(roomIdentity)
+    if (!this.ensureRoomIdReady(roomId)) {
       return
     }
     this.setData({ roomId: roomId })
@@ -61,7 +59,21 @@ Page({
     this.setData({ selectedDate: today, isToday: true })
   },
 
+  normalizeRoomId: function (value) {
+    var roomId = Number(localData.resolveRoomId(value))
+    return Number.isFinite(roomId) && roomId > 0 ? roomId : 0
+  },
+
+  ensureRoomIdReady: function (roomId) {
+    if (this.normalizeRoomId(roomId || this.data.roomId)) return true
+    this.setData({ loading: false })
+    wx.showToast({ title: '房间信息未准备好，请返回重新选择', icon: 'none' })
+    return false
+  },
+
   loadRoomInfo: function (roomId) {
+    roomId = this.normalizeRoomId(roomId)
+    if (!this.ensureRoomIdReady(roomId)) return
     var that = this
     request.get('/room/' + roomId).then(function (data) {
       var openEnd = data.open_end_time || '23:00'
@@ -104,8 +116,10 @@ Page({
   },
 
   loadTimeline: function () {
+    var roomId = this.normalizeRoomId(this.data.roomId)
+    if (!this.ensureRoomIdReady(roomId)) return Promise.resolve()
     var that = this
-    request.get('/room/' + this.data.roomId + '/timeline', { date: this.data.selectedDate }).then(function (data) {
+    return request.get('/room/' + roomId + '/timeline', { date: this.data.selectedDate }).then(function (data) {
       var apiTimeline = data.timeline || []
       var seats = []
       var reservations = []
@@ -157,7 +171,7 @@ Page({
       })
       that.scrollToCurrentTime()
     }).catch(function () {
-      var fallbackData = localData.generateLocalTimeline(that.data.roomId, that.data.selectedDate)
+      var fallbackData = localData.generateLocalTimeline(roomId, that.data.selectedDate)
       var seats = fallbackData.seats || []
       var apiTimeline = fallbackData.timeline || []
       var reservations = []
@@ -259,7 +273,7 @@ Page({
       isToday: e.detail.date === today,
       loading: true
     })
-    this.loadTimeline()
+    if (this.ensureRoomIdReady()) this.loadTimeline()
   },
 
   onTimelineSelect: function (e) {
@@ -364,7 +378,7 @@ Page({
   },
 
   onPullDownRefresh: function () {
-    this.loadTimeline()
+    if (this.ensureRoomIdReady()) this.loadTimeline()
     wx.stopPullDownRefresh()
   },
 

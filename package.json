@@ -11,6 +11,7 @@
     "check:student-loop": "node scripts/student-closed-loop-check.js",
     "check:mobile": "node scripts/mobile-regression-check.js",
     "check:admin-miniapp": "node scripts/admin-miniapp-regression-check.js",
+    "check:miniapp-room-nav": "node scripts/miniapp-room-navigation-check.js",
     "check:miniapp-ui": "node scripts/miniapp-ui-polish-check.js",
     "check:request-refresh": "node scripts/request-refresh-check.js",
     "check:reservation-consistency": "node scripts/reservation-consistency-check.js && node scripts/mysql-reservation-concurrency-check.js",

@@ -33,7 +33,15 @@ Page({
 
   onLoad: function (options) {
     var roomId = localData.resolveRoomId(options.roomId)
-    if (roomId) this.loadRoomDetail(roomId)
+    if (this.isValidRoomId(roomId)) {
+      this.loadRoomDetail(roomId)
+    } else {
+      this.setData({ loading: false })
+    }
+  },
+
+  isValidRoomId: function (roomId) {
+    return Number(roomId) > 0
   },
 
   normalizeRoom: function (data) {
@@ -50,7 +58,7 @@ Page({
     }
     var name = data.name || ''
     return {
-      id: data.id,
+      id: localData.resolveRoomId(data.id || data.room_id || data.roomId || data.room_number || data.name),
       name: name,
       iconKey: getIconKey(data.type || ''),
       icon: data.icon || '',
@@ -90,7 +98,10 @@ Page({
 
   onReserveTap: function () {
     var room = this.data.room
-    if (!room) return
+    if (!room || !this.isValidRoomId(room.id)) {
+      wx.showToast({ title: '房间信息未准备好，请稍后再试', icon: 'none' })
+      return
+    }
 
     if (room.type === 'study' || room.type === 'study_room') {
       wx.navigateTo({ url: '/pages/study-room/study-room?roomId=' + room.id })

@@ -94,9 +94,10 @@ async function main() {
   assert(appJson.pages.indexOf('pages/admin-credit/admin-credit') !== -1, 'app.json 应注册管理员信用管理页')
 
   console.log('admin-miniapp-regression-check passed')
+  process.exit(0)
 }
 
 main().catch(function(err) {
   console.error(err.message)
-  process.exitCode = 1
+  process.exit(1)
 })
