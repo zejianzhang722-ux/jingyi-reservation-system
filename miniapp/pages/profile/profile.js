@@ -31,7 +31,7 @@ Page({
       { key: 'network', name: '网络设置', icon: 'network', tone: 'purple' },
       { key: 'subscribe', name: '订阅消息管理', icon: 'bell', tone: 'gold' },
       { key: 'about', name: '关于系统', icon: 'info', tone: 'gray' },
-      { key: 'logout', name: 'logout', name: '退出登录', icon: 'logout', tone: 'red' }
+      { key: 'logout', name: '退出登录', icon: 'logout', tone: 'red' }
     ]
   },
 
