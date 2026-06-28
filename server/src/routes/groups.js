@@ -8,5 +8,6 @@ router.post('/', auth, groupController.create);
 router.get('/:id', auth, groupController.detail);
 router.post('/:id/join', auth, groupController.join);
 router.post('/:id/leave', auth, groupController.leave);
+router.post('/:id/submit-reservation', auth, groupController.submitReservation);
 
 module.exports = router;
