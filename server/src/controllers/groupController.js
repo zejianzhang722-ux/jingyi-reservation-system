@@ -2,6 +2,7 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
+const reservationCommandService = require('../services/reservationCommandService');
 
 const ACTIVE_RESERVATION_STATUS = ['pending', 'counselor_pending', 'approved', 'checked_in'];
 
@@ -54,6 +55,7 @@ function mapGroup(row) {
     endTime: row.end_time,
     maxMembers: row.max_members,
     currentMembers: row.current_members || row.member_count || 0,
+    reservationId: row.reservation_id || row.reservationId || null,
     createdAt: row.created_at
   });
 }
@@ -87,6 +89,7 @@ async function detailPayload(groupId, req) {
   mapped.isJoined = members.some(function(m) { return Number(m.user_id) === currentUserId; });
   mapped.currentMembers = members.length;
   if (group.status === 'open' && members.length >= Number(group.max_members)) mapped.status = 'full';
+  mapped.canSubmitReservation = mapped.isCreator && !mapped.reservationId && ['open', 'full'].includes(mapped.status) && members.length >= 2;
   return mapped;
 }
 async function ensureRoomAvailable(data) {
@@ -181,9 +184,11 @@ const leave = async function(req, res) {
     const isMember = members.some(function(m) { return Number(m.user_id) === Number(req.user.id); });
     if (!isMember) return response.error(res, '你尚未加入该组团', 404);
     if (Number(group.creator_id) === Number(req.user.id)) {
+      if (group.reservation_id) return response.error(res, '已提交正式预约，不能取消组团', 409);
       await db.query("UPDATE reservation_groups SET status = 'cancelled', updated_at = NOW() WHERE id = ?", [groupId]);
       return response.success(res, await detailPayload(groupId, req), '已取消组团');
     }
+    if (group.reservation_id) return response.error(res, '已提交正式预约，不能退出组团', 409);
     await db.query('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, req.user.id]);
     if (group.status === 'full') await db.query("UPDATE reservation_groups SET status = 'open', updated_at = NOW() WHERE id = ?", [groupId]);
     return response.success(res, await detailPayload(groupId, req), '已退出组团');
@@ -193,4 +198,40 @@ const leave = async function(req, res) {
   }
 };
 
-module.exports = { create, list, detail, join, leave };
+const submitReservation = async function(req, res) {
+  try {
+    const groupId = req.params.id;
+    const group = await findGroup(groupId);
+    if (!group) return response.error(res, '组团不存在', 404);
+    if (Number(group.creator_id) !== Number(req.user.id)) return response.error(res, '只有发起人可以提交正式预约', 403);
+    if (group.reservation_id) return response.error(res, '该组团已提交正式预约', 409);
+    if (!['open', 'full'].includes(group.status)) return response.error(res, '当前组团状态不能提交预约', 409);
+    const members = await loadMembers(groupId);
+    if (members.length < 2) return response.error(res, '至少2名成员后才能提交正式预约', 400);
+
+    const created = await reservationCommandService.createReservation({
+      userId: req.user.id,
+      roomId: group.room_id,
+      seatId: null,
+      date: group.date,
+      startTime: String(group.start_time).slice(0, 5),
+      endTime: String(group.end_time).slice(0, 5),
+      purpose: group.title + (group.description ? '：' + group.description : ''),
+      participants: members.length,
+      idempotencyKey: 'group-reservation:' + groupId
+    });
+
+    await db.query("UPDATE reservation_groups SET status = 'submitted', reservation_id = ?, updated_at = NOW() WHERE id = ?", [created.id, groupId]);
+    members.forEach(function(member) {
+      if (Number(member.user_id) !== Number(req.user.id)) {
+        notificationService.createNotification(member.user_id, 'group_submitted', '组团已提交预约', '您参与的组团“' + group.title + '”已由发起人提交正式预约', { groupId: groupId, reservationId: created.id }).catch(function() {});
+      }
+    });
+    return response.success(res, Object.assign(await detailPayload(groupId, req), { reservation: created }), '已提交正式预约');
+  } catch (err) {
+    logger.error('组团提交正式预约异常:', err);
+    return response.error(res, err.message || '提交正式预约失败', err.httpStatus || 500);
+  }
+};
+
+module.exports = { create, list, detail, join, leave, submitReservation };
