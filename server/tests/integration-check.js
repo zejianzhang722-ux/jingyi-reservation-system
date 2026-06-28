@@ -13,6 +13,7 @@ function startServer() {
     env: Object.assign({}, process.env, {
       NODE_ENV: 'test',
       ALLOW_MOCK_DB: 'true',
+      BYPASS_RATE_LIMITS: 'true',
       ENABLE_SCHEDULER: 'false',
       PORT: String(PORT),
       MYSQL_HOST: '127.0.0.1',
