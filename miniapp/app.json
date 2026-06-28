@@ -19,6 +19,7 @@
     "pages/feedback/feedback",
     "pages/network-settings/network-settings",
     "pages/subscribe-settings/subscribe-settings",
+    "pages/group-list/group-list",
     "pages/group-reserve/group-reserve",
     "pages/qrcode/qrcode",
     "pages/login/login",
