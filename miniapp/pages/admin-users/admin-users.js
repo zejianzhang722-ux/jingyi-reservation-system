@@ -2,6 +2,7 @@ var request = require('../../utils/request')
 
 function createEmptyForm() {
   return {
+    id: '',
     studentNo: '',
     realName: '',
     cardNo: '',
@@ -15,12 +16,30 @@ function createEmptyForm() {
   }
 }
 
+function pickUserForm(user) {
+  user = user || {}
+  return {
+    id: user.id || '',
+    studentNo: user.student_no || user.student_id || '',
+    realName: user.real_name || user.realName || user.name || '',
+    cardNo: user.card_no || user.cardNo || '',
+    phone: user.phone || '',
+    college: user.college || '',
+    major: user.major || '',
+    grade: user.grade || '',
+    className: user.class_name || user.className || '',
+    buildingId: user.building_id || user.buildingId || '',
+    roomNumber: user.room_number || user.roomNumber || ''
+  }
+}
+
 Page({
   data: {
     list: [],
     keyword: '',
     filteredList: [],
     showAddForm: false,
+    formMode: 'create',
     addForm: createEmptyForm(),
     submittingAdd: false
   },
@@ -49,16 +68,7 @@ Page({
     if (!keyword) return list
     var kw = keyword.toLowerCase()
     return list.filter(function (u) {
-      return [
-        u.name,
-        u.real_name,
-        u.realName,
-        u.student_no,
-        u.student_id,
-        u.phone,
-        u.card_no,
-        u.room_number
-      ].join(' ').toLowerCase().indexOf(kw) >= 0
+      return [u.name, u.real_name, u.realName, u.student_no, u.student_id, u.phone, u.card_no, u.room_number].join(' ').toLowerCase().indexOf(kw) >= 0
     })
   },
   onSearch: function (e) {
@@ -66,11 +76,16 @@ Page({
     this.setData({ keyword: keyword, filteredList: this.applyFilter(this.data.list, keyword) })
   },
   onAddUser: function () {
-    this.setData({ showAddForm: true, addForm: createEmptyForm(), submittingAdd: false })
+    this.setData({ showAddForm: true, formMode: 'create', addForm: createEmptyForm(), submittingAdd: false })
+  },
+  onEditUser: function (e) {
+    var id = e.currentTarget.dataset.id
+    var user = (this.data.list || []).find(function (item) { return String(item.id) === String(id) }) || {}
+    this.setData({ showAddForm: true, formMode: 'edit', addForm: pickUserForm(user), submittingAdd: false })
   },
   onCancelAdd: function () {
     if (this.data.submittingAdd) return
-    this.setData({ showAddForm: false, addForm: createEmptyForm() })
+    this.setData({ showAddForm: false, addForm: createEmptyForm(), formMode: 'create' })
   },
   onAddInput: function (e) {
     var field = e.currentTarget.dataset.field
@@ -90,21 +105,20 @@ Page({
   submitAddUser: function () {
     var that = this
     var error = this.validateAddForm()
-    if (error) {
-      wx.showToast({ title: error, icon: 'none' })
-      return
-    }
+    if (error) { wx.showToast({ title: error, icon: 'none' }); return }
     if (this.data.submittingAdd) return
     var form = Object.assign({}, this.data.addForm)
     Object.keys(form).forEach(function (key) { form[key] = String(form[key] || '').trim() })
+    var isEdit = this.data.formMode === 'edit'
+    var req = isEdit ? request.put('/user/list/' + form.id, form) : request.post('/user/list', form)
     this.setData({ submittingAdd: true })
-    request.post('/user/list', form).then(function () {
-      wx.showToast({ title: '宿生已添加', icon: 'success' })
-      that.setData({ showAddForm: false, addForm: createEmptyForm(), submittingAdd: false })
+    req.then(function () {
+      wx.showToast({ title: isEdit ? '宿生已更新' : '宿生已添加', icon: 'success' })
+      that.setData({ showAddForm: false, addForm: createEmptyForm(), formMode: 'create', submittingAdd: false })
       that.loadData()
     }).catch(function (err) {
       that.setData({ submittingAdd: false })
-      wx.showToast({ title: err && err.message ? err.message : '添加失败', icon: 'none' })
+      wx.showToast({ title: err && err.message ? err.message : '保存失败', icon: 'none' })
     })
   },
   onAdjustCredit: function (e) {
@@ -119,15 +133,11 @@ Page({
       success: function (res) {
         if (res.confirm) {
           var newScore = parseInt(res.content)
-          if (isNaN(newScore) || newScore < 0 || newScore > 100) {
-            wx.showToast({ title: '请输入0-100的数字', icon: 'none' }); return
-          }
+          if (isNaN(newScore) || newScore < 0 || newScore > 100) { wx.showToast({ title: '请输入0-100的数字', icon: 'none' }); return }
           request.put('/credit/adjust', { userId: id, score: newScore }).then(function () {
             wx.showToast({ title: '已调整', icon: 'success' })
             that.loadData()
-          }).catch(function () {
-            wx.showToast({ title: '调整失败', icon: 'none' })
-          })
+          }).catch(function () { wx.showToast({ title: '调整失败', icon: 'none' }) })
         }
       }
     })
@@ -146,9 +156,7 @@ Page({
           request.put('/admin/accounts/' + id, { status: newStatus }).then(function () {
             wx.showToast({ title: action + '成功', icon: 'success' })
             that.loadData()
-          }).catch(function () {
-            wx.showToast({ title: action + '失败', icon: 'none' })
-          })
+          }).catch(function () { wx.showToast({ title: action + '失败', icon: 'none' }) })
         }
       }
     })
