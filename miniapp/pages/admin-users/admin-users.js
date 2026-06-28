@@ -1,7 +1,29 @@
 var request = require('../../utils/request')
 
+function createEmptyForm() {
+  return {
+    studentNo: '',
+    realName: '',
+    cardNo: '',
+    phone: '',
+    college: '',
+    major: '',
+    grade: '',
+    className: '',
+    buildingId: '',
+    roomNumber: ''
+  }
+}
+
 Page({
-  data: { list: [], keyword: '', filteredList: [] },
+  data: {
+    list: [],
+    keyword: '',
+    filteredList: [],
+    showAddForm: false,
+    addForm: createEmptyForm(),
+    submittingAdd: false
+  },
   onLoad: function () { this.loadData() },
   onShow: function () { this.loadData() },
   loadData: function () {
@@ -17,7 +39,8 @@ Page({
   },
   enhanceUsers: function (list) {
     return list.map(function (u) {
-      u.avatarInitial = (u.name || u.real_name || '?').charAt(0)
+      var name = u.name || u.real_name || u.realName || '?'
+      u.avatarInitial = String(name).charAt(0) || '?'
       u.creditDisplay = parseInt(u.credit_score) || 100
       return u
     })
@@ -26,13 +49,63 @@ Page({
     if (!keyword) return list
     var kw = keyword.toLowerCase()
     return list.filter(function (u) {
-      return (u.name || u.real_name || '').toLowerCase().indexOf(kw) >= 0 ||
-        (u.student_no || u.student_id || '').toLowerCase().indexOf(kw) >= 0
+      return [
+        u.name,
+        u.real_name,
+        u.realName,
+        u.student_no,
+        u.student_id,
+        u.phone,
+        u.card_no,
+        u.room_number
+      ].join(' ').toLowerCase().indexOf(kw) >= 0
     })
   },
   onSearch: function (e) {
     var keyword = e.detail.value.trim()
     this.setData({ keyword: keyword, filteredList: this.applyFilter(this.data.list, keyword) })
+  },
+  onAddUser: function () {
+    this.setData({ showAddForm: true, addForm: createEmptyForm(), submittingAdd: false })
+  },
+  onCancelAdd: function () {
+    if (this.data.submittingAdd) return
+    this.setData({ showAddForm: false, addForm: createEmptyForm() })
+  },
+  onAddInput: function (e) {
+    var field = e.currentTarget.dataset.field
+    var value = e.detail.value
+    this.setData({ ['addForm.' + field]: value })
+  },
+  validateAddForm: function () {
+    var form = this.data.addForm
+    if (!String(form.studentNo || '').trim()) return '请输入学号'
+    if (!/^\d{9,10}$/.test(String(form.studentNo || '').trim())) return '学号应为9-10位数字'
+    if (!String(form.realName || '').trim()) return '请输入姓名'
+    if (!String(form.cardNo || '').trim()) return '请输入6位一卡通号'
+    if (!/^\d{6}$/.test(String(form.cardNo || '').trim())) return '一卡通号应为6位数字'
+    if (form.phone && !/^1\d{10}$/.test(String(form.phone).trim())) return '手机号格式不正确'
+    return ''
+  },
+  submitAddUser: function () {
+    var that = this
+    var error = this.validateAddForm()
+    if (error) {
+      wx.showToast({ title: error, icon: 'none' })
+      return
+    }
+    if (this.data.submittingAdd) return
+    var form = Object.assign({}, this.data.addForm)
+    Object.keys(form).forEach(function (key) { form[key] = String(form[key] || '').trim() })
+    this.setData({ submittingAdd: true })
+    request.post('/user/list', form).then(function () {
+      wx.showToast({ title: '宿生已添加', icon: 'success' })
+      that.setData({ showAddForm: false, addForm: createEmptyForm(), submittingAdd: false })
+      that.loadData()
+    }).catch(function (err) {
+      that.setData({ submittingAdd: false })
+      wx.showToast({ title: err && err.message ? err.message : '添加失败', icon: 'none' })
+    })
   },
   onAdjustCredit: function (e) {
     var that = this
