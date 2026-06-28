@@ -71,11 +71,29 @@ async function api(path, options) {
   const res = await fetch(BASE_URL + path, Object.assign({
     headers: { 'Content-Type': 'application/json' }
   }, options || {}));
-  const json = await res.json();
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (err) {
+    throw new Error(path + ' 返回非 JSON：HTTP ' + res.status + ' ' + text.slice(0, 240));
+  }
   if (json.code !== 200) {
-    throw new Error(path + ' 返回失败：' + JSON.stringify(json));
+    throw new Error(path + ' 返回失败：HTTP ' + res.status + ' ' + JSON.stringify(json));
   }
   return json.data;
+}
+
+async function runStep(label, fn) {
+  console.log('[integration] START ' + label);
+  try {
+    const result = await fn();
+    console.log('[integration] PASS ' + label);
+    return result;
+  } catch (err) {
+    console.error('[integration] FAIL ' + label);
+    throw err;
+  }
 }
 
 function assert(condition, message) {
@@ -92,136 +110,160 @@ function formatDate(date) {
 async function main() {
   let server = startServer();
   try {
-    await waitForHealth(server);
+    await runStep('BOOT health', function() { return waitForHealth(server); });
 
-    const rooms = await api('/room');
+    const rooms = await runStep('S02 room list', function() { return api('/room'); });
     assert(Array.isArray(rooms) && rooms.length > 0, 'S02 首页功能房列表为空');
 
-    const timeline = await api('/room/1/timeline?date=2026-06-03');
+    const timeline = await runStep('S03 room timeline', function() { return api('/room/1/timeline?date=2026-06-03'); });
     assert(timeline && Array.isArray(timeline.timeline), 'S03 功能房时间线没有返回时间段');
-    const seats = await api('/room/1/seats');
+    const seats = await runStep('S03 room seats', function() { return api('/room/1/seats'); });
     assert(Array.isArray(seats) && seats.length > 0, 'S03 功能房座位没有返回数据');
     const integrationSeatId = seats[0].id;
     assert(integrationSeatId, 'S03 功能房座位没有返回座位编号');
 
-    const studentLogin = await api('/auth/login/student', {
-      method: 'POST',
-      body: JSON.stringify({ studentNo: '2024001001', cardNo: '200001' })
+    const studentLogin = await runStep('S01 student login', function() {
+      return api('/auth/login/student', {
+        method: 'POST',
+        body: JSON.stringify({ studentNo: '2024001001', cardNo: '200001' })
+      });
     });
     const studentToken = studentLogin.token;
     assert(studentToken, 'S01 学生登录后没有拿到令牌');
 
     const studentHeaders = { Authorization: 'Bearer ' + studentToken };
-    const profile = await api('/user/profile', { headers: studentHeaders });
+    const profile = await runStep('S07 student profile', function() { return api('/user/profile', { headers: studentHeaders }); });
     assert(profile && profile.name !== '未登录', 'S07 个人中心没有显示真实姓名');
 
-    await api('/user/profile', {
-      method: 'PUT',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, studentHeaders),
-      body: JSON.stringify({ name: '张三', phone: '13900000001' })
+    await runStep('S07 update profile', function() {
+      return api('/user/profile', {
+        method: 'PUT',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, studentHeaders),
+        body: JSON.stringify({ name: '张三', phone: '13900000001' })
+      });
     });
 
     const reserveDate = formatDate(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
-    const createdReservation = await api('/reservation', {
-      method: 'POST',
-      headers: Object.assign({
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'integration-seat-booking-' + Date.now()
-      }, studentHeaders),
-      body: JSON.stringify({
-        roomId: 1,
-        seatId: integrationSeatId,
-        date: reserveDate,
-        startTime: '13:00',
-        endTime: '14:00',
-        purpose: '验收测试预约',
-        participants: 1
-      })
+    const createdReservation = await runStep('S04 create reservation', function() {
+      return api('/reservation', {
+        method: 'POST',
+        headers: Object.assign({
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'integration-seat-booking-' + Date.now()
+        }, studentHeaders),
+        body: JSON.stringify({
+          roomId: 1,
+          seatId: integrationSeatId,
+          date: reserveDate,
+          startTime: '13:00',
+          endTime: '14:00',
+          purpose: '验收测试预约',
+          participants: 1
+        })
+      });
     });
     assert(createdReservation && createdReservation.id, 'S04 创建预约没有返回预约编号');
     assert(Number(createdReservation.seatId) === Number(integrationSeatId), 'S04 自习室预约没有保留所选座位');
 
-    const myReservations = await api('/reservation?page=1&pageSize=20', { headers: studentHeaders });
+    const myReservations = await runStep('S05 my reservations', function() { return api('/reservation?page=1&pageSize=20', { headers: studentHeaders }); });
     assert(Array.isArray(myReservations.list), 'S05 我的预约列表没有返回列表');
 
-    await api('/reservation/' + createdReservation.id, {
-      method: 'DELETE',
-      headers: studentHeaders
+    await runStep('S05 cancel created reservation', function() {
+      return api('/reservation/' + createdReservation.id, {
+        method: 'DELETE',
+        headers: studentHeaders
+      });
     });
 
-    const notifications = await api('/notification', { headers: studentHeaders });
+    const notifications = await runStep('S09 notifications', function() { return api('/notification', { headers: studentHeaders }); });
     assert(Array.isArray(notifications.list), 'S09 消息通知没有返回列表');
 
     const marker = '重启保留验收-' + Date.now();
-    const feedback = await api('/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + studentToken },
-      body: JSON.stringify({ type: 'bug', content: marker, contact: 'test' })
+    const feedback = await runStep('S10 create feedback', function() {
+      return api('/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + studentToken },
+        body: JSON.stringify({ type: 'bug', content: marker, contact: 'test' })
+      });
     });
     assert(feedback && feedback.id, 'S10 反馈提交后没有返回编号');
 
-    const adminLogin = await api('/auth/login/admin-miniapp', {
-      method: 'POST',
-      body: JSON.stringify({ username: 'superadmin', password: 'super123' })
+    const adminLogin = await runStep('A01 admin login', function() {
+      return api('/auth/login/admin-miniapp', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'superadmin', password: 'super123' })
+      });
     });
     assert(adminLogin.userInfo.role === 'super_admin', 'A01 超级管理员身份应统一为 super_admin，实际为 ' + adminLogin.userInfo.role);
     const adminToken = adminLogin.token;
     const adminHeaders = { Authorization: 'Bearer ' + adminToken };
 
-    const pending = await api('/reservation/pending', { headers: adminHeaders });
+    const pending = await runStep('A03 pending reservations', function() { return api('/reservation/pending', { headers: adminHeaders }); });
     assert(Array.isArray(pending), 'A03 审批首页待审列表没有返回数组');
 
-    await api('/reservation/7/approve', {
-      method: 'PUT',
-      headers: adminHeaders
+    await runStep('A03 approve reservation', function() {
+      return api('/reservation/7/approve', {
+        method: 'PUT',
+        headers: adminHeaders
+      });
     });
 
-    await api('/reservation/5/reject', {
-      method: 'PUT',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, adminHeaders),
-      body: JSON.stringify({ reason: '验收拒绝测试' })
+    await runStep('A03 reject reservation', function() {
+      return api('/reservation/5/reject', {
+        method: 'PUT',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, adminHeaders),
+        body: JSON.stringify({ reason: '验收拒绝测试' })
+      });
     });
 
-    const allReservations = await api('/reservation?page=1&pageSize=20', { headers: adminHeaders });
+    const allReservations = await runStep('A06 all reservations', function() { return api('/reservation?page=1&pageSize=20', { headers: adminHeaders }); });
     assert(Array.isArray(allReservations.list) && allReservations.list.length >= myReservations.list.length, 'A06 管理员预约管理没有返回全量列表');
 
-    const users = await api('/user/list?page=1&pageSize=20', { headers: adminHeaders });
+    const users = await runStep('A10 user list', function() { return api('/user/list?page=1&pageSize=20', { headers: adminHeaders }); });
     assert(Array.isArray(users.list) && users.list.length > 0, 'A10 宿生管理没有返回用户列表');
 
-    const dashboard = await api('/stats/dashboard', { headers: adminHeaders });
+    const dashboard = await runStep('A07 stats dashboard', function() { return api('/stats/dashboard', { headers: adminHeaders }); });
     assert(dashboard && typeof dashboard === 'object', 'A07 管理中心统计没有返回数据');
 
-    const buildings = await api('/admin/buildings', {
-      headers: { Authorization: 'Bearer ' + adminToken }
+    const buildings = await runStep('A09 buildings', function() {
+      return api('/admin/buildings', {
+        headers: { Authorization: 'Bearer ' + adminToken }
+      });
     });
     assert(Array.isArray(buildings.list) && buildings.list.length > 0, 'A09/W02 超级管理员无法访问楼栋管理');
 
-    const adminRooms = await api('/admin/rooms?page=1&pageSize=20', { headers: adminHeaders });
+    const adminRooms = await runStep('A09 admin rooms', function() { return api('/admin/rooms?page=1&pageSize=20', { headers: adminHeaders }); });
     assert(Array.isArray(adminRooms.list) && adminRooms.list.length > 0, 'A09 功能房管理没有返回房间');
 
-    const announcements = await api('/admin/announcements?page=1&pageSize=20', { headers: adminHeaders });
+    const announcements = await runStep('A12 announcements', function() { return api('/admin/announcements?page=1&pageSize=20', { headers: adminHeaders }); });
     assert(Array.isArray(announcements.list), 'A12 公告管理没有返回列表');
 
-    const feedbackListBeforeResolve = await api('/feedback?status=pending&page=1&pageSize=50', { headers: adminHeaders });
+    const feedbackListBeforeResolve = await runStep('A11 feedback pending list', function() { return api('/feedback?status=pending&page=1&pageSize=50', { headers: adminHeaders }); });
     assert(feedbackListBeforeResolve.list.some(function(item) { return item.id === feedback.id; }), 'A11/W03 管理端没有看到学生刚提交的反馈');
 
-    await api('/feedback/' + feedback.id + '/resolve', {
-      method: 'PUT',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, adminHeaders),
-      body: JSON.stringify({ reply: '已收到，验收处理完成' })
+    await runStep('A11 resolve feedback', function() {
+      return api('/feedback/' + feedback.id + '/resolve', {
+        method: 'PUT',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, adminHeaders),
+        body: JSON.stringify({ reply: '已收到，验收处理完成' })
+      });
     });
 
-    await stopServer(server);
+    await runStep('RESTART stop server', function() { return stopServer(server); });
     server = startServer();
-    await waitForHealth(server);
+    await runStep('RESTART health', function() { return waitForHealth(server); });
 
-    const persistedAdminLogin = await api('/auth/login/admin-miniapp', {
-      method: 'POST',
-      body: JSON.stringify({ username: 'superadmin', password: 'super123' })
+    const persistedAdminLogin = await runStep('RESTART admin login', function() {
+      return api('/auth/login/admin-miniapp', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'superadmin', password: 'super123' })
+      });
     });
     const persistedAdminToken = persistedAdminLogin.token;
-    const feedbackList = await api('/feedback?page=1&pageSize=50', {
-      headers: { Authorization: 'Bearer ' + persistedAdminToken }
+    const feedbackList = await runStep('RESTART feedback list', function() {
+      return api('/feedback?page=1&pageSize=50', {
+        headers: { Authorization: 'Bearer ' + persistedAdminToken }
+      });
     });
     assert(
       feedbackList.list.some(function(item) { return item.content === marker; }),
