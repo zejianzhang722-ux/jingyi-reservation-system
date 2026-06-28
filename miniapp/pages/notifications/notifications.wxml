@@ -1,9 +1,7 @@
 <view class="container">
   <scroll-view class="category-scroll" scroll-x="true" enhanced="true" show-scrollbar="{{false}}">
     <view class="categories">
-      <view class="category-item {{currentCategory === item.key ? 'category-active' : ''}}"
-            wx:for="{{categories}}" wx:key="key"
-            data-key="{{item.key}}" bindtap="onCategoryChange">
+      <view class="category-item {{currentCategory === item.key ? 'category-active' : ''}}" wx:for="{{categories}}" wx:key="key" data-key="{{item.key}}" bindtap="onCategoryChange">
         <text class="category-name">{{item.name}}</text>
         <text class="category-badge" wx:if="{{item.unread > 0}}">{{item.unread > 99 ? '99+' : item.unread}}</text>
       </view>
@@ -16,30 +14,24 @@
   </view>
 
   <view class="notification-list" wx:if="{{!loading}}">
-    <view class="notification-item {{(item.isRead || item.is_read) ? '' : 'notification-unread'}}"
-          wx:for="{{notifications}}" wx:key="id"
-          data-id="{{item.id}}" bindtap="onNotificationTap">
+    <view class="notification-item {{(item.isRead || item.is_read) ? '' : 'notification-unread'}}" wx:for="{{notifications}}" wx:key="id" data-id="{{item.id}}" bindtap="onNotificationTap">
       <view class="notification-icon-wrap notification-icon-type-{{item.category}}">
         <view class="notification-icon-svg"></view>
         <view class="unread-dot" wx:if="{{!(item.isRead || item.is_read)}}"></view>
       </view>
       <view class="notification-content">
-        <view class="notification-title-row">
-          <text class="notification-title">{{item.title}}</text>
-          <text class="notification-time">{{item.displayTime}}</text>
-        </view>
+        <view class="notification-title-row"><text class="notification-title">{{item.title}}</text><text class="notification-time">{{item.displayTime}}</text></view>
         <text class="notification-body">{{item.content}}</text>
       </view>
     </view>
   </view>
 
-  <view class="empty-state" wx:if="{{!loading && notifications.length === 0}}">
-    <view class="empty-icon-svg"></view>
-    <text class="empty-text">暂无消息</text>
+  <view class="empty-state empty-card" wx:if="{{!loading && notifications.length === 0}}">
+    <view class="empty-visual"><view class="empty-symbol"></view></view>
+    <text class="empty-title">暂无消息</text>
+    <text class="empty-text">当前分类没有新的通知</text>
+    <text class="empty-hint">预约审核、团队确认、签到提醒和信用变动会在这里展示</text>
   </view>
 
-  <view class="loading-state" wx:if="{{loading}}">
-    <view class="loading-spinner"></view>
-    <text class="loading-text">加载中...</text>
-  </view>
+  <view class="loading-state" wx:if="{{loading}}"><view class="loading-spinner"></view><text class="loading-text">加载中...</text></view>
 </view>
