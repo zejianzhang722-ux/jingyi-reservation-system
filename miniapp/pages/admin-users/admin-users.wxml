@@ -3,12 +3,18 @@
     <view class="header-top">
       <text class="title">宿生管理</text>
       <view class="header-actions">
-        <view class="export-user-btn" bindtap="onExportUsers">导出</view>
+        <view class="export-user-btn" bindtap="onExportUsers">导出Excel</view>
         <view class="export-user-btn" bindtap="onOpenImport">导入</view>
         <view class="add-user-btn" bindtap="onAddUser">添加</view>
       </view>
     </view>
-    <view class="search-bar"><input class="search-input" placeholder="搜索学号/姓名/手机号/宿舍" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" /></view>
+    <view class="search-bar"><input class="search-input" placeholder="搜索学号/姓名/手机号/宿舍/专业" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" /></view>
+    <view class="filter-row">
+      <picker mode="selector" range="{{buildingOptions}}" range-key="label" bindchange="onBuildingFilterChange"><view class="filter-pill">{{buildingFilter ? buildingOptions[buildingFilter].label : '全部楼栋'}}</view></picker>
+      <picker mode="selector" range="{{statusOptions}}" range-key="label" bindchange="onStatusFilterChange"><view class="filter-pill">{{statusFilter === 'active' ? '正常' : statusFilter === 'banned' ? '封禁' : statusFilter === 'restricted' ? '限制' : '全部状态'}}</view></picker>
+      <input class="filter-input" placeholder="年级" value="{{gradeFilter}}" bindinput="onGradeFilterInput" />
+      <view class="filter-clear" bindtap="onClearFilters">重置</view>
+    </view>
   </view>
 
   <view class="user-list" wx:if="{{filteredList.length > 0}}">
@@ -18,7 +24,7 @@
       <view class="user-actions"><text class="user-status {{item.status}}">{{item.status === 'active' ? '正常' : item.status === 'banned' ? '封禁' : item.status}}</text><view class="action-btns"><view class="btn-credit" data-id="{{item.id}}" catchtap="onEditUser">编辑</view><view class="btn-credit" data-id="{{item.id}}" data-score="{{item.credit_score}}" catchtap="onAdjustCredit">调分</view><view class="btn-ban {{item.status === 'banned' ? 'btn-unban' : ''}}" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleBan">{{item.status === 'banned' ? '解封' : '封禁'}}</view></view></view>
     </view>
   </view>
-  <view class="empty" wx:else><text>暂无用户数据</text></view>
+  <view class="empty" wx:else><text>暂无匹配宿生数据</text></view>
 
   <view class="form-mask" wx:if="{{showAddForm}}" bindtap="onCancelAdd"></view>
   <view class="form-mask" wx:if="{{showImportForm}}" bindtap="onCancelImport"></view>
@@ -41,10 +47,10 @@
   </view>
 
   <view class="form-panel {{showImportForm ? 'form-show' : ''}}">
-    <view class="form-header"><view><text class="form-title">批量导入宿生</text><text class="form-subtitle">支持从 Excel 复制粘贴，列顺序为学号、姓名、一卡通号、手机号、学院、专业、年级、班级、楼栋ID、宿舍号</text></view><text class="form-close" bindtap="onCancelImport">✕</text></view>
+    <view class="form-header"><view><text class="form-title">批量导入宿生</text><text class="form-subtitle">支持模板Excel另存为 xls/csv 后导入，也支持从 Excel 复制粘贴</text></view><text class="form-close" bindtap="onCancelImport">✕</text></view>
     <view class="form-body">
+      <view class="import-actions"><view class="import-helper" bindtap="onDownloadTemplate">下载模板</view><view class="import-helper" bindtap="onChooseImportFile">选择文件</view><view class="import-helper" bindtap="onPasteImportExample">填入示例</view></view>
       <textarea class="import-textarea" placeholder="每行一名宿生，列之间用制表符或英文逗号分隔" value="{{importText}}" bindinput="onImportInput" maxlength="12000" />
-      <view class="import-helper" bindtap="onPasteImportExample">填入示例</view>
       <view class="import-result" wx:if="{{importResult}}">{{importResult}}</view>
     </view>
     <view class="form-footer"><view class="form-btn btn-cancel" bindtap="onCancelImport">取消</view><view class="form-btn btn-submit" bindtap="onSubmitImport">{{submittingImport ? '导入中...' : '开始导入'}}</view></view>
