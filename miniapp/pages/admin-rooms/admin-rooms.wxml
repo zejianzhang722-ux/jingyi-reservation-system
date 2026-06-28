@@ -22,31 +22,19 @@
   <view class="room-list" wx:if="{{list.length > 0}}">
     <view class="room-item" wx:for="{{list}}" wx:key="id">
       <view class="room-info" data-id="{{item.id}}" bindtap="onViewDetail">
-        <view class="room-header">
-          <text class="room-name">{{item.name}}</text>
-          <text class="room-status status-{{item.status}}">{{statusMap[item.status] || item.status}}</text>
-        </view>
-        <view class="room-detail">
-          <text class="detail-text">{{typeMap[item.type] || item.type}} | {{item.location || item.building_name || '-'}}</text>
-          <text class="detail-text">容量 {{item.capacity || '-'}} 人 | {{item.open_start_time || '-'}}-{{item.open_end_time || '-'}}</text>
-        </view>
+        <view class="room-header"><text class="room-name">{{item.name}}</text><text class="room-status status-{{item.status}}">{{statusMap[item.status] || item.status}}</text></view>
+        <view class="room-detail"><text class="detail-text">{{typeMap[item.type] || item.type}} | {{item.location || item.building_name || '-'}}</text><text class="detail-text">容量 {{item.capacity || '-'}} 人 | {{item.open_start_time || '-'}}-{{item.open_end_time || '-'}}</text></view>
       </view>
-      <view class="room-actions">
-        <view class="btn-edit" data-id="{{item.id}}" catchtap="onEditRoom">编辑</view>
-        <view class="btn-edit" data-id="{{item.id}}" catchtap="onOpenSeatForm">座位</view>
-        <view class="btn-toggle" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleStatus">{{item.status === 'open' ? '关闭' : '开放'}}</view>
-      </view>
+      <view class="room-actions"><view class="btn-edit" data-id="{{item.id}}" catchtap="onEditRoom">编辑</view><view class="btn-edit" data-id="{{item.id}}" catchtap="onOpenSeatForm">座位</view><view class="btn-toggle" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleStatus">{{item.status === 'open' ? '关闭' : '开放'}}</view></view>
     </view>
   </view>
-
   <view class="empty" wx:else><text>暂无功能房数据</text></view>
 
-  <view class="form-mask" wx:if="{{showForm || showSeatForm}}" bindtap="{{showSeatForm ? 'onCancelSeatForm' : 'onCancelForm'}}"></view>
+  <view class="form-mask" wx:if="{{showForm}}" bindtap="onCancelForm"></view>
+  <view class="form-mask" wx:if="{{showSeatForm}}" bindtap="onCancelSeatForm"></view>
+
   <view class="form-panel {{showForm ? 'form-show' : ''}}">
-    <view class="form-header">
-      <view><text class="form-title">{{formMode === 'edit' ? '编辑功能房' : '新增功能房'}}</text><text class="form-subtitle">维护容量、开放时间、审核规则和设备说明</text></view>
-      <text class="form-close" bindtap="onCancelForm">✕</text>
-    </view>
+    <view class="form-header"><view><text class="form-title">{{formMode === 'edit' ? '编辑功能房' : '新增功能房'}}</text><text class="form-subtitle">维护容量、开放时间、审核规则和设备说明</text></view><text class="form-close" bindtap="onCancelForm">✕</text></view>
     <scroll-view class="form-body" scroll-y="true">
       <view class="form-row required"><text class="form-label">名称</text><input class="form-input" placeholder="功能房名称" value="{{form.name}}" data-field="name" bindinput="onFormInput" /></view>
       <view class="form-row required"><text class="form-label">类型</text><picker mode="selector" range="{{typeOptions}}" range-key="label" bindchange="onTypeChange"><text class="form-picker">{{typeMap[form.type] || '自习室'}}</text></picker></view>
@@ -67,10 +55,7 @@
   </view>
 
   <view class="form-panel {{showSeatForm ? 'form-show' : ''}}">
-    <view class="form-header">
-      <view><text class="form-title">批量维护座位</text><text class="form-subtitle">{{seatForm.roomName}}：重新生成座位并同步容量</text></view>
-      <text class="form-close" bindtap="onCancelSeatForm">✕</text>
-    </view>
+    <view class="form-header"><view><text class="form-title">批量维护座位</text><text class="form-subtitle">{{seatForm.roomName}}：重新生成座位并同步容量</text></view><text class="form-close" bindtap="onCancelSeatForm">✕</text></view>
     <view class="form-body">
       <view class="form-row required"><text class="form-label">座位数</text><input class="form-input" type="number" placeholder="1-500" value="{{seatForm.count}}" data-field="count" bindinput="onSeatInput" /></view>
       <view class="form-row required"><text class="form-label">起始号</text><input class="form-input" type="number" placeholder="默认1" value="{{seatForm.startNumber}}" data-field="startNumber" bindinput="onSeatInput" /></view>
