@@ -180,7 +180,19 @@ const createManager = async function(req, res) { try { return createAccount(req,
 const updateManager = async function(req, res) { try { return updateAccount(req, res); } catch (err) { return response.error(res, err.message); } };
 const deleteManager = async function(req, res) { try { return deleteAccount(req, res); } catch (err) { return response.error(res, err.message); } };
 const operationLogs = async function(req, res) { try { return response.success(res, []); } catch (err) { return response.error(res, err.message); } };
-const getAnnouncements = async function(req, res) { try { const [rows] = await db.query('SELECT * FROM announcements ORDER BY is_top DESC, created_at DESC'); return response.success(res, rows); } catch (err) { logger.error('获取公告异常:', err); return response.error(res, err.message); } };
+const getAnnouncements = async function(req, res) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
+    const offset = (page - 1) * pageSize;
+    const [countResult] = await db.query('SELECT COUNT(*) as total FROM announcements');
+    const [rows] = await db.query('SELECT * FROM announcements ORDER BY is_top DESC, created_at DESC LIMIT ? OFFSET ?', [pageSize, offset]);
+    return response.paginate(res, rows, Number(countResult[0].total || 0), page, pageSize);
+  } catch (err) {
+    logger.error('获取公告异常:', err);
+    return response.error(res, err.message);
+  }
+};
 const createAnnouncement = async function(req, res) { try { const { title, content, type, isTop, target } = req.body; const [result] = await db.query('INSERT INTO announcements (title, content, type, is_top, target, created_at) VALUES (?, ?, ?, ?, ?, NOW())', [title, content, type || 'normal', isTop ? 1 : 0, target || 'all']); return response.success(res, { id: result.insertId }, '发布成功'); } catch (err) { logger.error('发布公告异常:', err); return response.error(res, err.message); } };
 const updateAnnouncement = async function(req, res) { try { const id = req.params.id; const { title, content, type, isTop, target } = req.body; await db.query('UPDATE announcements SET title = COALESCE(?, title), content = COALESCE(?, content), type = COALESCE(?, type), is_top = COALESCE(?, is_top), target = COALESCE(?, target) WHERE id = ?', [title, content, type, isTop === undefined ? null : (isTop ? 1 : 0), target, id]); return response.success(res, null, '更新成功'); } catch (err) { logger.error('更新公告异常:', err); return response.error(res, err.message); } };
 const deleteAnnouncement = async function(req, res) { try { await db.query('DELETE FROM announcements WHERE id = ?', [req.params.id]); return response.success(res, null, '删除成功'); } catch (err) { logger.error('删除公告异常:', err); return response.error(res, err.message); } };
