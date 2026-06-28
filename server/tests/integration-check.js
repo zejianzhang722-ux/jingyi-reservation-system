@@ -11,6 +11,9 @@ function startServer() {
   const child = spawn(process.execPath, ['src/app.js'], {
     cwd: __dirname + '/..',
     env: Object.assign({}, process.env, {
+      NODE_ENV: 'test',
+      ALLOW_MOCK_DB: 'true',
+      ENABLE_SCHEDULER: 'false',
       PORT: String(PORT),
       MYSQL_HOST: '127.0.0.1',
       MYSQL_PORT: '1',
