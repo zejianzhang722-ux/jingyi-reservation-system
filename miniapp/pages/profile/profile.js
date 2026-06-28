@@ -28,7 +28,6 @@ Page({
       { key: 'usageStats', name: '使用统计', icon: 'chart', tone: 'green' },
       { key: 'rules', name: '管理制度', icon: 'document', tone: 'blue' },
       { key: 'feedback', name: '帮助反馈', icon: 'chat', tone: 'cyan' },
-      { key: 'network', name: '网络设置', icon: 'network', tone: 'purple' },
       { key: 'subscribe', name: '订阅消息管理', icon: 'bell', tone: 'gold' },
       { key: 'about', name: '关于系统', icon: 'info', tone: 'gray' },
       { key: 'logout', name: '退出登录', icon: 'logout', tone: 'red' }
@@ -92,7 +91,6 @@ Page({
       case 'usageStats': wx.navigateTo({ url: '/pages/credit-detail/credit-detail?tab=stats' }); break
       case 'rules': wx.navigateTo({ url: '/pages/rules/rules' }); break
       case 'feedback': wx.navigateTo({ url: '/pages/feedback/feedback' }); break
-      case 'network': wx.navigateTo({ url: '/pages/network-settings/network-settings' }); break
       case 'subscribe': wx.navigateTo({ url: '/pages/subscribe-settings/subscribe-settings' }); break
       case 'about': wx.showModal({ title: '关于系统', content: '敬一书院功能房预约管理系统 v1.0.0', showCancel: false }); break
       case 'logout':
