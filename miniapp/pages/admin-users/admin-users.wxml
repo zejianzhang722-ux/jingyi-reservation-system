@@ -3,45 +3,28 @@
     <view class="header-top">
       <text class="title">宿生管理</text>
       <view class="header-actions">
-        <view class="export-user-btn" bindtap="onExportUsers">导出名单</view>
-        <view class="add-user-btn" bindtap="onAddUser">添加宿生</view>
+        <view class="export-user-btn" bindtap="onExportUsers">导出</view>
+        <view class="export-user-btn" bindtap="onOpenImport">导入</view>
+        <view class="add-user-btn" bindtap="onAddUser">添加</view>
       </view>
     </view>
-    <view class="search-bar">
-      <input class="search-input" placeholder="搜索学号/姓名/手机号/宿舍" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" />
-    </view>
+    <view class="search-bar"><input class="search-input" placeholder="搜索学号/姓名/手机号/宿舍" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" /></view>
   </view>
+
   <view class="user-list" wx:if="{{filteredList.length > 0}}">
     <view class="user-item" wx:for="{{filteredList}}" wx:key="id">
       <view class="user-avatar">{{item.avatarInitial}}</view>
-      <view class="user-info">
-        <text class="user-name">{{item.name || item.real_name || '未知'}}</text>
-        <text class="user-detail">{{item.student_no || item.student_id || '-'}} | {{item.college || item.major || '-'}}</text>
-        <text class="user-credit">信用分: {{item.creditDisplay}}</text>
-      </view>
-      <view class="user-actions">
-        <text class="user-status {{item.status}}">{{item.status === 'active' ? '正常' : item.status === 'banned' ? '封禁' : item.status}}</text>
-        <view class="action-btns">
-          <view class="btn-credit" data-id="{{item.id}}" catchtap="onEditUser">编辑</view>
-          <view class="btn-credit" data-id="{{item.id}}" data-score="{{item.credit_score}}" catchtap="onAdjustCredit">调分</view>
-          <view class="btn-ban {{item.status === 'banned' ? 'btn-unban' : ''}}" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleBan">{{item.status === 'banned' ? '解封' : '封禁'}}</view>
-        </view>
-      </view>
+      <view class="user-info"><text class="user-name">{{item.name || item.real_name || '未知'}}</text><text class="user-detail">{{item.student_no || item.student_id || '-'}} | {{item.college || item.major || '-'}}</text><text class="user-credit">信用分: {{item.creditDisplay}}</text></view>
+      <view class="user-actions"><text class="user-status {{item.status}}">{{item.status === 'active' ? '正常' : item.status === 'banned' ? '封禁' : item.status}}</text><view class="action-btns"><view class="btn-credit" data-id="{{item.id}}" catchtap="onEditUser">编辑</view><view class="btn-credit" data-id="{{item.id}}" data-score="{{item.credit_score}}" catchtap="onAdjustCredit">调分</view><view class="btn-ban {{item.status === 'banned' ? 'btn-unban' : ''}}" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleBan">{{item.status === 'banned' ? '解封' : '封禁'}}</view></view></view>
     </view>
   </view>
-  <view class="empty" wx:else>
-    <text>暂无用户数据</text>
-  </view>
+  <view class="empty" wx:else><text>暂无用户数据</text></view>
 
   <view class="form-mask" wx:if="{{showAddForm}}" bindtap="onCancelAdd"></view>
+  <view class="form-mask" wx:if="{{showImportForm}}" bindtap="onCancelImport"></view>
+
   <view class="form-panel {{showAddForm ? 'form-show' : ''}}">
-    <view class="form-header">
-      <view>
-        <text class="form-title">{{formMode === 'edit' ? '编辑宿生资料' : '手动添加宿生'}}</text>
-        <text class="form-subtitle">账号为学号，登录校验码为6位一卡通号</text>
-      </view>
-      <text class="form-close" bindtap="onCancelAdd">✕</text>
-    </view>
+    <view class="form-header"><view><text class="form-title">{{formMode === 'edit' ? '编辑宿生资料' : '手动添加宿生'}}</text><text class="form-subtitle">账号为学号，登录校验码为6位一卡通号</text></view><text class="form-close" bindtap="onCancelAdd">✕</text></view>
     <scroll-view class="form-body" scroll-y="true">
       <view class="form-row required"><text class="form-label">学号</text><input class="form-input" type="number" maxlength="10" placeholder="9-10位学号" value="{{addForm.studentNo}}" data-field="studentNo" bindinput="onAddInput" /></view>
       <view class="form-row required"><text class="form-label">姓名</text><input class="form-input" placeholder="宿生姓名" value="{{addForm.realName}}" data-field="realName" bindinput="onAddInput" /></view>
@@ -54,9 +37,16 @@
       <view class="form-row"><text class="form-label">楼栋ID</text><input class="form-input" type="number" placeholder="可选，非全局管理员默认按权限楼栋" value="{{addForm.buildingId}}" data-field="buildingId" bindinput="onAddInput" /></view>
       <view class="form-row"><text class="form-label">宿舍号</text><input class="form-input" placeholder="可选" value="{{addForm.roomNumber}}" data-field="roomNumber" bindinput="onAddInput" /></view>
     </scroll-view>
-    <view class="form-footer">
-      <view class="form-btn btn-cancel" bindtap="onCancelAdd">取消</view>
-      <view class="form-btn btn-submit" bindtap="submitAddUser">{{submittingAdd ? '保存中...' : (formMode === 'edit' ? '保存修改' : '确认添加')}}</view>
+    <view class="form-footer"><view class="form-btn btn-cancel" bindtap="onCancelAdd">取消</view><view class="form-btn btn-submit" bindtap="submitAddUser">{{submittingAdd ? '保存中...' : (formMode === 'edit' ? '保存修改' : '确认添加')}}</view></view>
+  </view>
+
+  <view class="form-panel {{showImportForm ? 'form-show' : ''}}">
+    <view class="form-header"><view><text class="form-title">批量导入宿生</text><text class="form-subtitle">支持从 Excel 复制粘贴，列顺序为学号、姓名、一卡通号、手机号、学院、专业、年级、班级、楼栋ID、宿舍号</text></view><text class="form-close" bindtap="onCancelImport">✕</text></view>
+    <view class="form-body">
+      <textarea class="import-textarea" placeholder="每行一名宿生，列之间用制表符或英文逗号分隔" value="{{importText}}" bindinput="onImportInput" maxlength="12000" />
+      <view class="import-helper" bindtap="onPasteImportExample">填入示例</view>
+      <view class="import-result" wx:if="{{importResult}}">{{importResult}}</view>
     </view>
+    <view class="form-footer"><view class="form-btn btn-cancel" bindtap="onCancelImport">取消</view><view class="form-btn btn-submit" bindtap="onSubmitImport">{{submittingImport ? '导入中...' : '开始导入'}}</view></view>
   </view>
 </view>
