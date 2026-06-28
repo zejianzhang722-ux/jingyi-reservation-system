@@ -20,8 +20,10 @@ function studentOnly(req, res, next) {
 router.get('/list', auth, requireAdmin, adminScope.loadAdminScope, scopedQueryController.users);
 router.post('/list', auth, requireAdmin, adminScope.loadAdminScope, studentAdminController.createStudent);
 router.put('/list/:id', auth, requireAdmin, adminScope.loadAdminScope, studentAdminController.updateStudent);
+router.put('/list/:id/status', auth, requireAdmin, adminScope.loadAdminScope, studentAdminController.updateStudentStatus);
 router.post('/create', auth, requireAdmin, adminScope.loadAdminScope, studentAdminController.createStudent);
 router.put('/create/:id', auth, requireAdmin, adminScope.loadAdminScope, studentAdminController.updateStudent);
+router.put('/create/:id/status', auth, requireAdmin, adminScope.loadAdminScope, studentAdminController.updateStudentStatus);
 router.get('/profile', auth, studentOnly, userController.getProfile);
 router.put('/profile', auth, studentOnly, updateProfileRules, userController.updateProfile);
 router.post(
