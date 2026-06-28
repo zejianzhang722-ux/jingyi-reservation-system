@@ -56,7 +56,21 @@ Page({
     var that = this
     request.get('/room/announcements', {}, { silent: true }).then(function (data) { var announcements = Array.isArray(data) ? data : []; var texts = announcements.map(function (a) { return a.title + (a.content ? '：' + a.content : '') }); that.setData({ announcementText: texts.join('    ') }) }).catch(function () { that.setData({ announcementText: '欢迎使用敬一书院功能房预约系统，请按需预约并准时签到。' }) })
   },
-  onSearchTap: function () { wx.navigateTo({ url: '/pages/room-list/room-list' }) },
+  onSearchTap: function () {
+    var that = this
+    wx.showModal({
+      title: '搜索功能房',
+      editable: true,
+      placeholderText: '输入房号、名称或用途',
+      success: function (res) {
+        if (!res.confirm) return
+        var keyword = String(res.content || '').trim()
+        if (!keyword) { wx.showToast({ title: '请输入搜索关键词', icon: 'none' }); return }
+        that.setData({ searchKeyword: keyword })
+        wx.navigateTo({ url: '/pages/room-list/room-list?keyword=' + encodeURIComponent(keyword) })
+      }
+    })
+  },
   onGroupListTap: function () { wx.navigateTo({ url: '/pages/group-list/group-list' }) },
   onSearchInput: function (e) { this.setData({ searchKeyword: e.detail.value }) },
   onSearch: function () { var keyword = this.data.searchKeyword.trim(); if (keyword) wx.navigateTo({ url: '/pages/room-list/room-list?keyword=' + encodeURIComponent(keyword) }) },
