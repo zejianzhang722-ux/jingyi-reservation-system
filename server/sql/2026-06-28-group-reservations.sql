@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS reservation_groups (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   room_id BIGINT UNSIGNED NOT NULL,
   creator_id BIGINT UNSIGNED NOT NULL,
+  reservation_id BIGINT UNSIGNED DEFAULT NULL,
   title VARCHAR(80) NOT NULL,
   date DATE NOT NULL,
   start_time TIME NOT NULL,
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS reservation_groups (
   PRIMARY KEY (id),
   KEY idx_group_room_time (room_id, date, start_time, end_time),
   KEY idx_group_creator (creator_id),
+  KEY idx_group_reservation (reservation_id),
   KEY idx_group_status (status, date)
 );
 
@@ -30,3 +32,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   UNIQUE KEY uk_group_member (group_id, user_id),
   KEY idx_group_member_user (user_id)
 );
+
+-- 如果已经先执行过旧版建表脚本，可单独执行以下语句补列：
+-- ALTER TABLE reservation_groups ADD COLUMN reservation_id BIGINT UNSIGNED DEFAULT NULL AFTER creator_id;
+-- ALTER TABLE reservation_groups ADD KEY idx_group_reservation (reservation_id);
