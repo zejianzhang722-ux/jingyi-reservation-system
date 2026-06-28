@@ -3,9 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const config = require('../config');
 
-const clean = function(value) {
-  return String(value || '').trim();
-};
+const clean = function(value) { return String(value || '').trim(); };
 
 const normalizeStudentPayload = function(body) {
   body = body || {};
@@ -34,10 +32,19 @@ const validateStudentPayload = function(data, mode) {
 };
 
 const applyAdminScopeBuilding = function(req, data) {
-  if (req.adminScope && !req.adminScope.isGlobal) {
-    return req.adminScope.buildingId || null;
-  }
+  if (req.adminScope && !req.adminScope.isGlobal) return req.adminScope.buildingId || null;
   return data.buildingId ? parseInt(data.buildingId, 10) : null;
+};
+
+const getStudentForScope = async function(req, studentId) {
+  let scopeSql = '';
+  const params = [studentId, 'student'];
+  if (req.adminScope && !req.adminScope.isGlobal) {
+    scopeSql = ' AND building_id = ?';
+    params.push(req.adminScope.buildingId);
+  }
+  const [rows] = await db.query('SELECT id FROM users WHERE id = ? AND role = ?' + scopeSql, params);
+  return rows[0] || null;
 };
 
 const createStudent = async function(req, res) {
@@ -45,38 +52,15 @@ const createStudent = async function(req, res) {
     const data = normalizeStudentPayload(req.body);
     const validateError = validateStudentPayload(data, 'create');
     if (validateError) return response.error(res, validateError, 400);
-
     const normalizedBuildingId = applyAdminScopeBuilding(req, data);
-    const [existing] = await db.query(
-      'SELECT id FROM users WHERE role = ? AND (student_no = ? OR student_id = ? OR card_no = ?) LIMIT 1',
-      ['student', data.studentNo, data.studentNo, data.cardNo]
-    );
+    const [existing] = await db.query('SELECT id FROM users WHERE role = ? AND (student_no = ? OR student_id = ? OR card_no = ?) LIMIT 1', ['student', data.studentNo, data.studentNo, data.cardNo]);
     if (existing.length > 0) return response.error(res, '该学号或一卡通号已存在', 409);
-
     const initialScore = Number(config.credit && config.credit.initialScore) || 100;
     const [result] = await db.query(
       'INSERT INTO users (student_no, student_id, card_no, name, real_name, phone, college, major, grade, class_name, building_id, room_number, role, credit_score, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
       [data.studentNo, data.studentNo, data.cardNo, data.realName, data.realName, data.phone || null, data.college || null, data.major || null, data.grade || null, data.className || null, normalizedBuildingId, data.roomNumber || null, 'student', initialScore, 'active']
     );
-
-    return response.success(res, {
-      id: result.insertId,
-      student_no: data.studentNo,
-      student_id: data.studentNo,
-      name: data.realName,
-      real_name: data.realName,
-      card_no: data.cardNo,
-      phone: data.phone,
-      college: data.college,
-      major: data.major,
-      grade: data.grade,
-      class_name: data.className,
-      building_id: normalizedBuildingId,
-      room_number: data.roomNumber,
-      role: 'student',
-      credit_score: initialScore,
-      status: 'active'
-    }, '宿生已添加');
+    return response.success(res, { id: result.insertId, student_no: data.studentNo, student_id: data.studentNo, name: data.realName, real_name: data.realName, card_no: data.cardNo, phone: data.phone, college: data.college, major: data.major, grade: data.grade, class_name: data.className, building_id: normalizedBuildingId, room_number: data.roomNumber, role: 'student', credit_score: initialScore, status: 'active' }, '宿生已添加');
   } catch (err) {
     logger.error('管理员手动添加宿生失败:', err);
     return response.error(res, err.message || '添加宿生失败', 500);
@@ -89,28 +73,15 @@ const updateStudent = async function(req, res) {
     const data = normalizeStudentPayload(req.body);
     const validateError = validateStudentPayload(data, 'update');
     if (validateError) return response.error(res, validateError, 400);
-
-    let scopeSql = '';
-    const scopeParams = [studentId];
-    if (req.adminScope && !req.adminScope.isGlobal) {
-      scopeSql = ' AND building_id = ?';
-      scopeParams.push(req.adminScope.buildingId);
-    }
-    const [current] = await db.query('SELECT id FROM users WHERE id = ? AND role = ?' + scopeSql, [studentId, 'student'].concat(scopeParams.slice(1)));
-    if (!current.length) return response.error(res, '宿生不存在或无权编辑', 404);
-
-    const [duplicate] = await db.query(
-      'SELECT id FROM users WHERE role = ? AND id != ? AND (student_no = ? OR student_id = ? OR card_no = ?) LIMIT 1',
-      ['student', studentId, data.studentNo, data.studentNo, data.cardNo]
-    );
+    const current = await getStudentForScope(req, studentId);
+    if (!current) return response.error(res, '宿生不存在或无权编辑', 404);
+    const [duplicate] = await db.query('SELECT id FROM users WHERE role = ? AND id != ? AND (student_no = ? OR student_id = ? OR card_no = ?) LIMIT 1', ['student', studentId, data.studentNo, data.studentNo, data.cardNo]);
     if (duplicate.length > 0) return response.error(res, '该学号或一卡通号已被其他宿生使用', 409);
-
     const normalizedBuildingId = applyAdminScopeBuilding(req, data);
     await db.query(
       'UPDATE users SET student_no = ?, student_id = ?, card_no = ?, name = ?, real_name = ?, phone = ?, college = ?, major = ?, grade = ?, class_name = ?, building_id = ?, room_number = ? WHERE id = ?',
       [data.studentNo, data.studentNo, data.cardNo, data.realName, data.realName, data.phone || null, data.college || null, data.major || null, data.grade || null, data.className || null, normalizedBuildingId, data.roomNumber || null, studentId]
     );
-
     return response.success(res, null, '宿生信息已更新');
   } catch (err) {
     logger.error('管理员编辑宿生失败:', err);
@@ -118,4 +89,19 @@ const updateStudent = async function(req, res) {
   }
 };
 
-module.exports = { createStudent, updateStudent };
+const updateStudentStatus = async function(req, res) {
+  try {
+    const studentId = req.params.id;
+    const status = clean(req.body && req.body.status);
+    if (!['active', 'banned'].includes(status)) return response.error(res, '宿生状态无效', 400);
+    const current = await getStudentForScope(req, studentId);
+    if (!current) return response.error(res, '宿生不存在或无权操作', 404);
+    await db.query('UPDATE users SET status = ? WHERE id = ? AND role = ?', [status, studentId, 'student']);
+    return response.success(res, null, status === 'banned' ? '宿生已封禁' : '宿生已解封');
+  } catch (err) {
+    logger.error('管理员修改宿生状态失败:', err);
+    return response.error(res, err.message || '修改宿生状态失败', 500);
+  }
+};
+
+module.exports = { createStudent, updateStudent, updateStudentStatus };
