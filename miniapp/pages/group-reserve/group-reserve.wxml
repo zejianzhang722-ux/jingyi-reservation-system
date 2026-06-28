@@ -2,8 +2,7 @@
   <view class="create-form" wx:if="{{mode === 'create'}}">
     <view class="form-card">
       <view class="form-section-title">发起组团</view>
-      <view class="room-tip" wx:if="{{room}}">{{room.name}} · 组团成功后请按书院要求完成正式预约或到场使用</view>
-
+      <view class="room-tip" wx:if="{{room}}">{{room.name}} · 成员加入后可由发起人提交正式预约</view>
       <view class="form-item"><text class="form-label">标题</text><input class="form-input" placeholder="请输入组团标题" value="{{form.title}}" bindinput="onTitleInput" maxlength="80" /></view>
       <view class="form-item"><text class="form-label">日期</text><picker mode="date" start="{{today}}" value="{{form.date}}" bindchange="onDateChange"><text class="form-value {{form.date ? '' : 'placeholder'}}">{{form.date || '请选择'}}</text></picker></view>
       <view class="form-item"><text class="form-label">开始时间</text><picker mode="time" value="{{form.startHour}}" bindchange="onStartHourChange"><text class="form-value {{form.startHour ? '' : 'placeholder'}}">{{form.startHour || '请选择'}}</text></picker></view>
@@ -20,29 +19,23 @@
         <view class="group-title-wrap"><text class="group-title">{{group.title}}</text><text class="group-room">{{group.roomName || room.name || '功能房'}}</text></view>
         <text class="group-status status-{{group.status}}">{{statusMap[group.status] || group.status}}</text>
       </view>
-
       <view class="group-info">
         <view class="group-info-row"><text class="info-label">日期</text><text class="info-value">{{group.date}}</text></view>
         <view class="group-info-row"><text class="info-label">时间</text><text class="info-value">{{group.startHour || group.start_time}} - {{group.endHour || group.end_time}}</text></view>
         <view class="group-info-row"><text class="info-label">人数</text><text class="info-value">{{members.length}}/{{group.maxMembers || group.max_members}}</text></view>
         <view class="group-info-row"><text class="info-label">发起人</text><text class="info-value">{{group.creatorName || '宿生'}}</text></view>
+        <view class="group-info-row" wx:if="{{group.reservationId || group.reservation_id}}"><text class="info-label">预约单</text><text class="info-value">已生成</text></view>
         <view class="group-info-row" wx:if="{{group.description}}"><text class="info-label">描述</text><text class="info-value">{{group.description}}</text></view>
       </view>
-
-      <view class="members-section">
-        <text class="members-title">成员列表</text>
-        <view class="member-item" wx:for="{{members}}" wx:key="id">
-          <image class="member-avatar" src="{{item.avatarUrl || item.avatar_url || '/images/default-avatar.png'}}" mode="aspectFill"></image>
-          <text class="member-name">{{item.name || item.nickname || '成员'}}</text>
-          <text class="member-tag" wx:if="{{item.isCreator || item.is_creator}}">发起人</text>
-        </view>
-      </view>
+      <view class="members-section"><text class="members-title">成员列表</text><view class="member-item" wx:for="{{members}}" wx:key="id"><image class="member-avatar" src="{{item.avatarUrl || item.avatar_url || '/images/default-avatar.png'}}" mode="aspectFill"></image><text class="member-name">{{item.name || item.nickname || '成员'}}</text><text class="member-tag" wx:if="{{item.isCreator || item.is_creator}}">发起人</text></view></view>
     </view>
 
     <view class="group-actions">
       <view class="action-btn btn-primary {{submitting ? 'btn-disabled' : ''}}" wx:if="{{mode === 'join' && group && group.status === 'open' && !group.isJoined}}" bindtap="onJoinGroup">{{submitting ? '加入中...' : '加入组团'}}</view>
-      <button class="action-btn btn-outline share-btn" wx:if="{{mode === 'detail' && group && group.status === 'open'}}" open-type="share">邀请成员</button>
-      <view class="action-btn btn-danger {{submitting ? 'btn-disabled' : ''}}" wx:if="{{group && group.isJoined && group.status !== 'cancelled'}}" bindtap="onLeaveGroup">{{group.isCreator ? '取消组团' : '退出组团'}}</view>
+      <button class="action-btn btn-outline share-btn" wx:if="{{mode === 'detail' && group && group.status === 'open' && !(group.reservationId || group.reservation_id)}}" open-type="share">邀请成员</button>
+      <view class="action-btn btn-primary {{submitting ? 'btn-disabled' : ''}}" wx:if="{{group && group.canSubmitReservation}}" bindtap="onSubmitReservation">{{submitting ? '提交中...' : '提交正式预约'}}</view>
+      <view class="action-btn btn-outline" wx:if="{{group && (group.reservationId || group.reservation_id)}}" bindtap="onViewReservation">查看预约单</view>
+      <view class="action-btn btn-danger {{submitting ? 'btn-disabled' : ''}}" wx:if="{{group && group.isJoined && group.status !== 'cancelled' && !(group.reservationId || group.reservation_id)}}" bindtap="onLeaveGroup">{{group.isCreator ? '取消组团' : '退出组团'}}</view>
     </view>
   </view>
 
