@@ -124,16 +124,16 @@ const create = async function(req, res) {
 
 const list = async function(req, res) {
   try {
-    const status = clean(req.query.status || 'open');
     const mine = String(req.query.mine || '') === '1';
+    const status = req.query.status === undefined ? (mine ? 'all' : 'open') : clean(req.query.status);
     const params = [];
     let where = ' WHERE 1=1';
-    if (status) { where += ' AND g.status = ?'; params.push(status); }
+    if (status && status !== 'all') { where += ' AND g.status = ?'; params.push(status); }
     if (mine) { where += ' AND EXISTS (SELECT 1 FROM group_members gm2 WHERE gm2.group_id = g.id AND gm2.user_id = ?)'; params.push(req.user.id); }
     const [rows] = await db.query(
       'SELECT g.*, r.name AS room_name, u.real_name AS creator_name, (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count ' +
       'FROM reservation_groups g JOIN rooms r ON r.id = g.room_id JOIN users u ON u.id = g.creator_id' + where +
-      ' ORDER BY g.date ASC, g.start_time ASC, g.created_at DESC LIMIT 50',
+      ' ORDER BY CASE WHEN g.status IN (\'open\',\'full\') THEN 0 WHEN g.status = \'submitted\' THEN 1 ELSE 2 END, g.date ASC, g.start_time ASC, g.created_at DESC LIMIT 80',
       params
     );
     return response.success(res, rows.map(mapGroup));
