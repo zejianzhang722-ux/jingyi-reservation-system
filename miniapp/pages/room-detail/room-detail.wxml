@@ -17,7 +17,6 @@
 
   <view class="detail-actions" wx:if="{{room && !loading}}">
     <view class="action-btn btn-primary" bindtap="onReserveTap">查看时间并预约</view>
-    <view class="action-btn btn-outline" bindtap="onGroupTap">发起组团预约</view>
     <view class="action-btn btn-outline" bindtap="onViewRules">查看管理制度</view>
     <view class="action-btn btn-outline" bindtap="onCompareTap">功能房对比</view>
   </view>
