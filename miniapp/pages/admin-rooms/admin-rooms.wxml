@@ -3,7 +3,7 @@
     <view class="header-top">
       <view>
         <text class="title">功能房管理</text>
-        <text class="subtitle">查看房间状态，按分类快速筛选</text>
+        <text class="subtitle">查看房间状态，维护开放规则、设备与座位</text>
       </view>
       <view class="add-btn" bindtap="onAddRoom">新增功能房</view>
     </view>
@@ -33,22 +33,18 @@
       </view>
       <view class="room-actions">
         <view class="btn-edit" data-id="{{item.id}}" catchtap="onEditRoom">编辑</view>
+        <view class="btn-edit" data-id="{{item.id}}" catchtap="onOpenSeatForm">座位</view>
         <view class="btn-toggle" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleStatus">{{item.status === 'open' ? '关闭' : '开放'}}</view>
       </view>
     </view>
   </view>
 
-  <view class="empty" wx:else>
-    <text>暂无功能房数据</text>
-  </view>
+  <view class="empty" wx:else><text>暂无功能房数据</text></view>
 
-  <view class="form-mask" wx:if="{{showForm}}" bindtap="onCancelForm"></view>
+  <view class="form-mask" wx:if="{{showForm || showSeatForm}}" bindtap="{{showSeatForm ? 'onCancelSeatForm' : 'onCancelForm'}}"></view>
   <view class="form-panel {{showForm ? 'form-show' : ''}}">
     <view class="form-header">
-      <view>
-        <text class="form-title">{{formMode === 'edit' ? '编辑功能房' : '新增功能房'}}</text>
-        <text class="form-subtitle">维护容量、开放时间、审核规则和设备说明</text>
-      </view>
+      <view><text class="form-title">{{formMode === 'edit' ? '编辑功能房' : '新增功能房'}}</text><text class="form-subtitle">维护容量、开放时间、审核规则和设备说明</text></view>
       <text class="form-close" bindtap="onCancelForm">✕</text>
     </view>
     <scroll-view class="form-body" scroll-y="true">
@@ -67,9 +63,20 @@
       <view class="form-row form-row-textarea"><text class="form-label">设备</text><textarea class="form-textarea" placeholder="如 WiFi、电源、空调" value="{{form.facilities}}" data-field="facilities" bindinput="onFormInput" maxlength="300" /></view>
       <view class="form-row form-row-textarea"><text class="form-label">说明</text><textarea class="form-textarea" placeholder="使用说明或注意事项" value="{{form.description}}" data-field="description" bindinput="onFormInput" maxlength="500" /></view>
     </scroll-view>
-    <view class="form-footer">
-      <view class="form-btn btn-cancel" bindtap="onCancelForm">取消</view>
-      <view class="form-btn btn-submit" bindtap="onSubmitForm">{{submitting ? '保存中...' : '保存'}}</view>
+    <view class="form-footer"><view class="form-btn btn-cancel" bindtap="onCancelForm">取消</view><view class="form-btn btn-submit" bindtap="onSubmitForm">{{submitting ? '保存中...' : '保存'}}</view></view>
+  </view>
+
+  <view class="form-panel {{showSeatForm ? 'form-show' : ''}}">
+    <view class="form-header">
+      <view><text class="form-title">批量维护座位</text><text class="form-subtitle">{{seatForm.roomName}}：重新生成座位并同步容量</text></view>
+      <text class="form-close" bindtap="onCancelSeatForm">✕</text>
     </view>
+    <view class="form-body">
+      <view class="form-row required"><text class="form-label">座位数</text><input class="form-input" type="number" placeholder="1-500" value="{{seatForm.count}}" data-field="count" bindinput="onSeatInput" /></view>
+      <view class="form-row required"><text class="form-label">起始号</text><input class="form-input" type="number" placeholder="默认1" value="{{seatForm.startNumber}}" data-field="startNumber" bindinput="onSeatInput" /></view>
+      <view class="form-row required"><text class="form-label">每行数</text><input class="form-input" type="number" placeholder="默认10" value="{{seatForm.rowSize}}" data-field="rowSize" bindinput="onSeatInput" /></view>
+      <view class="seat-warning">保存后将批量生成该功能房座位，并把容量同步为座位数。正式使用前请确认无正在进行的预约。</view>
+    </view>
+    <view class="form-footer"><view class="form-btn btn-cancel" bindtap="onCancelSeatForm">取消</view><view class="form-btn btn-submit" bindtap="onSubmitSeats">{{submittingSeats ? '生成中...' : '确认生成'}}</view></view>
   </view>
 </view>
