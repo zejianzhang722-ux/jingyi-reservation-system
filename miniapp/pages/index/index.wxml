@@ -12,7 +12,7 @@
       <view class="scene-chip chip-open"><view class="chip-dot"></view><text>空间在线</text></view>
       <view class="scene-chip chip-count"><text class="chip-count-num">{{categories.length}}</text><text>类空间</text></view>
     </view>
-    <view class="search-bar ui-floating-card ui-pressable" bindtap="onSearchTap"><view class="search-icon-wrap"><view class="search-icon-svg"></view></view><text class="search-placeholder" wx:if="{{!searchKeyword}}">搜索房号或功能房名称</text><text class="search-keyword" wx:else>{{searchKeyword}}</text><view class="search-arrow"></view></view>
+    <view class="search-bar ui-floating-card ui-pressable" bindtap="onSearchTap"><view class="search-icon-wrap"><view class="search-icon-svg"></view></view><text class="search-placeholder" wx:if="{{!searchKeyword}}">搜索房号、功能房名称或用途</text><text class="search-keyword" wx:else>{{searchKeyword}}</text><view class="search-arrow"></view></view>
   </view>
 
   <view class="offline-tip ui-floating-card" wx:if="{{isOffline}}"><view class="offline-dot"></view><text class="offline-text">网络暂不可用，恢复连接后将自动刷新。</text></view>
@@ -21,11 +21,10 @@
   <view class="quick-panel ui-rise">
     <view class="quick-item ui-card ui-pressable" bindtap="onSearchTap"><view class="quick-icon quick-icon-space"><view class="quick-icon-cube"></view></view><text class="quick-num">{{categories.length}}</text><text class="quick-label">空间分类</text></view>
     <view class="quick-item ui-card"><view class="quick-icon quick-icon-credit"><view class="quick-icon-shield"></view></view><text class="quick-num">{{creditScore}}</text><text class="quick-label">当前信用</text></view>
-    <view class="quick-item ui-card ui-pressable" bindtap="onGroupListTap"><view class="quick-icon quick-icon-group"><view class="quick-icon-group-shape"></view></view><text class="quick-num quick-num-word">组团</text><text class="quick-label">组团预约</text></view>
     <view class="quick-item ui-card ui-pressable" bindtap="onAvatarTap"><view class="quick-icon quick-icon-calendar"><view class="quick-icon-calendar-shape"></view></view><text class="quick-num quick-num-word">我的</text><text class="quick-label">预约与设置</text></view>
   </view>
 
-  <view class="section-heading"><view><text class="ui-section-title">可预约空间</text><text class="ui-section-caption">选择空间类型，查看实时余量与可预约时段</text></view><view class="section-more ui-pressable" bindtap="onSearchTap"><text>全部</text><view class="section-arrow"></view></view></view>
+  <view class="section-heading"><view><text class="ui-section-title">可预约空间</text><text class="ui-section-caption">选择空间类型，查看实时余量与可预约时段；多人空间会在预约确认页发起成员确认</text></view><view class="section-more ui-pressable" bindtap="onSearchTap"><text>全部</text><view class="section-arrow"></view></view></view>
   <view class="category-grid" wx:if="{{!loading}}"><view class="category-item ui-card ui-pressable {{currentCategory === item.key ? 'category-item-active' : ''}}" wx:for="{{categories}}" wx:key="key" data-key="{{item.key}}" bindtap="onCategoryTap"><view class="category-icon-wrap category-icon-{{item.key}}"><view class="category-highlight"></view><view class="category-symbol category-symbol-{{item.iconKey || item.key}}"></view><view class="category-badge" wx:if="{{item.freeCount > 0}}"><text class="category-badge-text">{{item.freeCount}}</text></view></view><text class="category-name">{{item.name}}</text><text class="category-count">{{item.count}} 间</text></view></view>
   <view class="empty-category ui-card" wx:if="{{!loading && categories.length === 0}}"><view class="empty-icon-svg"></view><text class="empty-text">暂无功能房分类</text><text class="empty-hint">请检查网络连接后下拉重试</text></view>
   <view class="loading-state" wx:if="{{loading}}"><view class="loading-spinner"></view><text class="loading-text">正在加载空间状态...</text></view>
