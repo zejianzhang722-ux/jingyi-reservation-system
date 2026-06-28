@@ -1,7 +1,12 @@
 <view class="container">
   <view class="header">
-    <text class="title">功能房管理</text>
-    <text class="subtitle">查看房间状态，按分类快速筛选</text>
+    <view class="header-top">
+      <view>
+        <text class="title">功能房管理</text>
+        <text class="subtitle">查看房间状态，按分类快速筛选</text>
+      </view>
+      <view class="add-btn" bindtap="onAddRoom">新增功能房</view>
+    </view>
   </view>
 
   <scroll-view class="filter-tabs" scroll-x="true" show-scrollbar="false">
@@ -27,14 +32,44 @@
         </view>
       </view>
       <view class="room-actions">
-        <view class="btn-toggle" data-id="{{item.id}}" data-status="{{item.status}}" bindtap="onToggleStatus">
-          {{item.status === 'open' ? '关闭' : '开放'}}
-        </view>
+        <view class="btn-edit" data-id="{{item.id}}" catchtap="onEditRoom">编辑</view>
+        <view class="btn-toggle" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleStatus">{{item.status === 'open' ? '关闭' : '开放'}}</view>
       </view>
     </view>
   </view>
 
   <view class="empty" wx:else>
     <text>暂无功能房数据</text>
+  </view>
+
+  <view class="form-mask" wx:if="{{showForm}}" bindtap="onCancelForm"></view>
+  <view class="form-panel {{showForm ? 'form-show' : ''}}">
+    <view class="form-header">
+      <view>
+        <text class="form-title">{{formMode === 'edit' ? '编辑功能房' : '新增功能房'}}</text>
+        <text class="form-subtitle">维护容量、开放时间、审核规则和设备说明</text>
+      </view>
+      <text class="form-close" bindtap="onCancelForm">✕</text>
+    </view>
+    <scroll-view class="form-body" scroll-y="true">
+      <view class="form-row required"><text class="form-label">名称</text><input class="form-input" placeholder="功能房名称" value="{{form.name}}" data-field="name" bindinput="onFormInput" /></view>
+      <view class="form-row required"><text class="form-label">类型</text><picker mode="selector" range="{{typeOptions}}" range-key="label" bindchange="onTypeChange"><text class="form-picker">{{typeMap[form.type] || '自习室'}}</text></picker></view>
+      <view class="form-row required"><text class="form-label">楼栋ID</text><input class="form-input" type="number" placeholder="楼栋ID" value="{{form.buildingId}}" data-field="buildingId" bindinput="onFormInput" /></view>
+      <view class="form-row"><text class="form-label">楼层</text><input class="form-input" type="number" placeholder="可选" value="{{form.floor}}" data-field="floor" bindinput="onFormInput" /></view>
+      <view class="form-row"><text class="form-label">位置</text><input class="form-input" placeholder="如 E座301" value="{{form.location}}" data-field="location" bindinput="onFormInput" /></view>
+      <view class="form-row required"><text class="form-label">容量</text><input class="form-input" type="number" placeholder="可容纳人数" value="{{form.capacity}}" data-field="capacity" bindinput="onFormInput" /></view>
+      <view class="form-row required"><text class="form-label">开放</text><input class="form-input" placeholder="08:00" value="{{form.openStartTime}}" data-field="openStartTime" bindinput="onFormInput" /></view>
+      <view class="form-row required"><text class="form-label">关闭</text><input class="form-input" placeholder="22:00" value="{{form.openEndTime}}" data-field="openEndTime" bindinput="onFormInput" /></view>
+      <view class="form-row required"><text class="form-label">最长</text><input class="form-input" type="number" placeholder="分钟" value="{{form.maxDuration}}" data-field="maxDuration" bindinput="onFormInput" /></view>
+      <view class="form-row"><text class="form-label">状态</text><picker mode="selector" range="{{['开放中','已关闭','维护中']}}" value="{{form.status === 'closed' ? 1 : form.status === 'maintenance' ? 2 : 0}}" bindchange="onStatusChange"><text class="form-picker">{{statusMap[form.status] || '开放中'}}</text></picker></view>
+      <view class="form-row"><text class="form-label">需审核</text><switch checked="{{form.needAudit}}" data-field="needAudit" bindchange="onSwitchChange" /></view>
+      <view class="form-row"><text class="form-label">辅导员审</text><switch checked="{{form.needCounselorAudit}}" data-field="needCounselorAudit" bindchange="onSwitchChange" /></view>
+      <view class="form-row form-row-textarea"><text class="form-label">设备</text><textarea class="form-textarea" placeholder="如 WiFi、电源、空调" value="{{form.facilities}}" data-field="facilities" bindinput="onFormInput" maxlength="300" /></view>
+      <view class="form-row form-row-textarea"><text class="form-label">说明</text><textarea class="form-textarea" placeholder="使用说明或注意事项" value="{{form.description}}" data-field="description" bindinput="onFormInput" maxlength="500" /></view>
+    </scroll-view>
+    <view class="form-footer">
+      <view class="form-btn btn-cancel" bindtap="onCancelForm">取消</view>
+      <view class="form-btn btn-submit" bindtap="onSubmitForm">{{submitting ? '保存中...' : '保存'}}</view>
+    </view>
   </view>
 </view>
