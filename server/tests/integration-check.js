@@ -33,9 +33,22 @@ function startServer() {
 }
 
 async function stopServer(child) {
-  if (!child || child.killed) return;
-  child.kill();
-  await wait(500);
+  if (!child || child.exitCode !== null || child.killed) return;
+  await new Promise(function(resolve) {
+    let done = false;
+    const finish = function() {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    child.once('exit', finish);
+    child.once('close', finish);
+    child.kill('SIGTERM');
+    setTimeout(function() {
+      if (child.exitCode === null && !child.killed) child.kill('SIGKILL');
+      finish();
+    }, 8000);
+  });
 }
 
 async function waitForHealth(child) {
