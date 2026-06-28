@@ -15,7 +15,7 @@ Page({
     roomId: '', room: null, mode: 'create', groupId: '',
     form: { title: '', date: '', startHour: '', endHour: '', maxMembers: 4, description: '' },
     group: null, members: [], loading: true, submitting: false, today: todayText(),
-    statusMap: { open: '招募中', full: '已满员', cancelled: '已取消', closed: '已关闭' }
+    statusMap: { open: '招募中', full: '已满员', submitted: '已提交预约', cancelled: '已取消', closed: '已关闭' }
   },
 
   onLoad: function (options) {
@@ -97,6 +97,32 @@ Page({
       that.setData({ submitting: false })
       wx.showToast({ title: err && err.message ? err.message : '加入失败', icon: 'none' })
     })
+  },
+
+  onSubmitReservation: function () {
+    var that = this
+    if (this.data.submitting || !this.data.groupId) return
+    if ((this.data.members || []).length < 2) { wx.showToast({ title: '至少2人后才能提交预约', icon: 'none' }); return }
+    wx.showModal({
+      title: '提交正式预约',
+      content: '提交后将进入预约审核流程，成员将不能再退出该组团。确认继续？',
+      success: function (res) {
+        if (!res.confirm) return
+        that.setData({ submitting: true })
+        request.post('/groups/' + that.data.groupId + '/submit-reservation', {}).then(function (data) {
+          wx.showToast({ title: '已提交预约', icon: 'success' })
+          that.setData({ submitting: false, group: data, members: data.members || [] })
+        }).catch(function (err) {
+          that.setData({ submitting: false })
+          wx.showToast({ title: err && err.message ? err.message : '提交失败', icon: 'none' })
+        })
+      }
+    })
+  },
+
+  onViewReservation: function () {
+    var id = this.data.group && (this.data.group.reservationId || this.data.group.reservation_id)
+    if (id) wx.navigateTo({ url: '/pages/reservation-detail/reservation-detail?id=' + id })
   },
 
   onLeaveGroup: function () {
