@@ -66,8 +66,22 @@ jobs:
         if: steps.existing_security.outcome == 'failure'
         run: exit 1
       - name: Run server integration check
-        run: npm run test:integration
+        id: server_integration
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run test:integration 2>&1 | tee ../server-integration.log
         working-directory: server
+      - name: Upload server integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-integration-log
+          path: server-integration.log
+          if-no-files-found: ignore
+      - name: Fail when server integration failed
+        if: steps.server_integration.outcome == 'failure'
+        run: exit 1
       - name: Audit critical production dependencies
         run: npm audit --omit=dev --audit-level=critical
         working-directory: server
