@@ -60,8 +60,8 @@ mustContain(groupReserveWxml, /!\(group\.reservationId \|\| group\.reservation_i
 mustContain(groupReserveWxml, /group\.canSubmitReservation/, '组团提交按钮应由后端返回的 canSubmitReservation 控制')
 
 mustContain(reservationConfirmWxml, /required-star/, '预约确认页应展示必填标识')
-mustContain(reservationConfirmWxml, /loading="{{submitting}}"/, '预约确认页提交按钮应展示 loading 状态')
-mustContain(reservationConfirmWxml, /disabled="{{submitting/, '预约确认页提交按钮应在提交中禁用')
+mustContain(reservationConfirmWxml, /submitting \? '提交中\.\.\.' : '确认预约'/, '预约确认页提交按钮应展示提交中状态')
+mustContain(reservationConfirmWxml, /btn-disabled/, '预约确认页提交中应进入禁用样式，防止重复点击')
 
 if (errors.length > 0) {
   console.error(errors.join('\n'))
