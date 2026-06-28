@@ -9,6 +9,9 @@
         <text class="item-title">{{item.title}}</text>
         <text class="item-type type-{{item.type}}">{{item.isTop ? '置顶' : (typeMap[item.type] || '通知')}}</text>
       </view>
+      <view class="item-meta">
+        <text class="target-tag">{{targetMap[item.target || 'all'] || '全体宿生'}}</text>
+      </view>
       <text class="item-content">{{item.content}}</text>
       <view class="item-footer">
         <text class="item-time">{{item.displayTime}}</text>
@@ -20,9 +23,7 @@
       </view>
     </view>
   </view>
-  <view class="empty" wx:else>
-    <text>暂无公告</text>
-  </view>
+  <view class="empty" wx:else><text>暂无公告</text></view>
   <view class="form-mask" wx:if="{{showForm}}" bindtap="onCancelForm"></view>
   <view class="form-panel {{showForm ? 'form-show' : ''}}">
     <view class="form-header">
@@ -30,24 +31,11 @@
       <text class="form-close" bindtap="onCancelForm">✕</text>
     </view>
     <view class="form-body">
-      <view class="form-row">
-        <text class="form-label">标题</text>
-        <input class="form-input" placeholder="请输入公告标题" value="{{form.title}}" bindinput="onTitleInput" />
-      </view>
-      <view class="form-row">
-        <text class="form-label">类型</text>
-        <picker mode="selector" range="{{['普通通知','紧急通知','维护通知']}}" value="{{form.type === 'urgent' ? 1 : form.type === 'maintenance' ? 2 : 0}}" bindchange="onTypeChange">
-          <text class="form-picker">{{typeMap[form.type] || '普通通知'}}</text>
-        </picker>
-      </view>
-      <view class="form-row">
-        <text class="form-label">置顶</text>
-        <switch checked="{{form.isTop}}" bindchange="onTopChange" />
-      </view>
-      <view class="form-row form-row-textarea">
-        <text class="form-label">内容</text>
-        <textarea class="form-textarea" placeholder="请输入公告内容" value="{{form.content}}" bindinput="onContentInput" maxlength="500" />
-      </view>
+      <view class="form-row"><text class="form-label">标题</text><input class="form-input" placeholder="请输入公告标题" value="{{form.title}}" bindinput="onTitleInput" /></view>
+      <view class="form-row"><text class="form-label">类型</text><picker mode="selector" range="{{['普通通知','紧急通知','维护通知']}}" value="{{form.type === 'urgent' ? 1 : form.type === 'maintenance' ? 2 : 0}}" bindchange="onTypeChange"><text class="form-picker">{{typeMap[form.type] || '普通通知'}}</text></picker></view>
+      <view class="form-row"><text class="form-label">对象</text><picker mode="selector" range="{{['全体宿生','宿生','管理员']}}" value="{{form.target === 'student' ? 1 : form.target === 'admin' ? 2 : 0}}" bindchange="onTargetChange"><text class="form-picker">{{targetMap[form.target] || '全体宿生'}}</text></picker></view>
+      <view class="form-row"><text class="form-label">置顶</text><switch checked="{{form.isTop}}" bindchange="onTopChange" /></view>
+      <view class="form-row form-row-textarea"><text class="form-label">内容</text><textarea class="form-textarea" placeholder="请输入公告内容" value="{{form.content}}" bindinput="onContentInput" maxlength="500" /></view>
     </view>
     <view class="form-footer">
       <view class="form-btn btn-cancel" bindtap="onCancelForm">取消</view>
