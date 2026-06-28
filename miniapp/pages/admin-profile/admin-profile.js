@@ -7,7 +7,6 @@ Page({
     roleMap: { admin: '导生管理员', super_admin: '超级管理员', counselor: '书院辅导员' },
     menuList: [
       { key: 'account', name: '账号信息', desc: '查看当前管理员身份', icon: 'account', tone: 'blue' },
-      { key: 'network', name: '网络诊断', desc: '检查服务连接状态', icon: 'network', tone: 'purple' },
       { key: 'password', name: '账号安全', desc: '查看账号安全提醒', icon: 'security', tone: 'gold' },
       { key: 'about', name: '关于系统', desc: '查看系统说明和版本', icon: 'info', tone: 'cyan' },
       { key: 'logout', name: '退出登录', desc: '退出当前管理员账号', icon: 'logout', tone: 'red' }
@@ -50,9 +49,6 @@ Page({
     switch (key) {
       case 'account':
         this.showAccountInfo()
-        break
-      case 'network':
-        wx.navigateTo({ url: '/pages/network-settings/network-settings' })
         break
       case 'password':
         wx.showToast({ title: '请联系书院管理员处理账号安全事项', icon: 'none' })
