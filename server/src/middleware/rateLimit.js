@@ -1,14 +1,14 @@
 const rateLimit = require('express-rate-limit');
 const response = require('../utils/response');
 
-const skipInTest = function() {
-  return process.env.NODE_ENV === 'test';
+const skipWhenBypassed = function() {
+  return process.env.BYPASS_RATE_LIMITS === 'true';
 };
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  skip: skipInTest,
+  skip: skipWhenBypassed,
   standardHeaders: true,
   legacyHeaders: false,
   handler: function(req, res) {
@@ -19,7 +19,7 @@ const apiLimiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  skip: skipInTest,
+  skip: skipWhenBypassed,
   standardHeaders: true,
   legacyHeaders: false,
   handler: function(req, res) {
@@ -30,7 +30,7 @@ const authLimiter = rateLimit({
 const studentLoginAccountLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  skip: skipInTest,
+  skip: skipWhenBypassed,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
@@ -46,7 +46,7 @@ const studentLoginAccountLimiter = rateLimit({
 const studentLoginIpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60,
-  skip: skipInTest,
+  skip: skipWhenBypassed,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
@@ -63,7 +63,7 @@ const studentLoginIpLimiter = rateLimit({
 const refreshLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60,
-  skip: skipInTest,
+  skip: skipWhenBypassed,
   standardHeaders: true,
   legacyHeaders: false,
   handler: function(req, res) {
@@ -74,7 +74,7 @@ const refreshLimiter = rateLimit({
 const reservationLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
-  skip: skipInTest,
+  skip: skipWhenBypassed,
   standardHeaders: true,
   legacyHeaders: false,
   handler: function(req, res) {
@@ -85,7 +85,7 @@ const reservationLimiter = rateLimit({
 const checkinLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
-  skip: skipInTest,
+  skip: skipWhenBypassed,
   standardHeaders: true,
   legacyHeaders: false,
   handler: function(req, res) {
