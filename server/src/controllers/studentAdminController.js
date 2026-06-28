@@ -47,23 +47,66 @@ const getStudentForScope = async function(req, studentId) {
   return rows[0] || null;
 };
 
+const insertStudent = async function(req, data) {
+  const normalizedBuildingId = applyAdminScopeBuilding(req, data);
+  const initialScore = Number(config.credit && config.credit.initialScore) || 100;
+  const [result] = await db.query(
+    'INSERT INTO users (student_no, student_id, card_no, name, real_name, phone, college, major, grade, class_name, building_id, room_number, role, credit_score, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+    [data.studentNo, data.studentNo, data.cardNo, data.realName, data.realName, data.phone || null, data.college || null, data.major || null, data.grade || null, data.className || null, normalizedBuildingId, data.roomNumber || null, 'student', initialScore, 'active']
+  );
+  return result.insertId;
+};
+
 const createStudent = async function(req, res) {
   try {
     const data = normalizeStudentPayload(req.body);
     const validateError = validateStudentPayload(data, 'create');
     if (validateError) return response.error(res, validateError, 400);
-    const normalizedBuildingId = applyAdminScopeBuilding(req, data);
     const [existing] = await db.query('SELECT id FROM users WHERE role = ? AND (student_no = ? OR student_id = ? OR card_no = ?) LIMIT 1', ['student', data.studentNo, data.studentNo, data.cardNo]);
     if (existing.length > 0) return response.error(res, '该学号或一卡通号已存在', 409);
-    const initialScore = Number(config.credit && config.credit.initialScore) || 100;
-    const [result] = await db.query(
-      'INSERT INTO users (student_no, student_id, card_no, name, real_name, phone, college, major, grade, class_name, building_id, room_number, role, credit_score, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-      [data.studentNo, data.studentNo, data.cardNo, data.realName, data.realName, data.phone || null, data.college || null, data.major || null, data.grade || null, data.className || null, normalizedBuildingId, data.roomNumber || null, 'student', initialScore, 'active']
-    );
-    return response.success(res, { id: result.insertId, student_no: data.studentNo, student_id: data.studentNo, name: data.realName, real_name: data.realName, card_no: data.cardNo, phone: data.phone, college: data.college, major: data.major, grade: data.grade, class_name: data.className, building_id: normalizedBuildingId, room_number: data.roomNumber, role: 'student', credit_score: initialScore, status: 'active' }, '宿生已添加');
+    const id = await insertStudent(req, data);
+    return response.success(res, { id: id, student_no: data.studentNo, student_id: data.studentNo, name: data.realName, real_name: data.realName, card_no: data.cardNo, phone: data.phone, college: data.college, major: data.major, grade: data.grade, class_name: data.className, building_id: applyAdminScopeBuilding(req, data), room_number: data.roomNumber, role: 'student', credit_score: Number(config.credit && config.credit.initialScore) || 100, status: 'active' }, '宿生已添加');
   } catch (err) {
     logger.error('管理员手动添加宿生失败:', err);
     return response.error(res, err.message || '添加宿生失败', 500);
+  }
+};
+
+const parseImportText = function(text) {
+  return String(text || '').split(/\r?\n/).map(function(line) { return clean(line); }).filter(Boolean).map(function(line) {
+    const parts = line.indexOf('\t') >= 0 ? line.split('\t') : line.split(',');
+    return normalizeStudentPayload({
+      studentNo: parts[0], realName: parts[1], cardNo: parts[2], phone: parts[3], college: parts[4], major: parts[5], grade: parts[6], className: parts[7], buildingId: parts[8], roomNumber: parts[9]
+    });
+  });
+};
+
+const importStudents = async function(req, res) {
+  try {
+    const rows = Array.isArray(req.body && req.body.students) ? req.body.students.map(normalizeStudentPayload) : parseImportText(req.body && req.body.text);
+    if (!rows.length) return response.error(res, '请粘贴宿生数据', 400);
+    if (rows.length > 200) return response.error(res, '单次最多导入200名宿生', 400);
+
+    const result = { created: 0, skipped: 0, errors: [] };
+    const seenStudent = {};
+    const seenCard = {};
+    for (let i = 0; i < rows.length; i++) {
+      const data = rows[i];
+      const line = i + 1;
+      const validateError = validateStudentPayload(data, 'create');
+      if (validateError) { result.skipped++; result.errors.push('第' + line + '行：' + validateError); continue; }
+      if (seenStudent[data.studentNo] || seenCard[data.cardNo]) { result.skipped++; result.errors.push('第' + line + '行：导入数据内部重复'); continue; }
+      seenStudent[data.studentNo] = true;
+      seenCard[data.cardNo] = true;
+      const [existing] = await db.query('SELECT id FROM users WHERE role = ? AND (student_no = ? OR student_id = ? OR card_no = ?) LIMIT 1', ['student', data.studentNo, data.studentNo, data.cardNo]);
+      if (existing.length > 0) { result.skipped++; result.errors.push('第' + line + '行：学号或一卡通号已存在'); continue; }
+      await insertStudent(req, data);
+      result.created++;
+    }
+    return response.success(res, result, '批量导入完成');
+  } catch (err) {
+    logger.error('批量导入宿生失败:', err);
+    return response.error(res, err.message || '批量导入失败', 500);
   }
 };
 
@@ -104,4 +147,4 @@ const updateStudentStatus = async function(req, res) {
   }
 };
 
-module.exports = { createStudent, updateStudent, updateStudentStatus };
+module.exports = { createStudent, importStudents, updateStudent, updateStudentStatus };
