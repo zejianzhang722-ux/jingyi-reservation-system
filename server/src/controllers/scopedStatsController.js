@@ -16,8 +16,86 @@ const dateRange = function(req) {
   };
 };
 
+const scopedMockData = function(req) {
+  const tables = require('../config/mock-db').__tables;
+  const rooms = (tables.rooms || []).filter(function(room) {
+    return req.adminScope.isGlobal || Number(room.building_id) === Number(req.adminScope.buildingId);
+  });
+  const roomIds = new Set(rooms.map(function(room) { return Number(room.id); }));
+  const reservations = (tables.reservations || []).filter(function(row) {
+    return roomIds.has(Number(row.room_id));
+  });
+  return { rooms, reservations, users: tables.users || [] };
+};
+
+const mockDashboard = function(req, res) {
+  const today = helpers.formatDate(new Date());
+  const data = scopedMockData(req);
+  const reservations = data.reservations;
+  const rooms = data.rooms;
+  const dates = [];
+  const trendReservations = [];
+  const trendUsed = [];
+  const trendNoshow = [];
+
+  for (let index = 6; index >= 0; index -= 1) {
+    const date = dayjs().subtract(index, 'day').format('YYYY-MM-DD');
+    const dayRows = reservations.filter(function(row) { return String(row.date) === date; });
+    dates.push(dayjs(date).format('MM-DD'));
+    trendReservations.push(dayRows.length);
+    trendUsed.push(dayRows.filter(function(row) { return ['approved', 'checked_in', 'completed'].includes(row.status); }).length);
+    trendNoshow.push(dayRows.filter(function(row) { return row.status === 'noshow'; }).length);
+  }
+
+  const roomTypeMap = {};
+  rooms.filter(function(room) { return room.status === 'open'; }).forEach(function(room) {
+    roomTypeMap[room.type] = (roomTypeMap[room.type] || 0) + 1;
+  });
+
+  const roomNameById = {};
+  rooms.forEach(function(room) { roomNameById[Number(room.id)] = room.name; });
+  const reservationCountByRoom = {};
+  reservations.filter(function(row) {
+    return ['approved', 'checked_in', 'completed'].includes(row.status);
+  }).forEach(function(row) {
+    reservationCountByRoom[Number(row.room_id)] = (reservationCountByRoom[Number(row.room_id)] || 0) + 1;
+  });
+
+  const ranking = Object.keys(roomNameById).map(function(id) {
+    return { name: roomNameById[id], count: reservationCountByRoom[Number(id)] || 0 };
+  }).sort(function(a, b) { return b.count - a.count; }).slice(0, 8);
+
+  const userNameById = {};
+  data.users.forEach(function(user) { userNameById[Number(user.id)] = user.real_name || user.name || user.nickname || ''; });
+
+  return response.success(res, {
+    todayReservations: reservations.filter(function(row) { return String(row.date) === today; }).length,
+    pendingCount: reservations.filter(function(row) { return ['pending', 'counselor_pending'].includes(row.status); }).length,
+    usingCount: reservations.filter(function(row) { return row.status === 'checked_in'; }).length,
+    noshowCount: reservations.filter(function(row) { return row.status === 'noshow' && String(row.date) === today; }).length,
+    trend: { dates, reservations: trendReservations, used: trendUsed, noshow: trendNoshow },
+    roomTypeStats: Object.keys(roomTypeMap).map(function(type) { return { name: type, value: roomTypeMap[type] }; }),
+    usageRanking: {
+      rooms: ranking.map(function(row) { return row.name; }),
+      rates: ranking.map(function(row) { return Math.min(100, Math.round(row.count / 30 * 100)); })
+    },
+    pendingItems: reservations.filter(function(row) {
+      return ['pending', 'counselor_pending'].includes(row.status);
+    }).slice(0, 10).map(function(row) {
+      return {
+        id: row.id,
+        tag: row.status === 'counselor_pending' ? '辅导员审核' : '待审核',
+        text: (userNameById[Number(row.user_id)] || '') + ' 申请 ' + (roomNameById[Number(row.room_id)] || '') + (row.purpose ? ' - ' + row.purpose : ''),
+        time: row.date + ' ' + row.start_time
+      };
+    })
+  });
+};
+
 const dashboard = async function(req, res) {
   try {
+    if (db.isMock()) return mockDashboard(req, res);
+
     const today = helpers.formatDate(new Date());
     const scope = buildingFilter(req, 'rm');
     const count = async function(condition, params) {
