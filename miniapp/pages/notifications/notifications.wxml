@@ -5,6 +5,7 @@
             wx:for="{{categories}}" wx:key="key"
             data-key="{{item.key}}" bindtap="onCategoryChange">
         <text class="category-name">{{item.name}}</text>
+        <text class="category-badge" wx:if="{{item.unread > 0}}">{{item.unread > 99 ? '99+' : item.unread}}</text>
       </view>
     </view>
   </scroll-view>
