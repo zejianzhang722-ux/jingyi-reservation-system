@@ -33,7 +33,7 @@ function startServer() {
 }
 
 async function stopServer(child) {
-  if (!child || child.exitCode !== null || child.killed) return;
+  if (!child || child.exitCode !== null) return;
   await new Promise(function(resolve) {
     let done = false;
     const finish = function() {
@@ -45,7 +45,7 @@ async function stopServer(child) {
     child.once('close', finish);
     child.kill('SIGTERM');
     setTimeout(function() {
-      if (child.exitCode === null && !child.killed) child.kill('SIGKILL');
+      if (child.exitCode === null) child.kill('SIGKILL');
       finish();
     }, 8000);
   });
