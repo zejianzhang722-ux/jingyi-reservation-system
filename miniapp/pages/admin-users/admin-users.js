@@ -1,48 +1,16 @@
 var request = require('../../utils/request')
 
 function createEmptyForm() {
-  return {
-    id: '',
-    studentNo: '',
-    realName: '',
-    cardNo: '',
-    phone: '',
-    college: '',
-    major: '',
-    grade: '',
-    className: '',
-    buildingId: '',
-    roomNumber: ''
-  }
+  return { id: '', studentNo: '', realName: '', cardNo: '', phone: '', college: '', major: '', grade: '', className: '', buildingId: '', roomNumber: '' }
 }
-
 function pickUserForm(user) {
   user = user || {}
-  return {
-    id: user.id || '',
-    studentNo: user.student_no || user.student_id || '',
-    realName: user.real_name || user.realName || user.name || '',
-    cardNo: user.card_no || user.cardNo || '',
-    phone: user.phone || '',
-    college: user.college || '',
-    major: user.major || '',
-    grade: user.grade || '',
-    className: user.class_name || user.className || '',
-    buildingId: user.building_id || user.buildingId || '',
-    roomNumber: user.room_number || user.roomNumber || ''
-  }
+  return { id: user.id || '', studentNo: user.student_no || user.student_id || '', realName: user.real_name || user.realName || user.name || '', cardNo: user.card_no || user.cardNo || '', phone: user.phone || '', college: user.college || '', major: user.major || '', grade: user.grade || '', className: user.class_name || user.className || '', buildingId: user.building_id || user.buildingId || '', roomNumber: user.room_number || user.roomNumber || '' }
 }
+function csvCell(value) { return '"' + String(value === undefined || value === null ? '' : value).replace(/"/g, '""') + '"' }
 
 Page({
-  data: {
-    list: [],
-    keyword: '',
-    filteredList: [],
-    showAddForm: false,
-    formMode: 'create',
-    addForm: createEmptyForm(),
-    submittingAdd: false
-  },
+  data: { list: [], keyword: '', filteredList: [], showAddForm: false, formMode: 'create', addForm: createEmptyForm(), submittingAdd: false },
   onLoad: function () { this.loadData() },
   onShow: function () { this.loadData() },
   loadData: function () {
@@ -52,9 +20,7 @@ Page({
       if (!Array.isArray(list)) list = data.list || data.users || []
       list = that.enhanceUsers(list)
       that.setData({ list: list, filteredList: that.applyFilter(list, that.data.keyword) })
-    }).catch(function () {
-      that.setData({ list: [], filteredList: [] })
-    })
+    }).catch(function () { that.setData({ list: [], filteredList: [] }) })
   },
   enhanceUsers: function (list) {
     return list.map(function (u) {
@@ -67,31 +33,13 @@ Page({
   applyFilter: function (list, keyword) {
     if (!keyword) return list
     var kw = keyword.toLowerCase()
-    return list.filter(function (u) {
-      return [u.name, u.real_name, u.realName, u.student_no, u.student_id, u.phone, u.card_no, u.room_number].join(' ').toLowerCase().indexOf(kw) >= 0
-    })
+    return list.filter(function (u) { return [u.name, u.real_name, u.realName, u.student_no, u.student_id, u.phone, u.card_no, u.room_number].join(' ').toLowerCase().indexOf(kw) >= 0 })
   },
-  onSearch: function (e) {
-    var keyword = e.detail.value.trim()
-    this.setData({ keyword: keyword, filteredList: this.applyFilter(this.data.list, keyword) })
-  },
-  onAddUser: function () {
-    this.setData({ showAddForm: true, formMode: 'create', addForm: createEmptyForm(), submittingAdd: false })
-  },
-  onEditUser: function (e) {
-    var id = e.currentTarget.dataset.id
-    var user = (this.data.list || []).find(function (item) { return String(item.id) === String(id) }) || {}
-    this.setData({ showAddForm: true, formMode: 'edit', addForm: pickUserForm(user), submittingAdd: false })
-  },
-  onCancelAdd: function () {
-    if (this.data.submittingAdd) return
-    this.setData({ showAddForm: false, addForm: createEmptyForm(), formMode: 'create' })
-  },
-  onAddInput: function (e) {
-    var field = e.currentTarget.dataset.field
-    var value = e.detail.value
-    this.setData({ ['addForm.' + field]: value })
-  },
+  onSearch: function (e) { var keyword = e.detail.value.trim(); this.setData({ keyword: keyword, filteredList: this.applyFilter(this.data.list, keyword) }) },
+  onAddUser: function () { this.setData({ showAddForm: true, formMode: 'create', addForm: createEmptyForm(), submittingAdd: false }) },
+  onEditUser: function (e) { var id = e.currentTarget.dataset.id; var user = (this.data.list || []).find(function (item) { return String(item.id) === String(id) }) || {}; this.setData({ showAddForm: true, formMode: 'edit', addForm: pickUserForm(user), submittingAdd: false }) },
+  onCancelAdd: function () { if (this.data.submittingAdd) return; this.setData({ showAddForm: false, addForm: createEmptyForm(), formMode: 'create' }) },
+  onAddInput: function (e) { var field = e.currentTarget.dataset.field; this.setData({ ['addForm.' + field]: e.detail.value }) },
   validateAddForm: function () {
     var form = this.data.addForm
     if (!String(form.studentNo || '').trim()) return '请输入学号'
@@ -112,53 +60,20 @@ Page({
     var isEdit = this.data.formMode === 'edit'
     var req = isEdit ? request.put('/user/list/' + form.id, form) : request.post('/user/list', form)
     this.setData({ submittingAdd: true })
-    req.then(function () {
-      wx.showToast({ title: isEdit ? '宿生已更新' : '宿生已添加', icon: 'success' })
-      that.setData({ showAddForm: false, addForm: createEmptyForm(), formMode: 'create', submittingAdd: false })
-      that.loadData()
-    }).catch(function (err) {
-      that.setData({ submittingAdd: false })
-      wx.showToast({ title: err && err.message ? err.message : '保存失败', icon: 'none' })
-    })
+    req.then(function () { wx.showToast({ title: isEdit ? '宿生已更新' : '宿生已添加', icon: 'success' }); that.setData({ showAddForm: false, addForm: createEmptyForm(), formMode: 'create', submittingAdd: false }); that.loadData() }).catch(function (err) { that.setData({ submittingAdd: false }); wx.showToast({ title: err && err.message ? err.message : '保存失败', icon: 'none' }) })
+  },
+  onExportUsers: function () {
+    var rows = [['学号', '姓名', '一卡通号', '手机号', '学院', '专业', '年级', '班级', '楼栋ID', '宿舍号', '信用分', '状态']]
+    ;(this.data.filteredList || []).forEach(function (u) { rows.push([u.student_no || u.student_id || '', u.real_name || u.realName || u.name || '', u.card_no || '', u.phone || '', u.college || '', u.major || '', u.grade || '', u.class_name || u.className || '', u.building_id || u.buildingId || '', u.room_number || u.roomNumber || '', u.credit_score || '', u.status || '']) })
+    var csv = rows.map(function (row) { return row.map(csvCell).join(',') }).join('\n')
+    wx.setClipboardData({ data: csv, success: function () { wx.showToast({ title: '名单已复制', icon: 'success' }) } })
   },
   onAdjustCredit: function (e) {
-    var that = this
-    var id = e.currentTarget.dataset.id
-    var currentScore = e.currentTarget.dataset.score
-    wx.showModal({
-      title: '调整信用分',
-      content: '当前信用分: ' + currentScore,
-      editable: true,
-      placeholderText: '输入新的信用分(0-100)',
-      success: function (res) {
-        if (res.confirm) {
-          var newScore = parseInt(res.content)
-          if (isNaN(newScore) || newScore < 0 || newScore > 100) { wx.showToast({ title: '请输入0-100的数字', icon: 'none' }); return }
-          request.put('/credit/adjust', { userId: id, score: newScore }).then(function () {
-            wx.showToast({ title: '已调整', icon: 'success' })
-            that.loadData()
-          }).catch(function () { wx.showToast({ title: '调整失败', icon: 'none' }) })
-        }
-      }
-    })
+    var that = this; var id = e.currentTarget.dataset.id; var currentScore = e.currentTarget.dataset.score
+    wx.showModal({ title: '调整信用分', content: '当前信用分: ' + currentScore, editable: true, placeholderText: '输入新的信用分(0-100)', success: function (res) { if (res.confirm) { var newScore = parseInt(res.content); if (isNaN(newScore) || newScore < 0 || newScore > 100) { wx.showToast({ title: '请输入0-100的数字', icon: 'none' }); return } request.put('/credit/adjust', { userId: id, score: newScore }).then(function () { wx.showToast({ title: '已调整', icon: 'success' }); that.loadData() }).catch(function () { wx.showToast({ title: '调整失败', icon: 'none' }) }) } } })
   },
   onToggleBan: function (e) {
-    var that = this
-    var id = e.currentTarget.dataset.id
-    var status = e.currentTarget.dataset.status
-    var action = status === 'banned' ? '解封' : '封禁'
-    wx.showModal({
-      title: '确认' + action,
-      content: '确定要' + action + '该用户？',
-      success: function (res) {
-        if (res.confirm) {
-          var newStatus = status === 'banned' ? 'active' : 'banned'
-          request.put('/admin/accounts/' + id, { status: newStatus }).then(function () {
-            wx.showToast({ title: action + '成功', icon: 'success' })
-            that.loadData()
-          }).catch(function () { wx.showToast({ title: action + '失败', icon: 'none' }) })
-        }
-      }
-    })
+    var that = this; var id = e.currentTarget.dataset.id; var status = e.currentTarget.dataset.status; var action = status === 'banned' ? '解封' : '封禁'
+    wx.showModal({ title: '确认' + action, content: '确定要' + action + '该宿生？', success: function (res) { if (res.confirm) { var newStatus = status === 'banned' ? 'active' : 'banned'; request.put('/user/list/' + id + '/status', { status: newStatus }).then(function () { wx.showToast({ title: action + '成功', icon: 'success' }); that.loadData() }).catch(function () { wx.showToast({ title: action + '失败', icon: 'none' }) }) } } })
   }
 })
