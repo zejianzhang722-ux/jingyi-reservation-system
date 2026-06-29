@@ -47,10 +47,10 @@
   </view>
 
   <view class="form-panel {{showImportForm ? 'form-show' : ''}}">
-    <view class="form-header"><view><text class="form-title">批量导入宿生</text><text class="form-subtitle">支持模板Excel另存为 xls/csv 后导入，也支持从 Excel 复制粘贴</text></view><text class="form-close" bindtap="onCancelImport">✕</text></view>
+    <view class="form-header"><view><text class="form-title">批量导入宿生</text><text class="form-subtitle">支持直接选择 .xlsx/.xls/.csv 文件，也支持从 Excel 复制粘贴</text></view><text class="form-close" bindtap="onCancelImport">✕</text></view>
     <view class="form-body">
       <view class="import-actions"><view class="import-helper" bindtap="onDownloadTemplate">下载模板</view><view class="import-helper" bindtap="onChooseImportFile">选择文件</view><view class="import-helper" bindtap="onPasteImportExample">填入示例</view></view>
-      <textarea class="import-textarea" placeholder="每行一名宿生，列之间用制表符或英文逗号分隔" value="{{importText}}" bindinput="onImportInput" maxlength="12000" />
+      <textarea class="import-textarea" placeholder="每行一名宿生，列之间用制表符或英文逗号分隔；也可直接选择xlsx文件上传解析" value="{{importText}}" bindinput="onImportInput" maxlength="12000" />
       <view class="import-result" wx:if="{{importResult}}">{{importResult}}</view>
     </view>
     <view class="form-footer"><view class="form-btn btn-cancel" bindtap="onCancelImport">取消</view><view class="form-btn btn-submit" bindtap="onSubmitImport">{{submittingImport ? '导入中...' : '开始导入'}}</view></view>
