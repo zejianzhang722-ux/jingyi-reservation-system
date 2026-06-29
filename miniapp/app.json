@@ -19,6 +19,7 @@
     "pages/feedback/feedback",
     "pages/network-settings/network-settings",
     "pages/subscribe-settings/subscribe-settings",
+    "pages/group-list/group-list",
     "pages/group-reserve/group-reserve",
     "pages/qrcode/qrcode",
     "pages/login/login",
@@ -31,47 +32,28 @@
     "pages/admin-credit/admin-credit",
     "pages/admin-stats/admin-stats",
     "pages/admin-announcement/admin-announcement",
+    "pages/admin-poster/admin-poster",
     "pages/admin-rooms/admin-rooms",
     "pages/admin-profile/admin-profile"
   ],
   "window": {
-    "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#0066CC",
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#F7F9FC",
     "navigationBarTitleText": "敬一书院",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#F5F6FA"
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F1F3F7"
   },
   "tabBar": {
     "custom": true,
-    "color": "#999999",
-    "selectedColor": "#0066CC",
-    "backgroundColor": "#FFFFFF",
-    "borderStyle": "black",
+    "color": "#9AA6B8",
+    "selectedColor": "#2F80FF",
+    "backgroundColor": "#F8FAFD",
+    "borderStyle": "white",
     "list": [
-      {
-        "pagePath": "pages/index/index",
-        "text": "首页",
-        "iconPath": "images/tab-home.png",
-        "selectedIconPath": "images/tab-home-active.png"
-      },
-      {
-        "pagePath": "pages/my-reservations/my-reservations",
-        "text": "预约",
-        "iconPath": "images/tab-reservation.png",
-        "selectedIconPath": "images/tab-reservation-active.png"
-      },
-      {
-        "pagePath": "pages/notifications/notifications",
-        "text": "消息",
-        "iconPath": "images/tab-message.png",
-        "selectedIconPath": "images/tab-message-active.png"
-      },
-      {
-        "pagePath": "pages/profile/profile",
-        "text": "我的",
-        "iconPath": "images/tab-profile.png",
-        "selectedIconPath": "images/tab-profile-active.png"
-      }
+      { "pagePath": "pages/index/index", "text": "首页", "iconPath": "images/tab-home.png", "selectedIconPath": "images/tab-home-active.png" },
+      { "pagePath": "pages/my-reservations/my-reservations", "text": "预约", "iconPath": "images/tab-reservation.png", "selectedIconPath": "images/tab-reservation-active.png" },
+      { "pagePath": "pages/notifications/notifications", "text": "消息", "iconPath": "images/tab-message.png", "selectedIconPath": "images/tab-message-active.png" },
+      { "pagePath": "pages/profile/profile", "text": "我的", "iconPath": "images/tab-profile.png", "selectedIconPath": "images/tab-profile-active.png" }
     ]
   },
   "lazyCodeLoading": "requiredComponents",

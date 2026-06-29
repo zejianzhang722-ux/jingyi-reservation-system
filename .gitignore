@@ -11,6 +11,7 @@ coverage/
 # Runtime files
 server/uploads/
 server/tmp-devtools/
+server/data/*.json
 uploads/
 *.log
 logs/

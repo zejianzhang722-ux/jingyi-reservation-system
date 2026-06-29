@@ -7,6 +7,7 @@ const config = require('../config');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const wechat = require('../utils/wechat');
+const devAvatarStore = require('../services/devAvatarStore');
 
 const getCalculatedCreditScore = async function(user) {
   const fallback = parseInt(user.credit_score) || config.credit.initialScore || 100;
@@ -133,6 +134,8 @@ const wechatLogin = async function(req, res) {
       }
     }
 
+    user = devAvatarStore.applyAvatar(user);
+
     if (user.status === 'banned') {
       return response.error(res, '账号已被封禁', 403);
     }
@@ -224,46 +227,24 @@ const adminLogin = async function(req, res) {
 const adminMiniappLogin = async function(req, res) {
   try {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-      return response.error(res, '请输入用户名和密码', 400);
-    }
-
     const [admins] = await db.query('SELECT * FROM admins WHERE username = ?', [username]);
     if (admins.length === 0) {
-      return response.error(res, '用户名或密码错误', 401);
+      return response.error(res, '管理员账号或密码错误', 401);
     }
-
     const admin = admins[0];
     admin.role = normalizeRole(admin.role);
     if (admins[0].role === 'superadmin') {
       await db.query('UPDATE admins SET role = ? WHERE id = ?', ['super_admin', admin.id]);
     }
-    const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) {
-      return response.error(res, '用户名或密码错误', 401);
-    }
-
     if (admin.status !== 'active') {
-      return response.error(res, '账号已被禁用', 403);
+      return response.error(res, '管理员账号已被禁用', 403);
     }
-
-    const validRoles = ['super_admin', 'admin', 'counselor'];
-    if (!validRoles.includes(admin.role)) {
-      return response.error(res, '账号角色无效', 403);
+    const matched = await bcrypt.compare(password, admin.password);
+    if (!matched) {
+      return response.error(res, '管理员账号或密码错误', 401);
     }
-
-    const tokens = generateTokens({
-      id: admin.id,
-      openid: admin.username,
-      role: admin.role
-    });
-
-    try {
-      await redis.set('token:admin:' + admin.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
-    } catch(e) {}
-    await db.query('UPDATE admins SET last_login_at = NOW() WHERE id = ?', [admin.id]);
-
+    const tokens = generateTokens({ id: admin.id, openid: admin.username, role: admin.role });
+    try { await redis.set('token:admin:' + admin.id, tokens.refreshToken, 'EX', 7 * 24 * 3600); } catch(e) {}
     return response.success(res, {
       token: tokens.token,
       refreshToken: tokens.refreshToken,
@@ -286,37 +267,35 @@ const studentLogin = async function(req, res) {
   try {
     const { studentNo, cardNo } = req.body;
     if (!studentNo || !cardNo) {
-      return response.error(res, '请输入学号和一卡通卡号', 400);
+      return response.error(res, '请输入学号和一卡通号', 400);
     }
-    if (!/^\d{9,10}$/.test(studentNo)) {
-      return response.error(res, '学号应为9-10位数字', 400);
-    }
-    if (!/^\d{6}$/.test(cardNo)) {
-      return response.error(res, '一卡通卡号应为6位数字', 400);
-    }
-    const [users] = await db.query('SELECT * FROM users WHERE (student_id = ? OR student_no = ?) AND card_no = ?', [studentNo, studentNo, cardNo]);
+    const [users] = await db.query(
+      'SELECT * FROM users WHERE (student_no = ? OR student_id = ?) AND card_no = ? AND role = ?',
+      [studentNo, studentNo, cardNo, 'student']
+    );
     if (users.length === 0) {
-      return response.error(res, '学号或一卡通卡号错误', 401);
+      return response.error(res, '学号或一卡通号错误', 401);
     }
-    const user = users[0];
-    if (user.status === 'banned') {
-      return response.error(res, '账号已被封禁', 403);
+    let user = users[0];
+    user = devAvatarStore.applyAvatar(user);
+    if (user.status !== 'active') {
+      return response.error(res, '账号已被禁用或未激活', 403);
     }
     const tokens = generateTokens(user);
-    try {
-      await redis.set('token:' + user.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
-    } catch(e) {}
+    try { await redis.set('token:' + user.id, tokens.refreshToken, 'EX', 7 * 24 * 3600); } catch(e) {}
     const creditScore = await getCalculatedCreditScore(user);
     return response.success(res, {
       token: tokens.token,
       refreshToken: tokens.refreshToken,
       userInfo: {
         id: user.id,
-        openid: user.openid || '',
+        openid: user.openid,
         nickname: user.nickname || '',
         avatar: user.avatar || '',
         student_no: user.student_no || user.student_id || '',
+        student_id: user.student_id || user.student_no || '',
         name: user.name || user.real_name || '',
+        real_name: user.real_name || user.name || '',
         gender: user.gender || '',
         phone: user.phone || '',
         card_no: user.card_no || '',

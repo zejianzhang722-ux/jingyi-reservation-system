@@ -13,7 +13,7 @@ const list = async function(req, res) {
     if (type) { sql += ' AND r.type = ?'; params.push(type); }
     if (buildingId) { sql += ' AND r.building_id = ?'; params.push(buildingId); }
     if (status) { sql += ' AND r.status = ?'; params.push(status); }
-    if (keyword) { sql += ' AND (r.name LIKE ? OR r.description LIKE ?)'; params.push('%' + keyword + '%', '%' + keyword + '%'); }
+    if (keyword) { sql += ' AND (r.name LIKE ? OR r.description LIKE ? OR r.location LIKE ?)'; params.push('%' + keyword + '%', '%' + keyword + '%', '%' + keyword + '%'); }
 
     sql += ' ORDER BY r.building_id, r.floor, r.name';
 
@@ -71,6 +71,12 @@ const seats = async function(req, res) {
   }
 };
 
+function reservationVisualStatus(reservation, req) {
+  if (req.user && reservation.user_id === req.user.id) return 'myReservation';
+  if (reservation.status === 'pending' || reservation.status === 'counselor_pending') return 'pending';
+  return 'occupied';
+}
+
 const timeline = async function(req, res) {
   try {
     const roomId = req.params.id;
@@ -88,7 +94,7 @@ const timeline = async function(req, res) {
     );
 
     const [reservations] = await db.query(
-      "SELECT r.*, u.nickname, u.real_name FROM reservations r LEFT JOIN users u ON r.user_id = u.id WHERE r.room_id = ? AND r.date = ? AND r.status IN ('approved', 'checked_in')",
+      "SELECT r.*, u.nickname, u.real_name FROM reservations r LEFT JOIN users u ON r.user_id = u.id WHERE r.room_id = ? AND r.date = ? AND r.status IN ('approved', 'checked_in', 'pending', 'counselor_pending')",
       [roomId, date]
     );
     logger.info('Timeline query - roomId:' + roomId + ' date:' + date + ' reservations:' + reservations.length + ' seats:' + seatList.length);
@@ -113,13 +119,7 @@ const timeline = async function(req, res) {
               return r.seat_id === seat.id && helpers.checkTimeConflict(r.start_time, r.end_time, hour, slotEnd);
             });
 
-            if (conflict) {
-              if (req.user && conflict.user_id === req.user.id) {
-                status = 'myReservation';
-              } else {
-                status = 'occupied';
-              }
-            }
+            if (conflict) status = reservationVisualStatus(conflict, req);
           }
 
           return {
@@ -136,9 +136,8 @@ const timeline = async function(req, res) {
         let slotStatus = 'available';
         if (availableCount === 0) {
           const hasMyReservation = seatStatuses.some(function(s) { return s.status === 'myReservation'; });
-          slotStatus = hasMyReservation ? 'myReservation' : 'occupied';
-        } else if (availableCount < totalCount) {
-          slotStatus = 'available';
+          const hasPending = seatStatuses.some(function(s) { return s.status === 'pending'; });
+          slotStatus = hasMyReservation ? 'myReservation' : (hasPending ? 'pending' : 'occupied');
         }
 
         return {
@@ -157,14 +156,11 @@ const timeline = async function(req, res) {
         let status = 'available';
         const occupiedCount = conflictReservations.length;
         if (occupiedCount > 0) {
-          const hasMyReservation = conflictReservations.some(function(r) {
-            return req.user && r.user_id === req.user.id;
-          });
-          if (hasMyReservation) {
-            status = 'myReservation';
-          } else {
-            status = 'occupied';
-          }
+          const hasMyReservation = conflictReservations.some(function(r) { return req.user && r.user_id === req.user.id; });
+          const hasPending = conflictReservations.some(function(r) { return r.status === 'pending' || r.status === 'counselor_pending'; });
+          if (hasMyReservation) status = 'myReservation';
+          else if (hasPending) status = 'pending';
+          else status = 'occupied';
         }
 
         return {

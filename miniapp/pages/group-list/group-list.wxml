@@ -1,0 +1,45 @@
+<view class="container">
+  <view class="header">
+    <view>
+      <text class="title">组团预约</text>
+      <text class="subtitle">发现可加入的组团，或先选择功能房发起组团</text>
+    </view>
+    <view class="create-btn" bindtap="onCreateTap">发起</view>
+  </view>
+
+  <view class="tabs">
+    <view class="tab {{tab === item.key ? 'active' : ''}}" wx:for="{{tabs}}" wx:key="key" data-tab="{{item.key}}" bindtap="onTabTap">{{item.name}}</view>
+  </view>
+
+  <view class="group-list" wx:if="{{list.length > 0}}">
+    <view class="group-item" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenGroup">
+      <view class="item-header">
+        <view class="item-title-wrap">
+          <text class="item-title">{{item.title}}</text>
+          <text class="item-room">{{item.roomName}}</text>
+        </view>
+        <text class="status-tag status-{{item.status}}">{{statusMap[item.status] || item.status}}</text>
+      </view>
+      <view class="meta-grid">
+        <view class="meta-pill"><text class="meta-label">日期</text><text class="meta-value">{{item.date}}</text></view>
+        <view class="meta-pill"><text class="meta-label">时间</text><text class="meta-value">{{item.startTime}}-{{item.endTime}}</text></view>
+        <view class="meta-pill"><text class="meta-label">发起人</text><text class="meta-value">{{item.creatorName}}</text></view>
+      </view>
+      <view class="member-row">
+        <view class="member-copy"><text class="member-count">{{item.progressText}}</text><text class="member-label">成员进度</text></view>
+        <view class="progress"><view class="progress-bar" style="width:{{item.progressPercent}}%"></view></view>
+      </view>
+      <text class="desc" wx:if="{{item.description}}">{{item.description}}</text>
+      <view class="item-footer"><text>{{tab === 'open' ? '查看并加入' : '查看详情'}}</text><view class="arrow"></view></view>
+    </view>
+  </view>
+
+  <view class="empty" wx:if="{{!loading && list.length === 0}}">
+    <view class="empty-icon"></view>
+    <text class="empty-title">暂无组团</text>
+    <text class="empty-hint">可先进入功能房详情，选择“发起组团”邀请同学加入</text>
+    <view class="empty-btn" bindtap="onCreateTap">选择功能房</view>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+</view>

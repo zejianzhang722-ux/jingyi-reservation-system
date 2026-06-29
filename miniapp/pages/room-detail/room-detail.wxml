@@ -1,48 +1,18 @@
 <view class="container page-fade-in">
   <view class="detail-card" wx:if="{{room && !loading}}">
     <view class="detail-header">
-      <view class="detail-icon detail-icon-{{room.iconKey || 'room'}}">
-        <view class="detail-symbol detail-symbol-{{room.iconKey || 'room'}}"></view>
-      </view>
-      <view class="detail-title">
-        <text class="detail-name">{{room.name}}</text>
-        <text class="detail-number">{{room.roomNumber || room.room_number || '功能空间'}}</text>
-      </view>
-      <view class="detail-status {{room.status === 'open' || room.status === 'active' ? 'status-open' : 'status-closed'}}">
-        {{room.status === 'open' || room.status === 'active' ? '开放' : '关闭'}}
-      </view>
+      <view class="detail-icon detail-icon-{{room.iconKey || 'room'}}"><view class="detail-symbol detail-symbol-{{room.iconKey || 'room'}}"></view></view>
+      <view class="detail-title"><text class="detail-name">{{room.name}}</text><text class="detail-number">{{room.roomNumber || room.room_number || '功能空间'}}</text></view>
+      <view class="detail-status {{room.status === 'open' || room.status === 'active' ? 'status-open' : 'status-closed'}}">{{room.status === 'open' || room.status === 'active' ? '开放' : '关闭'}}</view>
     </view>
-
     <view class="detail-info">
-      <view class="info-row">
-        <text class="info-label">位置</text>
-        <text class="info-value">{{room.building || '-'}}</text>
-      </view>
-      <view class="info-row">
-        <text class="info-label">容量</text>
-        <text class="info-value">{{room.capacity || '-'}}人</text>
-      </view>
-      <view class="info-row">
-        <text class="info-label">开放时间</text>
-        <text class="info-value">{{room.openTimeDisplay}} - {{room.closeTimeDisplay}}</text>
-      </view>
-      <view class="info-row">
-        <text class="info-label">审核要求</text>
-        <text class="info-value">{{room.need_counselor || room.need_counselor_audit ? '需辅导员审核' : '按系统规则审核'}}</text>
-      </view>
+      <view class="info-row"><text class="info-label">位置</text><text class="info-value">{{room.building || '-'}}</text></view>
+      <view class="info-row"><text class="info-label">容量</text><text class="info-value">{{room.capacity || '-'}}人</text></view>
+      <view class="info-row"><text class="info-label">开放时间</text><text class="info-value">{{room.openTimeDisplay}} - {{room.closeTimeDisplay}}</text></view>
+      <view class="info-row"><text class="info-label">审核要求</text><text class="info-value">{{room.need_counselor || room.need_counselor_audit ? '需辅导员审核' : '按系统规则审核'}}</text></view>
     </view>
-
-    <view class="detail-section" wx:if="{{room.devices && room.devices.length > 0}}">
-      <text class="section-label">设备设施</text>
-      <view class="device-list">
-        <text class="device-tag" wx:for="{{room.devices}}" wx:key="*this">{{item}}</text>
-      </view>
-    </view>
-
-    <view class="detail-section" wx:if="{{room.rules}}">
-      <text class="section-label">使用规则</text>
-      <text class="rules-text">{{room.rules}}</text>
-    </view>
+    <view class="detail-section" wx:if="{{room.devices && room.devices.length > 0}}"><text class="section-label">设备设施</text><view class="device-list"><text class="device-tag" wx:for="{{room.devices}}" wx:key="*this">{{item}}</text></view></view>
+    <view class="detail-section" wx:if="{{room.rules}}"><text class="section-label">使用规则</text><text class="rules-text">{{room.rules}}</text></view>
   </view>
 
   <view class="detail-actions" wx:if="{{room && !loading}}">
@@ -51,13 +21,6 @@
     <view class="action-btn btn-outline" bindtap="onCompareTap">功能房对比</view>
   </view>
 
-  <view class="empty-state" wx:if="{{!room && !loading}}">
-    <view class="empty-icon-svg"></view>
-    <text class="empty-text">未找到功能房信息</text>
-  </view>
-
-  <view class="loading-state" wx:if="{{loading}}">
-    <view class="loading-spinner"></view>
-    <text class="loading-text">正在加载...</text>
-  </view>
+  <view class="empty-state" wx:if="{{!room && !loading}}"><view class="empty-icon-svg"></view><text class="empty-text">未找到功能房信息</text></view>
+  <view class="loading-state" wx:if="{{loading}}"><view class="loading-spinner"></view><text class="loading-text">正在加载...</text></view>
 </view>

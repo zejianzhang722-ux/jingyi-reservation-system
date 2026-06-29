@@ -1,6 +1,17 @@
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 
+function pickList(data) {
+  if (Array.isArray(data)) return data
+  return (data && (data.list || data.items || data.records || data.blacklist || data.violations)) || []
+}
+
+function maskConfigKey(key) {
+  var hiddenKeys = ['jwt', 'token', 'secret', 'password', 'appid', 'app_secret', 'template', 'database', 'db_', 'mysql']
+  var lower = String(key || '').toLowerCase()
+  return hiddenKeys.some(function (item) { return lower.indexOf(item) >= 0 })
+}
+
 Page({
   data: {
     activeTab: 'violations',
@@ -29,7 +40,7 @@ Page({
   },
 
   onTabTap: function (e) {
-    this.setData({ activeTab: e.currentTarget.dataset.key })
+    this.setData({ activeTab: e.currentTarget.dataset.key, loading: true })
     this.loadData()
   },
 
@@ -43,8 +54,7 @@ Page({
     var that = this
     this.setData({ loading: true })
     return request.get('/credit/violations', { page: 1, pageSize: 20 }, { silent: true }).then(function (data) {
-      var list = Array.isArray(data) ? data : (data.list || [])
-      that.setData({ violations: list, loading: false })
+      that.setData({ violations: pickList(data), loading: false })
     }).catch(function () {
       that.setData({ violations: [], loading: false })
       wx.showToast({ title: '违规记录加载失败', icon: 'none' })
@@ -55,7 +65,7 @@ Page({
     var that = this
     this.setData({ loading: true })
     return request.get('/credit/blacklist', {}, { silent: true }).then(function (data) {
-      that.setData({ blacklist: Array.isArray(data) ? data : [], loading: false })
+      that.setData({ blacklist: pickList(data), loading: false })
     }).catch(function () {
       that.setData({ blacklist: [], loading: false })
       wx.showToast({ title: '黑名单加载失败', icon: 'none' })
@@ -66,7 +76,9 @@ Page({
     var that = this
     this.setData({ loading: true })
     return request.get('/admin/config', {}, { silent: true }).then(function (data) {
-      var list = Object.keys(data || {}).map(function (key) {
+      var list = Object.keys(data || {}).filter(function (key) {
+        return !maskConfigKey(key)
+      }).map(function (key) {
         return { key: key, value: data[key] }
       })
       that.setData({ configList: list, loading: false })

@@ -6,14 +6,7 @@ const config = require('../config');
 const response = require('../utils/response');
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const ALLOWED_TYPES = {
-  png: { mime: 'image/png', extensions: ['.png'] },
-  jpeg: { mime: 'image/jpeg', extensions: ['.jpg', '.jpeg'] }
-};
-const DANGEROUS_EXTENSIONS = new Set([
-  '.html', '.htm', '.svg', '.xml', '.js', '.mjs', '.cjs', '.php', '.jsp', '.asp', '.aspx',
-  '.exe', '.dll', '.bat', '.cmd', '.sh', '.ps1', '.py', '.jar', '.com', '.scr'
-]);
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
 const MAX_DIMENSION = Number(process.env.UPLOAD_MAX_DIMENSION || 10000);
 const MAX_PIXELS = Number(process.env.UPLOAD_MAX_PIXELS || 20000000);
 
@@ -31,24 +24,23 @@ const detectType = function(buffer) {
   return null;
 };
 
-const validateOriginalName = function(originalName, detectedType, declaredMime) {
-  const safeBase = path.basename(String(originalName || '')).toLowerCase();
-  if (!safeBase || safeBase !== String(originalName || '').replace(/\\/g, '/').split('/').pop().toLowerCase()) {
+const validateOriginalName = function(originalName, detectedType) {
+  const original = String(originalName || '').trim();
+  const normalized = original.replace(/\\/g, '/');
+  const basename = path.basename(normalized).toLowerCase();
+  if (original && basename !== normalized.split('/').pop().toLowerCase()) {
     throw uploadError('文件名包含非法路径', 400, 'UPLOAD_PATH_INVALID');
   }
-  const parts = safeBase.split('.');
-  const finalExtension = path.extname(safeBase);
-  const expected = ALLOWED_TYPES[detectedType];
-  if (!expected || !expected.extensions.includes(finalExtension)) {
-    throw uploadError('文件扩展名与图片内容不一致', 400, 'UPLOAD_EXTENSION_MISMATCH');
+  if (detectedType !== 'png' && detectedType !== 'jpeg') {
+    throw uploadError('仅支持真实的PNG或JPEG图片', 400, 'UPLOAD_TYPE_UNSUPPORTED');
   }
-  for (let index = 1; index < parts.length - 1; index += 1) {
-    if (DANGEROUS_EXTENSIONS.has('.' + parts[index])) {
-      throw uploadError('不允许使用危险的双扩展名', 400, 'UPLOAD_DOUBLE_EXTENSION');
-    }
+  const ext = path.extname(basename);
+  if (ext && !IMAGE_EXTENSIONS.has(ext)) {
+    throw uploadError('仅支持PNG或JPEG图片扩展名', 400, 'UPLOAD_EXTENSION_UNSUPPORTED');
   }
-  if (String(declaredMime || '').toLowerCase() !== expected.mime) {
-    throw uploadError('文件MIME类型与图片内容不一致', 400, 'UPLOAD_MIME_MISMATCH');
+  const parts = basename.split('.').filter(Boolean);
+  if (parts.length > 2) {
+    throw uploadError('不允许使用复杂扩展名', 400, 'UPLOAD_DOUBLE_EXTENSION');
   }
 };
 
@@ -63,9 +55,7 @@ const validateDimensions = function(width, height) {
 };
 
 const sanitizePng = function(buffer) {
-  if (!buffer.subarray(0, 8).equals(PNG_SIGNATURE)) {
-    throw uploadError('PNG文件签名无效', 400, 'UPLOAD_SIGNATURE_INVALID');
-  }
+  if (!buffer.subarray(0, 8).equals(PNG_SIGNATURE)) throw uploadError('PNG文件签名无效', 400, 'UPLOAD_SIGNATURE_INVALID');
   const kept = [buffer.subarray(0, 8)];
   let offset = 8;
   let width = 0;
@@ -78,16 +68,10 @@ const sanitizePng = function(buffer) {
   while (offset + 12 <= buffer.length) {
     const length = buffer.readUInt32BE(offset);
     const chunkEnd = offset + 12 + length;
-    if (length > config.upload.maxSize || chunkEnd > buffer.length) {
-      throw uploadError('PNG数据块长度无效', 400, 'UPLOAD_PNG_CHUNK_INVALID');
-    }
+    if (length > config.upload.maxSize || chunkEnd > buffer.length) throw uploadError('PNG数据块长度无效', 400, 'UPLOAD_PNG_CHUNK_INVALID');
     const type = buffer.toString('ascii', offset + 4, offset + 8);
-    if (!/^[A-Za-z]{4}$/.test(type)) {
-      throw uploadError('PNG数据块类型无效', 400, 'UPLOAD_PNG_CHUNK_INVALID');
-    }
-    if (!sawIHDR && type !== 'IHDR') {
-      throw uploadError('PNG缺少有效IHDR头', 400, 'UPLOAD_PNG_STRUCTURE_INVALID');
-    }
+    if (!/^[A-Za-z]{4}$/.test(type)) throw uploadError('PNG数据块类型无效', 400, 'UPLOAD_PNG_CHUNK_INVALID');
+    if (!sawIHDR && type !== 'IHDR') throw uploadError('PNG缺少有效IHDR头', 400, 'UPLOAD_PNG_STRUCTURE_INVALID');
     if (type === 'IHDR') {
       if (sawIHDR || length !== 13) throw uploadError('PNG IHDR无效', 400, 'UPLOAD_PNG_STRUCTURE_INVALID');
       sawIHDR = true;
@@ -104,9 +88,7 @@ const sanitizePng = function(buffer) {
     if (type === 'IEND') break;
   }
 
-  if (!sawIHDR || !sawIDAT || !sawIEND || offset !== buffer.length) {
-    throw uploadError('PNG结构不完整或包含尾随数据', 400, 'UPLOAD_PNG_STRUCTURE_INVALID');
-  }
+  if (!sawIHDR || !sawIDAT || !sawIEND || offset !== buffer.length) throw uploadError('PNG结构不完整或包含尾随数据', 400, 'UPLOAD_PNG_STRUCTURE_INVALID');
   const dimensions = validateDimensions(width, height);
   return { buffer: Buffer.concat(kept), width: dimensions.width, height: dimensions.height, extension: '.png', mime: 'image/png' };
 };
@@ -116,9 +98,7 @@ const isSofMarker = function(marker) {
 };
 
 const sanitizeJpeg = function(buffer) {
-  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) {
-    throw uploadError('JPEG文件签名无效', 400, 'UPLOAD_SIGNATURE_INVALID');
-  }
+  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) throw uploadError('JPEG文件签名无效', 400, 'UPLOAD_SIGNATURE_INVALID');
   const kept = [buffer.subarray(0, 2)];
   let offset = 2;
   let width = 0;
@@ -133,40 +113,27 @@ const sanitizeJpeg = function(buffer) {
     if (offset >= buffer.length) throw uploadError('JPEG标记不完整', 400, 'UPLOAD_JPEG_STRUCTURE_INVALID');
     const marker = buffer[offset];
     offset += 1;
-
-    if (marker === 0xd9) {
-      kept.push(Buffer.from([0xff, 0xd9]));
-      sawEoi = true;
-      break;
-    }
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
-      kept.push(buffer.subarray(markerStart, offset));
-      continue;
-    }
+    if (marker === 0xd9) { kept.push(Buffer.from([0xff, 0xd9])); sawEoi = true; break; }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { kept.push(buffer.subarray(markerStart, offset)); continue; }
     if (offset + 2 > buffer.length) throw uploadError('JPEG段长度缺失', 400, 'UPLOAD_JPEG_STRUCTURE_INVALID');
     const segmentLength = buffer.readUInt16BE(offset);
     if (segmentLength < 2) throw uploadError('JPEG段长度无效', 400, 'UPLOAD_JPEG_STRUCTURE_INVALID');
     const segmentEnd = offset + segmentLength;
     if (segmentEnd > buffer.length) throw uploadError('JPEG段超出文件边界', 400, 'UPLOAD_JPEG_STRUCTURE_INVALID');
-
     if (isSofMarker(marker)) {
       if (segmentLength < 7) throw uploadError('JPEG尺寸段无效', 400, 'UPLOAD_JPEG_STRUCTURE_INVALID');
       height = buffer.readUInt16BE(offset + 3);
       width = buffer.readUInt16BE(offset + 5);
     }
-
     if (marker === 0xda) {
       sawSos = true;
       const eoi = buffer.lastIndexOf(Buffer.from([0xff, 0xd9]));
-      if (eoi < segmentEnd || eoi !== buffer.length - 2) {
-        throw uploadError('JPEG扫描数据或结尾无效', 400, 'UPLOAD_JPEG_STRUCTURE_INVALID');
-      }
+      if (eoi < segmentEnd || eoi !== buffer.length - 2) throw uploadError('JPEG扫描数据或结尾无效', 400, 'UPLOAD_JPEG_STRUCTURE_INVALID');
       kept.push(buffer.subarray(markerStart, buffer.length));
       sawEoi = true;
       offset = buffer.length;
       break;
     }
-
     const isMetadata = (marker >= 0xe1 && marker <= 0xef) || marker === 0xfe;
     if (!isMetadata) kept.push(buffer.subarray(markerStart, segmentEnd));
     offset = segmentEnd;
@@ -181,7 +148,7 @@ const sanitizeImage = function(file) {
   if (!file || !Buffer.isBuffer(file.buffer)) throw uploadError('请选择图片文件', 400, 'UPLOAD_FILE_REQUIRED');
   const detectedType = detectType(file.buffer);
   if (!detectedType) throw uploadError('仅支持真实的PNG或JPEG图片', 400, 'UPLOAD_TYPE_UNSUPPORTED');
-  validateOriginalName(file.originalname, detectedType, file.mimetype);
+  validateOriginalName(file.originalname, detectedType);
   return detectedType === 'png' ? sanitizePng(file.buffer) : sanitizeJpeg(file.buffer);
 };
 
@@ -199,21 +166,10 @@ const persistSanitizedImage = async function(file, prefix) {
   const destination = path.resolve(directory, filename);
   if (path.dirname(destination) !== directory) throw uploadError('文件存储路径无效', 400, 'UPLOAD_PATH_INVALID');
   await fs.promises.writeFile(destination, sanitized.buffer, { flag: 'wx', mode: 0o640 });
-  return {
-    filename,
-    path: destination,
-    size: sanitized.buffer.length,
-    mimetype: sanitized.mime,
-    width: sanitized.width,
-    height: sanitized.height,
-    url: '/uploads/' + filename
-  };
+  return { filename, path: destination, size: sanitized.buffer.length, mimetype: sanitized.mime, width: sanitized.width, height: sanitized.height, url: '/uploads/' + filename };
 };
 
-const uploader = multer({
-  storage: multer.memoryStorage(),
-  limits: { files: 1, fileSize: config.upload.maxSize, fields: 20, fieldSize: 64 * 1024 }
-});
+const uploader = multer({ storage: multer.memoryStorage(), limits: { files: 1, fileSize: config.upload.maxSize, fields: 20, fieldSize: 64 * 1024 } });
 
 const imageUpload = function(fieldName, prefix) {
   const single = uploader.single(fieldName);
@@ -238,17 +194,4 @@ const safePublicFilename = function(filename) {
   return /^[A-Za-z0-9_-]{1,80}\.(?:png|jpg)$/.test(String(filename || ''));
 };
 
-module.exports = {
-  ALLOWED_TYPES,
-  MAX_DIMENSION,
-  MAX_PIXELS,
-  detectType,
-  validateOriginalName,
-  validateDimensions,
-  sanitizePng,
-  sanitizeJpeg,
-  sanitizeImage,
-  persistSanitizedImage,
-  imageUpload,
-  safePublicFilename
-};
+module.exports = { ALLOWED_TYPES: { png: { mime: 'image/png' }, jpeg: { mime: 'image/jpeg' } }, MAX_DIMENSION, MAX_PIXELS, detectType, validateOriginalName, validateDimensions, sanitizePng, sanitizeJpeg, sanitizeImage, persistSanitizedImage, imageUpload, safePublicFilename };

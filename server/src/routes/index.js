@@ -8,6 +8,7 @@ router.use('/auth', require('./auth'));
 router.use('/user', require('./user'));
 router.use('/room', require('./room'));
 router.use('/reservation', require('./reservation'));
+router.use('/groups', require('./groups'));
 router.use('/audit', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./audit'));
 router.use('/checkin', require('./checkin'));
 router.use('/reading-room', require('./readingRoom'));

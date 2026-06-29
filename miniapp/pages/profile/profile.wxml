@@ -1,10 +1,11 @@
 <view class="container page-fade-in">
   <view class="profile-header">
-    <view class="profile-avatar-wrap avatar-choose-button" bindtap="onAvatarTap">
-      <image class="profile-avatar-img" src="{{avatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" wx:if="{{!avatarLoadError}}" />
+    <button class="profile-avatar-wrap avatar-choose-button" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+      <image class="profile-avatar-img" src="{{avatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" wx:if="{{!avatarLoadError && avatarUrl}}" />
+      <open-data class="profile-avatar-img" type="userAvatarUrl" wx:elif="{{useWechatAvatarFallback}}"></open-data>
       <view class="profile-avatar-fallback" wx:else>{{avatarFallbackText}}</view>
       <view class="profile-avatar-edit"></view>
-    </view>
+    </button>
     <view class="profile-info">
       <text class="profile-name">{{userInfo.name || userInfo.real_name || userInfo.realName || userInfo.nickname || '未登录'}}</text>
       <text class="profile-student-id">{{userInfo.student_no || userInfo.studentNo || '请完善个人信息'}}</text>

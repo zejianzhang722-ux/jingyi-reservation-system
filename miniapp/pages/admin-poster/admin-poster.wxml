@@ -1,0 +1,47 @@
+<view class="container">
+  <view class="header">
+    <view>
+      <text class="title">海报审核</text>
+      <text class="subtitle">处理宿生海报张贴申请、清理与违规记录</text>
+    </view>
+  </view>
+
+  <scroll-view class="filter-tabs" scroll-x="true" show-scrollbar="false">
+    <view class="tab {{status === item.key ? 'active' : ''}}" wx:for="{{tabs}}" wx:key="key" data-status="{{item.key}}" bindtap="onFilter">{{item.name}}</view>
+  </scroll-view>
+
+  <view class="poster-list" wx:if="{{list.length > 0}}">
+    <view class="poster-item" wx:for="{{list}}" wx:key="id">
+      <view class="poster-main">
+        <view class="poster-cover" wx:if="{{item.image_url || item.imageUrl}}" data-url="{{item.image_url || item.imageUrl}}" bindtap="onPreviewImage">
+          <image src="{{item.image_url || item.imageUrl}}" mode="aspectFill"></image>
+        </view>
+        <view class="poster-info">
+          <view class="poster-title-row">
+            <text class="poster-title">{{item.title}}</text>
+            <text class="status-tag status-{{item.status}}">{{statusMap[item.status] || item.status}}</text>
+          </view>
+          <text class="poster-desc">{{item.description || item.content || '暂无内容说明'}}</text>
+          <view class="meta-grid">
+            <text>组织：{{item.organization || '-'}}</text>
+            <text>申请人：{{item.applicantName}} {{item.studentNo}}</text>
+            <text>时间：{{item.displayDate}}</text>
+            <text>位置：{{item.displayPosition}}</text>
+            <text>联系：{{item.contact_name || item.contactName || '-'}} {{item.contact_phone || item.contactPhone || ''}}</text>
+            <text>提交：{{item.displayTime}}</text>
+          </view>
+          <view class="reject-reason" wx:if="{{item.reject_reason}}">驳回原因：{{item.reject_reason}}</view>
+        </view>
+      </view>
+      <view class="actions">
+        <view class="btn btn-approve" wx:if="{{item.status === 'pending'}}" data-id="{{item.id}}" data-position="{{item.displayPosition}}" bindtap="onApprove">通过</view>
+        <view class="btn btn-reject" wx:if="{{item.status === 'pending'}}" data-id="{{item.id}}" bindtap="onReject">驳回</view>
+        <view class="btn btn-clean" wx:if="{{item.status === 'approved'}}" data-id="{{item.id}}" bindtap="onClean">已清理</view>
+        <view class="btn btn-violation" wx:if="{{item.status === 'approved'}}" data-id="{{item.id}}" bindtap="onViolation">违规扣分</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty" wx:if="{{!loading && list.length === 0}}"><text>暂无海报申请</text></view>
+  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+</view>

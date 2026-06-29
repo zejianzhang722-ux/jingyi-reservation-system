@@ -28,7 +28,8 @@ Page({
         title: '运营发布',
         items: [
           { key: 'feedback', name: '反馈管理', desc: '处理宿生反馈和回复', icon: 'feedback', tone: 'cyan' },
-          { key: 'announcement', name: '公告管理', desc: '发布、归档和维护公告', icon: 'announcement', tone: 'gold' }
+          { key: 'announcement', name: '公告管理', desc: '发布、归档和维护公告', icon: 'announcement', tone: 'gold' },
+          { key: 'poster', name: '海报审核', desc: '审核海报张贴、清理和违规扣分', icon: 'poster', tone: 'purple' }
         ]
       }
     ]
@@ -42,9 +43,7 @@ Page({
     return true
   },
 
-  onLoad: function () {
-    this.ensureAdmin()
-  },
+  onLoad: function () { this.ensureAdmin() },
 
   onShow: function () {
     if (!this.ensureAdmin()) return
@@ -64,11 +63,10 @@ Page({
       users: '/pages/admin-users/admin-users',
       credit: '/pages/admin-credit/admin-credit',
       feedback: '/pages/admin-feedback/admin-feedback',
-      announcement: '/pages/admin-announcement/admin-announcement'
+      announcement: '/pages/admin-announcement/admin-announcement',
+      poster: '/pages/admin-poster/admin-poster'
     }
-    if (routes[key]) {
-      wx.navigateTo({ url: routes[key] })
-    }
+    if (routes[key]) wx.navigateTo({ url: routes[key] })
   },
 
   goToReservationList: function () { wx.navigateTo({ url: '/pages/admin-reservation/admin-reservation' }) },
@@ -78,5 +76,6 @@ Page({
   goToCreditManage: function () { wx.navigateTo({ url: '/pages/admin-credit/admin-credit' }) },
   goToStatsOverview: function () { wx.navigateTo({ url: '/pages/admin-stats/admin-stats' }) },
   goToFeedback: function () { wx.navigateTo({ url: '/pages/admin-feedback/admin-feedback' }) },
-  goToAnnouncement: function () { wx.navigateTo({ url: '/pages/admin-announcement/admin-announcement' }) }
+  goToAnnouncement: function () { wx.navigateTo({ url: '/pages/admin-announcement/admin-announcement' }) },
+  goToPoster: function () { wx.navigateTo({ url: '/pages/admin-poster/admin-poster' }) }
 })

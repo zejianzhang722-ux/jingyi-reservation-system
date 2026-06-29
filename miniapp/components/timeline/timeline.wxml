@@ -13,50 +13,22 @@
       <view class="timeline-body">
         <view class="timeline-row" wx:for="{{processedTimeline}}" wx:key="seatId">
           <view class="timeline-seat-label" style="width:{{seatLabelWidth}}rpx">{{item.seatName}}</view>
-          <view class="timeline-blocks" style="width:{{totalWidth}}rpx"
-                data-seat-id="{{item.seatId}}"
-                bindtouchstart="onBlockTouchStart"
-                bindtouchmove="onBlockTouchMove"
-                bindtouchend="onBlockTouchEnd">
-            <view class="timeline-block timeline-block-{{block.type}}"
-                  wx:for="{{item.blocks}}" wx:for-item="block" wx:key="start"
-                  style="{{block.style}}"
-                  data-seat-id="{{item.seatId}}"
-                  data-type="{{block.type}}"
-                  data-start="{{block.start}}"
-                  data-end="{{block.end}}"
-                  bindtap="onBlockTap">
-            </view>
-            <view class="timeline-block timeline-block-selected"
-                  wx:if="{{selectedSeat === item.seatId && selectedStart !== null}}"
-                  style="left:{{(selectedStart - openHour) * halfHourWidth * 2}}rpx;width:{{(selectedEnd - selectedStart) * halfHourWidth * 2}}rpx">
-            </view>
+          <view class="timeline-blocks" style="width:{{totalWidth}}rpx" data-seat-id="{{item.seatId}}" bindtouchstart="onBlockTouchStart" bindtouchmove="onBlockTouchMove" bindtouchend="onBlockTouchEnd">
+            <view class="timeline-block timeline-block-{{block.type}}" wx:for="{{item.blocks}}" wx:for-item="block" wx:key="start" style="{{block.style}}" data-seat-id="{{item.seatId}}" data-type="{{block.type}}" data-start="{{block.start}}" data-end="{{block.end}}" bindtap="onBlockTap"></view>
+            <view class="timeline-block timeline-block-selected" wx:if="{{selectedSeat === item.seatId && selectedStart !== null}}" style="left:{{(selectedStart - openHour) * halfHourWidth * 2}}rpx;width:{{(selectedEnd - selectedStart) * halfHourWidth * 2}}rpx"></view>
           </view>
         </view>
       </view>
 
-      <view class="timeline-current-line" wx:if="{{isToday && currentHour >= openHour && currentHour <= closeHour}}"
-            style="left:{{seatLabelWidth + (currentHour - openHour) * halfHourWidth * 2}}rpx">
-      </view>
+      <view class="timeline-current-line" wx:if="{{isToday && currentHour >= openHour && currentHour <= closeHour}}" style="left:{{seatLabelWidth + (currentHour - openHour) * halfHourWidth * 2}}rpx"></view>
     </view>
   </scroll-view>
 
   <view class="timeline-legend">
-    <view class="legend-item">
-      <view class="legend-dot legend-free"></view>
-      <text class="legend-text">空闲</text>
-    </view>
-    <view class="legend-item">
-      <view class="legend-dot legend-occupied"></view>
-      <text class="legend-text">占用</text>
-    </view>
-    <view class="legend-item">
-      <view class="legend-dot legend-mine"></view>
-      <text class="legend-text">我的预约</text>
-    </view>
-    <view class="legend-item">
-      <view class="legend-dot legend-unavailable"></view>
-      <text class="legend-text">不可用</text>
-    </view>
+    <view class="legend-item"><view class="legend-dot legend-free"></view><text class="legend-text">空闲</text></view>
+    <view class="legend-item"><view class="legend-dot legend-pending"></view><text class="legend-text">待审核</text></view>
+    <view class="legend-item"><view class="legend-dot legend-occupied"></view><text class="legend-text">占用</text></view>
+    <view class="legend-item"><view class="legend-dot legend-mine"></view><text class="legend-text">我的预约</text></view>
+    <view class="legend-item"><view class="legend-dot legend-unavailable"></view><text class="legend-text">不可用</text></view>
   </view>
 </view>

@@ -59,7 +59,7 @@ async function main() {
   const adminLogin = await api('/auth/login/admin-miniapp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+    body: JSON.stringify({ username: 'superadmin', password: 'super123' })
   })
   assert(adminLogin.json.code === 200, '管理员登录应成功')
   assert(adminLogin.json.data.userInfo.role !== 'student', '管理员角色不应被识别为学生')

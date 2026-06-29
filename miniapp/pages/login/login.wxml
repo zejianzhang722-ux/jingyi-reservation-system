@@ -33,11 +33,11 @@
       <view class="form-section" wx:if="{{loginMode === 'student'}}">
         <view class="input-group">
           <view class="input-icon input-icon-user"></view>
-          <input class="form-input" type="text" placeholder="请输入学号" value="{{studentId}}" bindinput="onStudentIdInput" placeholder-style="color:#5a6a8a" />
+          <input class="form-input" type="text" placeholder="宿生账号：请输入学号" value="{{studentId}}" bindinput="onStudentIdInput" placeholder-style="color:#5a6a8a" />
         </view>
         <view class="input-group">
           <view class="input-icon input-icon-key"></view>
-          <input class="form-input" type="text" placeholder="请输入一卡通卡号" value="{{cardNo}}" bindinput="onCardNoInput" placeholder-style="color:#5a6a8a" />
+          <input class="form-input" type="password" maxlength="6" placeholder="密码：6位一卡通号" value="{{cardNo}}" bindinput="onCardNoInput" placeholder-style="color:#5a6a8a" />
         </view>
       </view>
 
@@ -61,7 +61,7 @@
     </view>
 
     <view class="footer-text">
-      <text>首次使用？请前往书院前台绑定一卡通</text>
+      <text>宿生账号为学号，密码为6位一卡通号</text>
     </view>
   </view>
 </view>
