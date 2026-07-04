@@ -14,10 +14,10 @@
         <text class="user-credit">信用分: {{item.creditDisplay}}</text>
       </view>
       <view class="user-actions">
-        <text class="user-status {{item.status}}">{{item.status === 'active' ? '正常' : item.status === 'banned' ? '封禁' : item.status}}</text>
+        <text class="user-status {{item.status}}">{{item.statusText}}</text>
         <view class="action-btns">
           <view class="btn-credit" data-id="{{item.id}}" data-score="{{item.credit_score}}" catchtap="onAdjustCredit">调分</view>
-          <view class="btn-ban {{item.status === 'banned' ? 'btn-unban' : ''}}" data-id="{{item.id}}" data-status="{{item.status}}" catchtap="onToggleBan">{{item.status === 'banned' ? '解封' : '封禁'}}</view>
+          <view class="btn-ban {{item.statusActionClass}}" data-id="{{item.id}}" data-next-status="{{item.nextStatus}}" data-action="{{item.statusActionText}}" catchtap="onToggleStatus">{{item.statusActionText}}</view>
         </view>
       </view>
     </view>

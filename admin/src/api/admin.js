@@ -37,7 +37,7 @@ export function deleteAnnouncement(id) {
 }
 
 export function getBackupList(params) {
-  return request.get('/admin/backup', { params })
+  return request.get('/admin/backups', { params })
 }
 
 export function createBackup() {

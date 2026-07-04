@@ -12,10 +12,11 @@ router.use('/audit', auth, roleAuth.requireRole('admin', 'super_admin', 'counsel
 router.use('/checkin', require('./checkin'));
 router.use('/reading-room', require('./readingRoom'));
 router.use('/poster', require('./poster'));
-router.use('/credit', auth, roleAuth.requireRole('admin', 'super_admin'), require('./credit'));
-router.use('/stats', auth, roleAuth.requireRole('admin', 'super_admin'), require('./stats'));
+router.use('/credit', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./credit'));
+router.use('/stats', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./stats'));
 router.use('/notification', require('./notification'));
-router.use('/admin', auth, roleAuth.requireRole('admin', 'super_admin'), require('./admin'));
+router.use('/admin', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./admin'));
+router.use('/student-ops', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./studentAdmin'));
 router.use('/rules', require('./rules'));
 router.use('/feedback', require('./feedback'));
 router.use('/ops', opsRoutes);
