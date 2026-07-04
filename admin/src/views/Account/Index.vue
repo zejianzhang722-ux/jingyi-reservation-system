@@ -146,7 +146,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { getList, create, update, remove } from '@/api/account'
+import { getList, create, update, remove, saveRows } from '@/api/account'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import PageShell from '@/components/admin/PageShell.vue'
@@ -316,30 +316,25 @@ async function doImport() {
     const XLSX = await import('xlsx')
     const reader = new FileReader()
     reader.onload = async (e) => {
-      const wb = XLSX.read(e.target.result, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws)
-      const excelRoleMap = { '超级管理员': 'super_admin', '导生管理员': 'admin', '书院辅导员': 'counselor', '宿生': 'student' }
-      let successCount = 0
-      let failCount = 0
-      for (const row of rows) {
-        try {
-          const role = activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin')
-          await create({
-            username: row['账号'] || row['学号'] || '',
-            realName: row['真实姓名'] || row['姓名'] || '',
-            password: row['密码'] || row['一卡通卡号'] || '',
-            role
-          })
-          successCount++
-        } catch (e) {
-          failCount++
-        }
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws)
+        const excelRoleMap = { '超级管理员': 'super_admin', '导生管理员': 'admin', '书院辅导员': 'counselor', '宿生': 'student' }
+        const normalizedRows = rows.map(row => ({
+          username: row['账号'] || row['学号'] || '',
+          realName: row['真实姓名'] || row['姓名'] || '',
+          password: row['密码'] || row['一卡通卡号'] || '',
+          role: activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin')
+        }))
+        const res = await saveRows(normalizedRows)
+        const data = res.data || {}
+        ElMessage.success(`导入完成：成功 ${data.successCount || 0} 个，失败 ${data.failCount || 0} 个`)
+        importDialogVisible.value = false
+        loadData()
+      } finally {
+        importLoading.value = false
       }
-      ElMessage.success(`导入完成：成功 ${successCount} 个，失败 ${failCount} 个`)
-      importDialogVisible.value = false
-      importLoading.value = false
-      loadData()
     }
     reader.readAsArrayBuffer(importFile)
   } catch (e) {
