@@ -17,6 +17,7 @@ router.use('/stats', auth, roleAuth.requireRole('admin', 'super_admin', 'counsel
 router.use('/notification', require('./notification'));
 router.use('/admin', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./admin'));
 router.use('/student-ops', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./studentAdmin'));
+router.use('/account-batch', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./accountBatch'));
 router.use('/rules', require('./rules'));
 router.use('/feedback', require('./feedback'));
 router.use('/ops', opsRoutes);
