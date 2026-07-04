@@ -13,7 +13,8 @@ export function getBlacklist(params) {
 }
 
 export function toggleBan(data) {
-  return request.put('/credit/blacklist/' + data.userId, data)
+  const id = data.userId || data.studentId || data.studentNo
+  return request.put('/credit/blacklist/' + id, data)
 }
 
 export function getScoreConfig() {
