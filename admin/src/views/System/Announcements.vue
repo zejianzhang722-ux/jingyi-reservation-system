@@ -1,30 +1,43 @@
 <template>
-  <div class="page-container">
-    <el-card shadow="never">
-      <div class="table-header">
-        <span class="table-title">公告管理</span>
-        <el-button type="primary" @click="handleAdd">
-          <el-icon><Plus /></el-icon>发布公告
-        </el-button>
-      </div>
+  <PageShell
+    title="公告管理"
+    eyebrow="ANNOUNCEMENTS"
+    description="发布、编辑、归档书院预约平台公告，并区分通知、公告和紧急信息。"
+  >
+    <template #actions>
+      <el-button type="primary" @click="handleAdd">
+        <el-icon><Plus /></el-icon>发布公告
+      </el-button>
+    </template>
 
+    <el-row :gutter="16">
+      <el-col :xs="24" :sm="8">
+        <MetricCard label="公告总数" :value="pagination.total" caption="当前列表总量" icon="Bell" tone="primary" />
+      </el-col>
+      <el-col :xs="24" :sm="8">
+        <MetricCard label="已发布" :value="publishedCount" caption="本页可见发布项" icon="CircleCheck" tone="success" />
+      </el-col>
+      <el-col :xs="24" :sm="8">
+        <MetricCard label="草稿/归档" :value="inactiveCount" caption="本页非发布项" icon="Folder" tone="warning" />
+      </el-col>
+    </el-row>
+
+    <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="type" label="类型" width="100">
+        <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="type" label="类型" width="110">
           <template #default="{ row }">
             <el-tag :type="typeMap[row.type]?.tagType || ''" size="small">{{ typeMap[row.type]?.label || row.type }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="90">
+        <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'published' ? 'success' : row.status === 'draft' ? 'info' : 'warning'" size="small">
-              {{ row.status === 'published' ? '已发布' : row.status === 'draft' ? '草稿' : '已归档' }}
-            </el-tag>
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="creator_name" label="发布人" width="100" />
-        <el-table-column prop="created_at" label="发布时间" width="170" />
+        <el-table-column prop="creator_name" label="发布人" width="110" />
+        <el-table-column prop="created_at" label="发布时间" width="180" />
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="handleEdit(row)">编辑</el-button>
@@ -48,7 +61,7 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑公告' : '发布公告'" width="650px" @close="resetForm">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑公告' : '发布公告'" width="680px" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" placeholder="请输入公告标题" />
@@ -78,13 +91,15 @@
         <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PageShell from '@/components/admin/PageShell.vue'
+import MetricCard from '@/components/admin/MetricCard.vue'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -98,6 +113,11 @@ const typeMap = {
   announcement: { label: '公告', tagType: 'success' },
   urgent: { label: '紧急', tagType: 'danger' }
 }
+const statusMap = {
+  published: { label: '已发布', type: 'success' },
+  draft: { label: '草稿', type: 'info' },
+  archived: { label: '已归档', type: 'warning' }
+}
 
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const form = reactive({ id: null, title: '', type: 'notice', content: '', isTop: false, status: 'draft' })
@@ -107,6 +127,9 @@ const rules = {
   content: [{ required: true, message: '请输入内容', trigger: 'blur' }]
 }
 
+const publishedCount = computed(() => tableData.value.filter(item => item.status === 'published').length)
+const inactiveCount = computed(() => tableData.value.filter(item => item.status !== 'published').length)
+
 async function loadData() {
   loading.value = true
   try {
@@ -114,7 +137,8 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    // handled
+    tableData.value = []
+    pagination.total = 0
   } finally {
     loading.value = false
   }
@@ -122,6 +146,7 @@ async function loadData() {
 
 function handleAdd() {
   isEdit.value = false
+  resetForm()
   dialogVisible.value = true
 }
 
@@ -137,7 +162,7 @@ async function handlePublish(row) {
     ElMessage.success('发布成功')
     loadData()
   } catch (e) {
-    // handled
+    // handled by interceptor
   }
 }
 
@@ -154,7 +179,7 @@ async function handleArchive(row) {
 
 async function handleDelete(row) {
   try {
-    await ElMessageBox.confirm(`确认删除公告"${row.title}"？`, '提示', { type: 'warning' })
+    await ElMessageBox.confirm(`确认删除公告“${row.title}”？`, '提示', { type: 'warning' })
     await deleteAnnouncement(row.id)
     ElMessage.success('删除成功')
     loadData()
@@ -170,7 +195,6 @@ function resetForm() {
 async function handleSubmit() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
-
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -183,7 +207,7 @@ async function handleSubmit() {
     dialogVisible.value = false
     loadData()
   } catch (e) {
-    // handled
+    // handled by interceptor
   } finally {
     submitLoading.value = false
   }
@@ -195,25 +219,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-container {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.table-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.table-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-}
-
 .pagination-wrap {
   display: flex;
   justify-content: flex-end;
