@@ -8,6 +8,10 @@ export function create(data) {
   return request.post('/admin/accounts', data)
 }
 
+export function saveRows(rows) {
+  return request.post('/account-batch', { rows })
+}
+
 export function update(id, data) {
   return request.put('/admin/accounts/' + id, data)
 }
