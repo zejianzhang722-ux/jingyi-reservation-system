@@ -44,10 +44,6 @@ export function createBackup() {
   return request.post('/admin/backup')
 }
 
-export function restoreBackup(id) {
-  return request.post(`/admin/backup/${id}/restore`)
-}
-
-export function deleteBackup(id) {
-  return request.delete(`/admin/backup/${id}`)
+export function verifyBackup(fileName) {
+  return request.post(`/admin/backups/${fileName}/verify`)
 }
