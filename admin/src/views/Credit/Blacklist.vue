@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="黑名单与受限账号"
-    eyebrow="CREDIT CONTROL"
+    eyebrow="信用管控"
     description="集中处理低信用、受限和封禁宿生，所有人工操作都需要填写原因，方便后续审计。"
   >
     <template #actions>
@@ -191,3 +191,4 @@ onMounted(() => {
   color: var(--jy-danger, #FF4D4F);
 }
 </style>
+

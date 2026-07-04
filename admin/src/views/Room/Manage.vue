@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="功能房管理"
-    eyebrow="SPACE MANAGEMENT"
+    eyebrow="空间管理"
     description="统一维护功能房信息、开放状态和座位数据；座位编辑支持保存与撤销，避免只在前端临时修改。"
   >
     <template #actions>
@@ -464,3 +464,4 @@ onMounted(() => {
   margin-top: 10px;
 }
 </style>
+

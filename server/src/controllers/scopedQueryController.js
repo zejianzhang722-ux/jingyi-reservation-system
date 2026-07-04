@@ -1,7 +1,8 @@
-const db = require('../config/database');
+﻿const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const reservationApprovalController = require('./reservationApprovalController');
+const reservationPresenter = require('../utils/reservationPresenter');
 
 const pagination = function(query, defaultSize) {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
@@ -9,8 +10,17 @@ const pagination = function(query, defaultSize) {
   return { page, pageSize, offset: (page - 1) * pageSize };
 };
 
+const requestedStatuses = function(req) {
+  const allowed = reservationApprovalController.allowedStatusesForRole(req.adminScope.role);
+  const type = String((req.query && req.query.type) || '').trim() || (String(req.originalUrl || '').includes('/counselor/') ? 'counselor' : '');
+  let wanted = allowed;
+  if (type === 'counselor') wanted = ['counselor_pending'];
+  if (type === 'admin') wanted = ['pending'];
+  return wanted.filter(function(status) { return allowed.includes(status); });
+};
+
 const pendingQuery = function(req) {
-  const statuses = reservationApprovalController.allowedStatusesForRole(req.adminScope.role);
+  const statuses = requestedStatuses(req);
   if (!statuses.length) return null;
   const placeholders = statuses.map(function() { return '?'; }).join(',');
   let where = ' WHERE r.status IN (' + placeholders + ')';
@@ -18,13 +28,41 @@ const pendingQuery = function(req) {
   if (!req.adminScope.isGlobal) {
     where += ' AND rm.building_id = ?';
     params.push(req.adminScope.buildingId);
+  } else if (req.query.buildingId) {
+    where += ' AND rm.building_id = ?';
+    params.push(Number(req.query.buildingId));
   }
-  return { where, params };
+  if (req.query.roomId) {
+    where += ' AND r.room_id = ?';
+    params.push(Number(req.query.roomId));
+  }
+  if (req.query.date) {
+    where += ' AND r.date = ?';
+    params.push(String(req.query.date));
+  }
+  return { where, params, statuses };
 };
 
 const loadPendingRows = async function(req, limit, offset) {
   const query = pendingQuery(req);
   if (!query) return null;
+
+  if (db.isMock()) {
+    let rows = reservationPresenter.getMockReservationRows({
+      adminScope: req.adminScope,
+      statuses: query.statuses,
+      buildingId: req.adminScope.isGlobal ? req.query.buildingId : '',
+      roomId: req.query.roomId,
+      date: req.query.date
+    }).sort(function(a, b) {
+      const byCreated = String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+      return byCreated || (Number(a.id) - Number(b.id));
+    });
+    const total = rows.length;
+    if (Number.isInteger(limit)) rows = rows.slice(Number(offset || 0), Number(offset || 0) + limit);
+    return { rows, query, total };
+  }
+
   let sql = 'SELECT r.*, rm.name AS room_name, rm.name AS roomName, rm.building_id, ' +
     'u.real_name AS user_name, u.real_name AS userName, u.student_id, u.student_no ' +
     'FROM reservations r JOIN rooms rm ON rm.id = r.room_id JOIN users u ON u.id = r.user_id' +
@@ -35,7 +73,7 @@ const loadPendingRows = async function(req, limit, offset) {
     params.push(limit, Number(offset || 0));
   }
   const [rows] = await db.query(sql, params);
-  return { rows, query };
+  return { rows: rows.map(reservationPresenter.formatReservationRow), query };
 };
 
 // `/reservation/pending` historically returns a plain array and existing clients rely on it.
@@ -56,6 +94,9 @@ const pendingAuditList = async function(req, res) {
     const page = pagination(req.query, 20);
     const loaded = await loadPendingRows(req, page.pageSize, page.offset);
     if (!loaded) return response.error(res, '当前角色无权查看审核队列', 403);
+    if (db.isMock()) {
+      return response.paginate(res, loaded.rows, loaded.total, page.page, page.pageSize);
+    }
     const [countRows] = await db.query(
       'SELECT COUNT(*) AS total FROM reservations r JOIN rooms rm ON rm.id = r.room_id' + loaded.query.where,
       loaded.query.params
@@ -71,6 +112,16 @@ const pendingReservationCount = async function(req, res) {
   try {
     const query = pendingQuery(req);
     if (!query) return response.error(res, '当前角色无权查看审核队列', 403);
+    if (db.isMock()) {
+      const rows = reservationPresenter.getMockReservationRows({
+        adminScope: req.adminScope,
+        statuses: query.statuses,
+        buildingId: req.adminScope.isGlobal ? req.query.buildingId : '',
+        roomId: req.query.roomId,
+        date: req.query.date
+      });
+      return response.success(res, { count: rows.length });
+    }
     const [rows] = await db.query(
       'SELECT COUNT(*) AS count FROM reservations r JOIN rooms rm ON rm.id = r.room_id' + query.where,
       query.params
@@ -81,7 +132,6 @@ const pendingReservationCount = async function(req, res) {
     return response.error(res, err.message || '获取待审核数量失败', 500);
   }
 };
-
 const users = async function(req, res) {
   try {
     const page = pagination(req.query, 20);
@@ -152,3 +202,4 @@ module.exports = {
   users,
   posters
 };
+

@@ -5,9 +5,10 @@
         <el-form-item label="状态">
           <el-select v-model="filters.status" placeholder="全部" clearable style="width: 120px">
             <el-option label="待审核" value="pending" />
+            <el-option label="辅导员审核" value="counselor_pending" />
             <el-option label="已通过" value="approved" />
             <el-option label="已驳回" value="rejected" />
-            <el-option label="使用中" value="using" />
+            <el-option label="使用中" value="checked_in" />
             <el-option label="已完成" value="completed" />
             <el-option label="已爽约" value="noshow" />
             <el-option label="已取消" value="cancelled" />
@@ -42,7 +43,7 @@
         <el-table-column prop="timeSlot" label="时间段" width="150" />
         <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type" size="small">{{ statusMap[row.status]?.label }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="purpose" label="用途" min-width="140" show-overflow-tooltip />
@@ -75,7 +76,7 @@
         <el-descriptions-item label="预约日期">{{ currentRow.date }}</el-descriptions-item>
         <el-descriptions-item label="时间段">{{ currentRow.timeSlot }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="statusMap[currentRow.status]?.type" size="small">{{ statusMap[currentRow.status]?.label }}</el-tag>
+          <el-tag :type="statusMap[currentRow.status]?.type" size="small">{{ statusMap[currentRow.status]?.label || currentRow.status }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="用途" :span="2">{{ currentRow.purpose }}</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ currentRow.createdAt }}</el-descriptions-item>
@@ -101,9 +102,10 @@ const currentRow = ref(null)
 
 const statusMap = {
   pending: { label: '待审核', type: 'warning' },
+  counselor_pending: { label: '辅导员审核', type: 'warning' },
   approved: { label: '已通过', type: 'success' },
   rejected: { label: '已驳回', type: 'danger' },
-  using: { label: '使用中', type: '' },
+  checked_in: { label: '使用中', type: '' },
   completed: { label: '已完成', type: 'info' },
   noshow: { label: '已爽约', type: 'danger' },
   cancelled: { label: '已取消', type: 'info' }
@@ -172,7 +174,7 @@ async function handleExport() {
       return
     }
     const XLSX = await import('xlsx')
-    const statusLabels = { pending: '待审核', approved: '已通过', rejected: '已驳回', using: '使用中', completed: '已完成', noshow: '已爽约', cancelled: '已取消' }
+    const statusLabels = { pending: '待审核', counselor_pending: '辅导员审核', approved: '已通过', rejected: '已驳回', checked_in: '使用中', completed: '已完成', noshow: '已爽约', cancelled: '已取消' }
     const exportData = list.map(row => ({
       '预约ID': row.id,
       '预约人': row.userName,
@@ -217,3 +219,4 @@ onMounted(() => {
   margin-top: 16px;
 }
 </style>
+

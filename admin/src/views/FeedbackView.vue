@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="反馈管理"
-    eyebrow="USER FEEDBACK"
+    eyebrow="用户反馈"
     description="集中查看用户反馈、问题上报和功能建议，并记录处理回复。"
   >
     <el-row :gutter="16">
@@ -152,3 +152,4 @@ onMounted(() => { loadFeedbacks() })
   margin-bottom: 16px;
 }
 </style>
+

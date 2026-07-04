@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="公告管理"
-    eyebrow="ANNOUNCEMENTS"
+    eyebrow="公告管理"
     description="发布、编辑、归档书院预约平台公告，并区分通知、公告和紧急信息。"
   >
     <template #actions>
@@ -225,3 +225,4 @@ onMounted(() => {
   margin-top: 16px;
 }
 </style>
+

@@ -1,4 +1,4 @@
-const rateLimit = require('express-rate-limit');
+﻿const rateLimit = require('express-rate-limit');
 const response = require('../utils/response');
 
 const apiLimiter = rateLimit({
@@ -6,6 +6,12 @@ const apiLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: function(req) {
+    const hasAuth = !!(req.headers && req.headers.authorization);
+    const isRead = req.method === 'GET';
+    const path = req.originalUrl || req.url || '';
+    return hasAuth && isRead && /^\/api\/v1\/(admin|stats|room|poster|feedback)\b/.test(path);
+  },
   handler: function(req, res) {
     return response.error(res, '请求过于频繁，请稍后再试', 429);
   }
@@ -91,3 +97,4 @@ module.exports = {
   reservationLimiter,
   checkinLimiter
 };
+

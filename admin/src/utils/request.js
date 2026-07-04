@@ -1,4 +1,4 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
@@ -39,6 +39,9 @@ request.interceptors.response.use(
         case 422:
           ElMessage.error(response.data.message || '参数校验失败')
           break
+        case 429:
+          ElMessage.error(response.data.message || '操作过快，请稍后再试')
+          break
         case 500:
           ElMessage.error('服务器内部错误')
           break
@@ -53,3 +56,5 @@ request.interceptors.response.use(
 )
 
 export default request
+
+
