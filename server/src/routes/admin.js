@@ -1,15 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const accountController = require('../controllers/accountController');
 const backupController = require('../controllers/backupController');
 const secureUploadService = require('../services/secureUploadService');
 const adminScope = require('../middleware/adminScope');
 const { auth, requireAdmin, requireRole } = require('../middleware/auth');
 
-router.get('/accounts', auth, requireRole('super_admin'), adminController.getAccounts);
-router.post('/accounts', auth, requireRole('super_admin'), adminController.createAccount);
-router.put('/accounts/:id', auth, requireRole('super_admin'), adminController.updateAccount);
-router.delete('/accounts/:id', auth, requireRole('super_admin'), adminController.deleteAccount);
+router.get('/accounts', auth, requireAdmin, adminScope.loadAdminScope, accountController.getAccounts);
+router.post('/accounts', auth, requireAdmin, adminScope.loadAdminScope, accountController.createAccount);
+router.put('/accounts/:id', auth, requireAdmin, adminScope.loadAdminScope, accountController.updateAccount);
+router.delete('/accounts/:id', auth, requireAdmin, adminScope.loadAdminScope, accountController.deleteAccount);
 
 router.get('/rooms', auth, requireAdmin, adminScope.loadAdminScope, adminScope.forceBuildingQuery, adminController.getRooms);
 router.get('/rooms/:id', auth, requireAdmin, adminScope.loadAdminScope, adminScope.roomFromParam('id'), adminController.getRoomDetail);
@@ -30,6 +31,7 @@ router.post('/buildings', auth, requireRole('super_admin'), adminController.crea
 router.put('/buildings/:id', auth, requireRole('super_admin'), adminController.updateBuilding);
 router.delete('/buildings/:id', auth, requireRole('super_admin'), adminController.deleteBuilding);
 
+router.get('/managers', auth, requireRole('super_admin'), accountController.getManagers);
 router.post('/managers', auth, requireRole('super_admin'), adminController.createManager);
 router.put('/managers/:id', auth, requireRole('super_admin'), adminController.updateManager);
 router.delete('/managers/:id', auth, requireRole('super_admin'), adminController.deleteManager);
