@@ -1,10 +1,13 @@
 <template>
   <el-container class="layout-container">
-    <el-aside :width="isCollapse ? '64px' : '220px'" class="layout-aside">
+    <el-aside :width="isCollapse ? '64px' : '240px'" class="layout-aside">
       <div class="logo-container">
         <div class="logo-mark">敬</div>
         <transition name="fade">
-          <span v-show="!isCollapse" class="logo-text">敬一书院</span>
+          <div v-show="!isCollapse" class="logo-copy">
+            <span class="logo-text">敬一书院</span>
+            <span class="logo-subtitle">预约管理平台</span>
+          </div>
         </transition>
       </div>
 
@@ -14,81 +17,23 @@
         :collapse-transition="false"
         router
         background-color="transparent"
-        text-color="rgba(255,255,255,0.68)"
+        text-color="rgba(255,255,255,0.72)"
         active-text-color="#FFFFFF"
         class="aside-menu"
       >
-        <el-menu-item index="/dashboard">
-          <el-icon><DataBoard /></el-icon>
-          <template #title>工作台</template>
-        </el-menu-item>
-
-        <el-sub-menu index="reservation">
-          <template #title>
-            <el-icon><Calendar /></el-icon>
-            <span>预约管理</span>
-          </template>
-          <el-menu-item index="/reservation/pending"><el-icon><Clock /></el-icon><template #title>待审核</template></el-menu-item>
-          <el-menu-item index="/reservation/all"><el-icon><List /></el-icon><template #title>全部预约</template></el-menu-item>
-          <el-menu-item index="/reservation/counselor"><el-icon><UserFilled /></el-icon><template #title>辅导员审核</template></el-menu-item>
-        </el-sub-menu>
-
-        <el-sub-menu index="room">
-          <template #title>
-            <el-icon><OfficeBuilding /></el-icon>
-            <span>功能房管理</span>
-          </template>
-          <el-menu-item index="/room/monitor"><el-icon><Monitor /></el-icon><template #title>实时监控</template></el-menu-item>
-          <el-menu-item index="/room/manage"><el-icon><Setting /></el-icon><template #title>房间管理</template></el-menu-item>
-          <el-menu-item index="/room/seats"><el-icon><Grid /></el-icon><template #title>座位管理</template></el-menu-item>
-          <el-menu-item index="/room/rules"><el-icon><Operation /></el-icon><template #title>规则配置</template></el-menu-item>
-        </el-sub-menu>
-
-        <el-menu-item index="/building/manage"><el-icon><HomeFilled /></el-icon><template #title>楼栋管理</template></el-menu-item>
-        <el-menu-item index="/checkin/manage"><el-icon><Check /></el-icon><template #title>签到管理</template></el-menu-item>
-        <el-menu-item index="/reading-room/logs"><el-icon><Reading /></el-icon><template #title>阅览室记录</template></el-menu-item>
-
-        <el-sub-menu index="poster">
-          <template #title>
-            <el-icon><PictureFilled /></el-icon>
-            <span>海报管理</span>
-          </template>
-          <el-menu-item index="/poster/pending"><el-icon><Clock /></el-icon><template #title>海报审核</template></el-menu-item>
-          <el-menu-item index="/poster/position"><el-icon><Location /></el-icon><template #title>位置管理</template></el-menu-item>
-        </el-sub-menu>
-
-        <el-menu-item index="/feedback"><el-icon><ChatDotRound /></el-icon><template #title>反馈管理</template></el-menu-item>
-
-        <el-sub-menu index="credit">
-          <template #title>
-            <el-icon><WarningFilled /></el-icon>
-            <span>信用管理</span>
-          </template>
-          <el-menu-item index="/credit/violations"><el-icon><Warning /></el-icon><template #title>违规记录</template></el-menu-item>
-          <el-menu-item index="/credit/blacklist"><el-icon><CircleCloseFilled /></el-icon><template #title>黑名单</template></el-menu-item>
-          <el-menu-item index="/credit/config"><el-icon><SetUp /></el-icon><template #title>信用配置</template></el-menu-item>
-        </el-sub-menu>
-
-        <el-sub-menu index="stats">
-          <template #title>
-            <el-icon><TrendCharts /></el-icon>
-            <span>数据统计</span>
-          </template>
-          <el-menu-item index="/stats/overview"><el-icon><DataAnalysis /></el-icon><template #title>数据概览</template></el-menu-item>
-          <el-menu-item index="/stats/export"><el-icon><Download /></el-icon><template #title>导出报表</template></el-menu-item>
-        </el-sub-menu>
-
-        <el-menu-item index="/account"><el-icon><User /></el-icon><template #title>账号管理</template></el-menu-item>
-
-        <el-sub-menu index="system">
-          <template #title>
-            <el-icon><Tools /></el-icon>
-            <span>系统管理</span>
-          </template>
-          <el-menu-item index="/system/announcements"><el-icon><Bell /></el-icon><template #title>公告管理</template></el-menu-item>
-          <el-menu-item index="/system/logs"><el-icon><Document /></el-icon><template #title>操作日志</template></el-menu-item>
-          <el-menu-item index="/system/backup"><el-icon><FolderOpened /></el-icon><template #title>数据备份</template></el-menu-item>
-        </el-sub-menu>
+        <template v-for="section in navigation" :key="section.title">
+          <div v-if="!isCollapse" class="menu-section-title">{{ section.title }}</div>
+          <el-menu-item
+            v-for="item in section.children"
+            :key="item.path"
+            :index="item.path"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <template #title>
+              <span>{{ item.title }}</span>
+            </template>
+          </el-menu-item>
+        </template>
       </el-menu>
     </el-aside>
 
@@ -100,12 +45,21 @@
               <Fold v-if="!isCollapse" />
               <Expand v-else />
             </el-icon>
-            <div>
-              <div class="page-title">{{ currentTitle }}</div>
-              <div class="page-subtitle">功能房预约管理后台</div>
+            <div class="route-summary">
+              <el-breadcrumb separator="/" class="breadcrumb">
+                <el-breadcrumb-item>管理后台</el-breadcrumb-item>
+                <el-breadcrumb-item v-if="route.meta.parent">{{ route.meta.parent }}</el-breadcrumb-item>
+                <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
+              </el-breadcrumb>
+              <div class="page-title-row">
+                <span class="page-title">{{ currentTitle }}</span>
+                <span class="page-subtitle">{{ currentDescription }}</span>
+              </div>
             </div>
           </div>
           <div class="header-right">
+            <el-button class="quick-btn" :icon="Search" circle @click="quickSearchVisible = true" />
+            <el-button class="quick-btn" :icon="Bell" circle @click="goPending" />
             <el-tag type="warning" effect="light">{{ roleLabel }}</el-tag>
             <el-dropdown @command="handleCommand">
               <span class="user-info">
@@ -114,7 +68,10 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="logout">
+                  <el-dropdown-item command="dashboard">
+                    <el-icon><DataBoard /></el-icon>工作台
+                  </el-dropdown-item>
+                  <el-dropdown-item divided command="logout">
                     <el-icon><SwitchButton /></el-icon>退出登录
                   </el-dropdown-item>
                 </el-dropdown-menu>
@@ -128,20 +85,52 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <el-dialog v-model="quickSearchVisible" title="快速导航" width="520px" class="quick-search-dialog">
+      <el-input v-model="quickKeyword" placeholder="输入功能名称，例如：预约、账号、黑名单" clearable autofocus />
+      <div class="quick-list">
+        <div
+          v-for="item in filteredQuickEntries"
+          :key="item.path"
+          class="quick-item"
+          @click="goQuick(item.path)"
+        >
+          <div>
+            <div class="quick-title">{{ item.title }}</div>
+            <div class="quick-description">{{ item.description }}</div>
+          </div>
+          <el-icon><ArrowRight /></el-icon>
+        </div>
+        <el-empty v-if="!filteredQuickEntries.length" description="没有匹配的功能" :image-size="80" />
+      </div>
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { Search, Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
+import { buildNavigation } from '@/router/adminRoutes'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const isCollapse = ref(false)
+const quickSearchVisible = ref(false)
+const quickKeyword = ref('')
 
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '工作台')
+const currentDescription = computed(() => route.meta.description || '功能房预约管理后台')
+const navigation = computed(() => buildNavigation(userStore.userInfo.role || 'admin'))
+const quickEntries = computed(() => navigation.value.flatMap(section => section.children))
+const filteredQuickEntries = computed(() => {
+  const keyword = quickKeyword.value.trim().toLowerCase()
+  if (!keyword) return quickEntries.value
+  return quickEntries.value.filter(item => `${item.title} ${item.description}`.toLowerCase().includes(keyword))
+})
 const avatarText = computed(() => {
   const name = userStore.userInfo.realName || userStore.userInfo.username || '管'
   return name.charAt(0)
@@ -155,9 +144,21 @@ const roleMap = {
 
 const roleLabel = computed(() => roleMap[userStore.userInfo.role] || '管理员')
 
+function goPending() {
+  router.push('/reservation/pending')
+}
+
+function goQuick(path) {
+  quickSearchVisible.value = false
+  quickKeyword.value = ''
+  router.push(path)
+}
+
 function handleCommand(command) {
   if (command === 'logout') {
     userStore.logout()
+  } else if (command === 'dashboard') {
+    router.push('/dashboard')
   }
 }
 </script>
@@ -177,10 +178,9 @@ function handleCommand(command) {
 }
 
 .logo-container {
-  height: 64px;
+  height: 68px;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(196, 148, 58, 0.28);
@@ -189,7 +189,8 @@ function handleCommand(command) {
 .logo-mark {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  flex: 0 0 34px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -198,12 +199,25 @@ function handleCommand(command) {
   font-weight: 800;
 }
 
+.logo-copy {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .logo-text {
   color: #FFFFFF;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 800;
   white-space: nowrap;
   letter-spacing: 1px;
+}
+
+.logo-subtitle {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .fade-enter-active,
@@ -218,30 +232,36 @@ function handleCommand(command) {
 
 .aside-menu {
   border-right: none;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 68px);
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 10px 0 18px;
 }
 
 .aside-menu::-webkit-scrollbar {
   width: 0;
 }
 
-.aside-menu :deep(.el-menu-item),
-.aside-menu :deep(.el-sub-menu__title) {
-  height: 46px;
-  line-height: 46px;
-  margin: 3px 8px;
-  border-radius: 8px;
+.menu-section-title {
+  padding: 14px 18px 6px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
-.aside-menu :deep(.el-menu-item:hover),
-.aside-menu :deep(.el-sub-menu__title:hover) {
+.aside-menu :deep(.el-menu-item) {
+  height: 42px;
+  line-height: 42px;
+  margin: 3px 10px;
+  border-radius: 10px;
+}
+
+.aside-menu :deep(.el-menu-item:hover) {
   background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .aside-menu :deep(.el-menu-item.is-active) {
-  background: rgba(0, 102, 204, 0.48) !important;
+  background: rgba(0, 102, 204, 0.5) !important;
   color: #FFFFFF !important;
 }
 
@@ -249,8 +269,8 @@ function handleCommand(command) {
   content: '';
   position: absolute;
   left: 0;
-  top: 25%;
-  bottom: 25%;
+  top: 24%;
+  bottom: 24%;
   width: 3px;
   background: #C4943A;
   border-radius: 0 3px 3px 0;
@@ -261,19 +281,20 @@ function handleCommand(command) {
 }
 
 .layout-header {
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
   padding: 0;
-  height: 64px;
+  height: 68px;
   box-shadow: 0 1px 4px rgba(0, 21, 41, 0.06);
   z-index: 10;
 }
 
 .header-content {
-  height: 64px;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 22px;
+  padding: 0 24px;
 }
 
 .header-left,
@@ -285,10 +306,12 @@ function handleCommand(command) {
 
 .header-left {
   gap: 14px;
+  min-width: 0;
 }
 
 .header-right {
-  gap: 16px;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .collapse-btn {
@@ -296,24 +319,49 @@ function handleCommand(command) {
   cursor: pointer;
   color: var(--jy-text-secondary, #8C8C9A);
   padding: 6px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
-.collapse-btn:hover {
+.collapse-btn:hover,
+.quick-btn:hover {
   color: var(--jy-primary, #0066CC);
   background-color: var(--jy-primary-bg, rgba(0, 102, 204, 0.08));
 }
 
+.route-summary {
+  min-width: 0;
+}
+
+.breadcrumb {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.page-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
 .page-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--jy-text-primary, #1A1A2E);
+  white-space: nowrap;
 }
 
 .page-subtitle {
-  margin-top: 2px;
   font-size: 12px;
   color: var(--jy-text-secondary, #8C8C9A);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-btn {
+  border: none;
+  background: var(--jy-bg, #F5F6FA);
 }
 
 .user-info {
@@ -334,8 +382,39 @@ function handleCommand(command) {
 }
 
 .layout-main {
-  padding: 20px;
+  padding: 22px;
   overflow-y: auto;
   background-color: var(--jy-bg, #F5F6FA);
+}
+
+.quick-list {
+  margin-top: 14px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.quick-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.quick-item:hover {
+  background: var(--jy-primary-bg, rgba(0, 102, 204, 0.08));
+}
+
+.quick-title {
+  font-weight: 700;
+  color: var(--jy-text-primary, #1A1A2E);
+}
+
+.quick-description {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--jy-text-secondary, #8C8C9A);
 }
 </style>
