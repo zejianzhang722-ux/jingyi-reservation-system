@@ -34,6 +34,11 @@
   --jy-spacing-md: 16px;
   --jy-spacing-lg: 24px;
   --jy-spacing-xl: 32px;
+  --jy-motion-fast: 160ms;
+  --jy-motion-normal: 260ms;
+  --jy-motion-slow: 420ms;
+  --jy-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --jy-motion-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --jy-sidebar-gradient: linear-gradient(180deg, #003D7A 0%, #001529 100%);
   --jy-header-height: 60px;
   --jy-sidebar-width: 220px;
@@ -63,6 +68,33 @@
   --el-box-shadow: 0 2px 8px rgba(0, 21, 41, 0.06);
   --el-box-shadow-light: 0 1px 3px rgba(0, 21, 41, 0.06);
   --el-box-shadow-lighter: 0 1px 2px rgba(0, 21, 41, 0.04);
+}
+
+@keyframes jy-fade-up {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes jy-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes jy-glow-sweep {
+  0% { transform: translateX(-120%); opacity: 0; }
+  35% { opacity: 0.75; }
+  100% { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes jy-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(196, 148, 58, 0.36); }
+  70% { box-shadow: 0 0 0 10px rgba(196, 148, 58, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(196, 148, 58, 0); }
+}
+
+@keyframes jy-soft-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -4px, 0); }
 }
 
 .el-button--primary {
@@ -138,15 +170,27 @@
   border-radius: var(--jy-radius-md);
   border: 1px solid var(--jy-border-light);
   box-shadow: var(--jy-shadow-card);
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  transition: box-shadow var(--jy-motion-normal) var(--jy-motion-ease), transform var(--jy-motion-normal) var(--jy-motion-ease), border-color var(--jy-motion-normal) var(--jy-motion-ease);
 }
 
 .el-card:hover {
   box-shadow: var(--jy-shadow-hover);
+  transform: translateY(-2px);
+  border-color: rgba(0, 102, 204, 0.12);
+}
+
+.el-button,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-tag,
+.el-switch__core {
+  transition-duration: var(--jy-motion-fast) !important;
+  transition-timing-function: var(--jy-motion-ease) !important;
 }
 
 .el-dialog {
   border-radius: var(--jy-radius-lg);
+  animation: jy-scale-in var(--jy-motion-normal) var(--jy-motion-spring);
 }
 
 .el-dialog__header {
@@ -170,8 +214,18 @@
   color: var(--jy-text-primary);
 }
 
+.el-table .el-table__row {
+  animation: jy-fade-up var(--jy-motion-normal) var(--jy-motion-ease) both;
+}
+
 .el-input__wrapper {
   border-radius: var(--jy-radius-sm);
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1) !important;
 }
 
 .el-select__wrapper {
@@ -211,4 +265,21 @@
 ::selection {
   background: rgba(0, 102, 204, 0.15);
   color: var(--jy-text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .el-card:hover,
+  .el-input__wrapper.is-focus,
+  .el-select__wrapper.is-focused {
+    transform: none;
+  }
 }
