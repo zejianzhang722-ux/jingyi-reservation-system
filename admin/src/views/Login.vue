@@ -3,8 +3,17 @@
     <div class="aurora-layer"></div>
     <div class="grid-layer"></div>
     <div class="beam-layer"></div>
+    <div class="ribbon-layer">
+      <span class="motion-ribbon ribbon-a"></span>
+      <span class="motion-ribbon ribbon-b"></span>
+      <span class="motion-ribbon ribbon-c"></span>
+    </div>
     <div class="constellation-layer">
       <span v-for="dot in dots" :key="dot.id" class="star-dot" :style="dot.style"></span>
+      <span v-for="meteor in meteors" :key="meteor.id" class="meteor" :style="meteor.style"></span>
+    </div>
+    <div class="glass-shards" aria-hidden="true">
+      <span v-for="shard in shards" :key="shard.id" class="glass-shard" :style="shard.style"></span>
     </div>
 
     <div class="login-stage">
@@ -29,6 +38,9 @@
           <div class="orbit-node node-a"></div>
           <div class="orbit-node node-b"></div>
           <div class="orbit-node node-c"></div>
+          <span class="orbit-label label-a">审核</span>
+          <span class="orbit-label label-b">签到</span>
+          <span class="orbit-label label-c">统计</span>
         </div>
 
         <div class="feature-stack">
@@ -42,9 +54,10 @@
         </div>
       </section>
 
-      <section class="login-card" :class="{ shake: loginError }">
+      <section class="login-card" :class="{ shake: loginError, loading: loading }">
         <div class="card-glow"></div>
         <div class="card-noise"></div>
+        <div class="scan-line"></div>
 
         <div class="login-header">
           <div class="login-logo">
@@ -62,6 +75,14 @@
         <div class="secure-strip">
           <span><i></i>安全连接</span>
           <span><i></i>权限自动识别</span>
+        </div>
+
+        <div class="access-flow" aria-hidden="true">
+          <span class="flow-dot active"></span>
+          <span class="flow-line"></span>
+          <span class="flow-dot"></span>
+          <span class="flow-line"></span>
+          <span class="flow-dot"></span>
         </div>
 
         <el-form ref="formRef" :model="form" :rules="rules" class="login-form" @keyup.enter="handleLogin">
@@ -115,13 +136,36 @@ const featureCards = [
   { title: '信用治理', desc: '信用分、限制与审计', icon: 'TrendCharts' }
 ]
 
-const dots = Array.from({ length: 22 }).map((_, index) => ({
+const dots = Array.from({ length: 26 }).map((_, index) => ({
   id: index,
   style: {
-    left: `${8 + (index * 37) % 88}%`,
-    top: `${8 + (index * 53) % 84}%`,
+    left: `${6 + (index * 37) % 90}%`,
+    top: `${7 + (index * 53) % 86}%`,
     animationDelay: `${(index % 8) * 0.45}s`,
     animationDuration: `${3.8 + (index % 5) * 0.35}s`
+  }
+}))
+
+const meteors = Array.from({ length: 5 }).map((_, index) => ({
+  id: index,
+  style: {
+    left: `${12 + index * 19}%`,
+    top: `${8 + (index * 17) % 48}%`,
+    animationDelay: `${1.2 + index * 1.7}s`,
+    animationDuration: `${5.8 + index * 0.55}s`
+  }
+}))
+
+const shards = Array.from({ length: 8 }).map((_, index) => ({
+  id: index,
+  style: {
+    left: `${5 + (index * 13) % 88}%`,
+    top: `${14 + (index * 29) % 68}%`,
+    width: `${42 + (index % 4) * 14}px`,
+    height: `${18 + (index % 3) * 8}px`,
+    animationDelay: `${index * 0.6}s`,
+    animationDuration: `${7.5 + (index % 4) * 1.2}s`,
+    transform: `rotate(${(index * 27) % 80 - 40}deg)`
   }
 }))
 
@@ -179,7 +223,9 @@ async function handleLogin() {
 .aurora-layer,
 .grid-layer,
 .beam-layer,
-.constellation-layer {
+.ribbon-layer,
+.constellation-layer,
+.glass-shards {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -212,6 +258,42 @@ async function handleLogin() {
   opacity: 0.7;
 }
 
+.ribbon-layer {
+  overflow: hidden;
+  opacity: 0.62;
+  mix-blend-mode: screen;
+}
+
+.motion-ribbon {
+  position: absolute;
+  width: 56vw;
+  height: 120px;
+  border-radius: 999px;
+  filter: blur(18px);
+  transform-origin: center;
+}
+
+.ribbon-a {
+  left: -18vw;
+  top: 18%;
+  background: linear-gradient(90deg, transparent, rgba(51,153,255,0.28), transparent);
+  animation: ribbonFlow 12s ease-in-out infinite;
+}
+
+.ribbon-b {
+  right: -24vw;
+  top: 52%;
+  background: linear-gradient(90deg, transparent, rgba(196,148,58,0.22), transparent);
+  animation: ribbonFlow 14s ease-in-out infinite reverse;
+}
+
+.ribbon-c {
+  left: 22vw;
+  bottom: 6%;
+  background: linear-gradient(90deg, transparent, rgba(82,196,26,0.12), transparent);
+  animation: ribbonFloat 10s ease-in-out infinite;
+}
+
 .constellation-layer {
   opacity: 0.78;
 }
@@ -224,6 +306,33 @@ async function handleLogin() {
   background: rgba(255,255,255,0.8);
   box-shadow: 0 0 14px rgba(255,255,255,0.6);
   animation: starPulse 4s ease-in-out infinite;
+}
+
+.meteor {
+  position: absolute;
+  width: 110px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.92), rgba(196,148,58,0));
+  opacity: 0;
+  transform: rotate(-24deg);
+  filter: drop-shadow(0 0 8px rgba(255,255,255,0.6));
+  animation: meteorFly 6s ease-in-out infinite;
+}
+
+.glass-shards {
+  z-index: 0;
+}
+
+.glass-shard {
+  position: absolute;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.035));
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 10px 30px rgba(0,0,0,0.1);
+  backdrop-filter: blur(8px);
+  animation: shardFloat 8s ease-in-out infinite;
+  opacity: 0.42;
 }
 
 .login-stage {
@@ -267,6 +376,7 @@ async function handleLogin() {
   border-radius: 999px;
   background: #C4943A;
   box-shadow: 0 0 0 6px rgba(196, 148, 58, 0.14), 0 0 18px rgba(196, 148, 58, 0.55);
+  animation: dotBeacon 2.4s ease-in-out infinite;
 }
 
 .hero-copy {
@@ -366,6 +476,25 @@ async function handleLogin() {
 .node-b { right: 25px; bottom: 74px; background: #C4943A; animation: nodePulse 2.8s ease-in-out infinite 0.4s; }
 .node-c { left: 34px; bottom: 88px; background: #3399FF; animation: nodePulse 2.6s ease-in-out infinite 0.8s; }
 
+.orbit-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.11);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.78);
+  font-size: 12px;
+  backdrop-filter: blur(8px);
+  animation: labelFloat 4.8s ease-in-out infinite;
+}
+
+.label-a { top: 64px; right: 18px; }
+.label-b { left: 16px; top: 132px; animation-delay: 0.5s; }
+.label-c { right: 46px; bottom: 48px; animation-delay: 0.95s; }
+
 .feature-stack {
   position: absolute;
   left: 0;
@@ -386,16 +515,18 @@ async function handleLogin() {
   background: linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.07));
   backdrop-filter: blur(18px);
   box-shadow: 0 14px 36px rgba(0,0,0,0.16);
-  animation: panelIn 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: panelIn 720ms cubic-bezier(0.16, 1, 0.3, 1) both, cardFloat 5.4s ease-in-out infinite;
   transition: transform 220ms ease, background 220ms ease, border-color 220ms ease;
 }
 
 .feature-card:nth-child(2) {
   transform: translateX(28px);
+  animation-duration: 720ms, 6.2s;
 }
 
 .feature-card:nth-child(3) {
   transform: translateX(58px);
+  animation-duration: 720ms, 6.8s;
 }
 
 .feature-card:hover {
@@ -423,6 +554,7 @@ async function handleLogin() {
   color: #F5D38D;
   font-size: 19px;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+  animation: iconPulse 3.6s ease-in-out infinite;
 }
 
 .feature-card strong {
@@ -464,6 +596,13 @@ async function handleLogin() {
     inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
+.login-card.loading {
+  box-shadow:
+    0 34px 94px rgba(0, 102, 204, 0.22),
+    0 0 0 1px rgba(51, 153, 255, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
 .login-card.shake {
   animation: shake 420ms ease;
 }
@@ -483,6 +622,17 @@ async function handleLogin() {
   pointer-events: none;
   background-image: radial-gradient(rgba(255,255,255,0.7) 0.6px, transparent 0.6px);
   background-size: 18px 18px;
+}
+
+.scan-line {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,102,204,0.34), transparent);
+  opacity: 0;
+  animation: cardScan 5.5s ease-in-out infinite;
 }
 
 .login-card::before {
@@ -549,7 +699,7 @@ async function handleLogin() {
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
   border-radius: 14px;
   background: rgba(0, 102, 204, 0.055);
   border: 1px solid rgba(0, 102, 204, 0.08);
@@ -571,6 +721,47 @@ async function handleLogin() {
   background: var(--jy-success, #52C41A);
   box-shadow: 0 0 0 4px rgba(82,196,26,0.12);
   animation: securePulse 2.2s ease-in-out infinite;
+}
+
+.access-flow {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.flow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0,102,204,0.26);
+  animation: flowStep 2.8s ease-in-out infinite;
+}
+
+.flow-dot:nth-of-type(3) { animation-delay: 0.42s; }
+.flow-dot:nth-of-type(5) { animation-delay: 0.84s; }
+.flow-dot.active {
+  background: var(--jy-primary, #0066CC);
+}
+
+.flow-line {
+  width: 38px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0,102,204,0.14), rgba(0,102,204,0.38), rgba(0,102,204,0.14));
+  overflow: hidden;
+  position: relative;
+}
+
+.flow-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(0,102,204,0.78), transparent);
+  transform: translateX(-100%);
+  animation: flowLine 2.8s ease-in-out infinite;
 }
 
 .login-form {
@@ -658,8 +849,13 @@ async function handleLogin() {
   filter: saturate(1.08);
 }
 
-.login-btn:hover::after {
+.login-btn:hover::after,
+.login-card.loading .login-btn::after {
   transform: translateX(100%);
+}
+
+.login-card.loading .login-btn {
+  animation: buttonBreath 1.25s ease-in-out infinite;
 }
 
 .login-btn:active {
@@ -702,9 +898,30 @@ async function handleLogin() {
   50% { transform: translateX(42%); opacity: 0.32; }
 }
 
+@keyframes ribbonFlow {
+  0%, 100% { transform: translate3d(-8%, 0, 0) rotate(-12deg) scale(1); }
+  50% { transform: translate3d(14%, 10px, 0) rotate(-8deg) scale(1.08); }
+}
+
+@keyframes ribbonFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(8deg); }
+  50% { transform: translate3d(-10%, -18px, 0) rotate(12deg); }
+}
+
 @keyframes starPulse {
   0%, 100% { opacity: 0.25; transform: scale(0.72); }
   50% { opacity: 0.92; transform: scale(1.16); }
+}
+
+@keyframes meteorFly {
+  0%, 68% { opacity: 0; transform: translate3d(0, 0, 0) rotate(-24deg); }
+  74% { opacity: 0.95; }
+  100% { opacity: 0; transform: translate3d(-260px, 140px, 0) rotate(-24deg); }
+}
+
+@keyframes shardFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)); }
+  50% { transform: translate3d(18px, -20px, 0) rotate(var(--r, 0deg)); }
 }
 
 @keyframes panelIn {
@@ -715,6 +932,16 @@ async function handleLogin() {
 @keyframes cardIn {
   from { opacity: 0; transform: perspective(1100px) translateY(34px) scale(0.96); }
   to { opacity: 1; transform: perspective(1100px) translateY(0) scale(1); }
+}
+
+@keyframes cardFloat {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.08); }
+}
+
+@keyframes iconPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 
 @keyframes orbitSpin {
@@ -731,6 +958,11 @@ async function handleLogin() {
   50% { transform: scale(1.28); opacity: 1; }
 }
 
+@keyframes labelFloat {
+  0%, 100% { transform: translateY(0); opacity: 0.62; }
+  50% { transform: translateY(-6px); opacity: 0.92; }
+}
+
 @keyframes shimmerBar {
   to { background-position: 220% 0; }
 }
@@ -743,6 +975,32 @@ async function handleLogin() {
 @keyframes securePulse {
   0%, 100% { box-shadow: 0 0 0 4px rgba(82,196,26,0.12); }
   50% { box-shadow: 0 0 0 7px rgba(82,196,26,0.05); }
+}
+
+@keyframes flowStep {
+  0%, 100% { transform: scale(0.86); opacity: 0.48; }
+  45% { transform: scale(1.24); opacity: 1; }
+}
+
+@keyframes flowLine {
+  0% { transform: translateX(-100%); }
+  70%, 100% { transform: translateX(100%); }
+}
+
+@keyframes cardScan {
+  0%, 64% { opacity: 0; transform: translateY(0); }
+  70% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(560px); }
+}
+
+@keyframes buttonBreath {
+  0%, 100% { filter: saturate(1); }
+  50% { filter: saturate(1.2) brightness(1.08); }
+}
+
+@keyframes dotBeacon {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(196, 148, 58, 0.14), 0 0 18px rgba(196, 148, 58, 0.55); }
+  50% { box-shadow: 0 0 0 10px rgba(196, 148, 58, 0.06), 0 0 26px rgba(196, 148, 58, 0.75); }
 }
 
 @keyframes shake {
@@ -789,7 +1047,8 @@ async function handleLogin() {
   }
 
   .brand-orbit,
-  .feature-stack {
+  .feature-stack,
+  .glass-shards {
     display: none;
   }
 
