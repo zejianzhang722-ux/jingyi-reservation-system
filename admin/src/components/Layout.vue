@@ -51,15 +51,17 @@
                 <el-breadcrumb-item v-if="route.meta.parent">{{ route.meta.parent }}</el-breadcrumb-item>
                 <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
               </el-breadcrumb>
-              <div class="page-title-row">
-                <span class="page-title">{{ currentTitle }}</span>
-                <span class="page-subtitle">{{ currentDescription }}</span>
-              </div>
+              <transition name="title-slide" mode="out-in">
+                <div class="page-title-row" :key="route.fullPath">
+                  <span class="page-title">{{ currentTitle }}</span>
+                  <span class="page-subtitle">{{ currentDescription }}</span>
+                </div>
+              </transition>
             </div>
           </div>
           <div class="header-right">
             <el-button class="quick-btn" :icon="Search" circle @click="quickSearchVisible = true" />
-            <el-button class="quick-btn" :icon="Bell" circle @click="goPending" />
+            <el-button class="quick-btn notify-btn" :icon="Bell" circle @click="goPending" />
             <el-tag type="warning" effect="light">{{ roleLabel }}</el-tag>
             <el-dropdown @command="handleCommand">
               <span class="user-info">
@@ -82,7 +84,11 @@
       </el-header>
 
       <el-main class="layout-main">
-        <router-view />
+        <router-view v-slot="{ Component, route: viewRoute }">
+          <transition name="route-fade" mode="out-in">
+            <component :is="Component" :key="viewRoute.fullPath" />
+          </transition>
+        </router-view>
       </el-main>
     </el-container>
 
@@ -90,9 +96,10 @@
       <el-input v-model="quickKeyword" placeholder="输入功能名称，例如：预约、账号、黑名单" clearable autofocus />
       <div class="quick-list">
         <div
-          v-for="item in filteredQuickEntries"
+          v-for="(item, index) in filteredQuickEntries"
           :key="item.path"
           class="quick-item"
+          :style="{ animationDelay: `${index * 32}ms` }"
           @click="goQuick(item.path)"
         >
           <div>
@@ -170,11 +177,19 @@ function handleCommand(command) {
 
 .layout-aside {
   background: linear-gradient(180deg, #103B70 0%, #0B1F35 100%);
-  transition: width 0.25s ease;
+  transition: width var(--jy-motion-normal, 260ms) var(--jy-motion-spring, cubic-bezier(0.16, 1, 0.3, 1));
   overflow: hidden;
   box-shadow: 2px 0 12px rgba(0, 21, 41, 0.14);
   position: relative;
   z-index: 20;
+}
+
+.layout-aside::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 25% 8%, rgba(196, 148, 58, 0.22), transparent 26%), radial-gradient(circle at 90% 78%, rgba(0, 102, 204, 0.26), transparent 32%);
 }
 
 .logo-container {
@@ -184,6 +199,8 @@ function handleCommand(command) {
   gap: 10px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(196, 148, 58, 0.28);
+  position: relative;
+  z-index: 1;
 }
 
 .logo-mark {
@@ -197,6 +214,7 @@ function handleCommand(command) {
   background: #C4943A;
   color: #fff;
   font-weight: 800;
+  animation: jy-pulse-ring 2.8s ease-out infinite;
 }
 
 .logo-copy {
@@ -222,12 +240,13 @@ function handleCommand(command) {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--jy-motion-fast, 160ms) ease, transform var(--jy-motion-fast, 160ms) ease;
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+  transform: translateX(-6px);
 }
 
 .aside-menu {
@@ -235,6 +254,8 @@ function handleCommand(command) {
   height: calc(100vh - 68px);
   overflow-y: auto;
   padding: 10px 0 18px;
+  position: relative;
+  z-index: 1;
 }
 
 .aside-menu::-webkit-scrollbar {
@@ -254,15 +275,18 @@ function handleCommand(command) {
   line-height: 42px;
   margin: 3px 10px;
   border-radius: 10px;
+  transition: background-color var(--jy-motion-fast, 160ms) ease, transform var(--jy-motion-fast, 160ms) ease, color var(--jy-motion-fast, 160ms) ease;
 }
 
 .aside-menu :deep(.el-menu-item:hover) {
   background-color: rgba(255, 255, 255, 0.08) !important;
+  transform: translateX(3px);
 }
 
 .aside-menu :deep(.el-menu-item.is-active) {
   background: rgba(0, 102, 204, 0.5) !important;
   color: #FFFFFF !important;
+  transform: translateX(3px);
 }
 
 .aside-menu :deep(.el-menu-item.is-active)::before {
@@ -320,12 +344,30 @@ function handleCommand(command) {
   color: var(--jy-text-secondary, #8C8C9A);
   padding: 6px;
   border-radius: 8px;
+  transition: background-color var(--jy-motion-fast, 160ms) ease, transform var(--jy-motion-fast, 160ms) ease;
 }
 
 .collapse-btn:hover,
 .quick-btn:hover {
   color: var(--jy-primary, #0066CC);
   background-color: var(--jy-primary-bg, rgba(0, 102, 204, 0.08));
+  transform: translateY(-1px);
+}
+
+.notify-btn {
+  position: relative;
+}
+
+.notify-btn::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--jy-danger, #FF4D4F);
+  box-shadow: 0 0 0 4px rgba(255, 77, 79, 0.14);
 }
 
 .route-summary {
@@ -359,6 +401,21 @@ function handleCommand(command) {
   white-space: nowrap;
 }
 
+.title-slide-enter-active,
+.title-slide-leave-active {
+  transition: opacity var(--jy-motion-fast, 160ms) ease, transform var(--jy-motion-fast, 160ms) ease;
+}
+
+.title-slide-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.title-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
 .quick-btn {
   border: none;
   background: var(--jy-bg, #F5F6FA);
@@ -373,6 +430,11 @@ function handleCommand(command) {
   background: #0066CC;
   color: #fff;
   font-weight: 700;
+  transition: transform var(--jy-motion-fast, 160ms) ease;
+}
+
+.user-info:hover .user-avatar {
+  transform: rotate(-6deg) scale(1.05);
 }
 
 .user-name {
@@ -385,6 +447,23 @@ function handleCommand(command) {
   padding: 22px;
   overflow-y: auto;
   background-color: var(--jy-bg, #F5F6FA);
+}
+
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition: opacity var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease), transform var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease), filter var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease);
+}
+
+.route-fade-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.992);
+  filter: blur(2px);
+}
+
+.route-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.998);
+  filter: blur(1px);
 }
 
 .quick-list {
@@ -401,10 +480,13 @@ function handleCommand(command) {
   padding: 12px 14px;
   border-radius: 10px;
   cursor: pointer;
+  animation: jy-fade-up var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease) both;
+  transition: background-color var(--jy-motion-fast, 160ms) ease, transform var(--jy-motion-fast, 160ms) ease;
 }
 
 .quick-item:hover {
   background: var(--jy-primary-bg, rgba(0, 102, 204, 0.08));
+  transform: translateX(4px);
 }
 
 .quick-title {
