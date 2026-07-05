@@ -27,6 +27,7 @@ defineProps({
   display: flex;
   flex-direction: column;
   gap: 16px;
+  animation: jy-fade-up var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease) both;
 }
 
 .page-shell-header {
@@ -35,10 +36,36 @@ defineProps({
   align-items: flex-start;
   gap: 20px;
   padding: 20px 22px;
-  background: #FFFFFF;
+  background: linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(246,250,255,0.96) 100%);
   border: 1px solid var(--jy-border-light, #F0F0F5);
   border-radius: var(--jy-radius-md, 10px);
   box-shadow: var(--jy-shadow-card, 0 2px 8px rgba(0, 21, 41, 0.06));
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease), box-shadow var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease);
+}
+
+.page-shell-header:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--jy-shadow-hover, 0 6px 16px rgba(0, 21, 41, 0.12));
+}
+
+.page-shell-header::before {
+  content: '';
+  position: absolute;
+  right: -80px;
+  top: -80px;
+  width: 210px;
+  height: 210px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(0, 102, 204, 0.12), transparent 65%);
+  animation: jy-soft-float 6s ease-in-out infinite;
+}
+
+.page-shell-copy,
+.page-shell-actions {
+  position: relative;
+  z-index: 1;
 }
 
 .page-shell-copy {
