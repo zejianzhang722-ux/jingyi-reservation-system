@@ -1,7 +1,9 @@
-const db = require('../config/database');
+﻿const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const bcrypt = require('bcryptjs');
+const dayjs = require('dayjs');
+const helpers = require('../utils/helpers');
 
 const getAccounts = async function(req, res) {
   try {
@@ -138,6 +140,63 @@ const deleteAccount = async function(req, res) {
   }
 };
 
+const enrichRoomsWithTodayTimeline = async function(rooms) {
+  if (!Array.isArray(rooms) || rooms.length === 0) return rooms;
+
+  const today = dayjs().format('YYYY-MM-DD');
+  const nowTime = dayjs().format('HH:mm');
+  const roomIds = rooms.map(function(room) { return room.id; }).filter(Boolean);
+  const placeholders = roomIds.map(function() { return '?'; }).join(',');
+
+  let reservations = [];
+  if (roomIds.length > 0) {
+    const [rows] = await db.query(
+      'SELECT r.room_id, r.start_time, r.end_time, r.status, r.participants, u.real_name, u.nickname FROM reservations r LEFT JOIN users u ON r.user_id = u.id WHERE r.date = ? AND r.status IN ("approved", "checked_in") AND r.room_id IN (' + placeholders + ')',
+      [today].concat(roomIds)
+    );
+    reservations = rows;
+  }
+
+  return rooms.map(function(room) {
+    const capacity = Number(room.capacity) || 1;
+    const roomReservations = reservations.filter(function(r) { return Number(r.room_id) === Number(room.id); });
+    const openStart = room.open_start_time || '08:00';
+    const openEnd = room.open_end_time || '22:00';
+    const slots = helpers.getHourRange(openStart, openEnd).slice(0, 8).map(function(time) {
+      const endTime = helpers.addMinutes(time, 30);
+      const occupiedRows = roomReservations.filter(function(r) {
+        return helpers.checkTimeConflict(r.start_time, r.end_time, time, endTime);
+      });
+      const occupiedPeople = occupiedRows.reduce(function(sum, r) {
+        return sum + (Number(r.participants) || 1);
+      }, 0);
+      const names = occupiedRows.map(function(r) { return r.real_name || r.nickname || ''; }).filter(Boolean);
+      const availableCount = Math.max(0, capacity - occupiedPeople);
+      return {
+        time: time,
+        endTime: endTime,
+        status: occupiedRows.length ? 'occupied' : 'available',
+        occupied: occupiedRows.length > 0,
+        availableCount: availableCount,
+        totalCount: capacity,
+        userName: names.join('、')
+      };
+    });
+
+    const currentRows = roomReservations.filter(function(r) {
+      return helpers.checkTimeConflict(r.start_time, r.end_time, nowTime, helpers.addMinutes(nowTime, 1));
+    });
+    const usingRows = currentRows.filter(function(r) { return r.status === 'checked_in'; });
+    const currentStatus = room.status === 'closed' ? 'closed' : (usingRows.length ? 'using' : (currentRows.length ? 'reserved' : 'free'));
+    const currentNames = currentRows.map(function(r) { return r.real_name || r.nickname || ''; }).filter(Boolean);
+
+    return Object.assign({}, room, {
+      currentStatus: currentStatus,
+      currentUser: currentNames.join('、'),
+      todaySlots: slots
+    });
+  });
+};
 const getRooms = async function(req, res) {
   try {
     const { page = 1, pageSize = 10, type, buildingId, status, keyword } = req.query;
@@ -163,8 +222,9 @@ const getRooms = async function(req, res) {
     params.push(parseInt(pageSize), parseInt(offset));
 
     const [rooms] = await db.query(listSql, params);
+    const enrichedRooms = await enrichRoomsWithTodayTimeline(rooms);
 
-    return response.paginate(res, rooms, countResult[0].total, page, pageSize);
+    return response.paginate(res, enrichedRooms, countResult[0].total, page, pageSize);
   } catch (err) {
     logger.error('获取功能房列表异常:', err);
     return response.error(res, err.message);
@@ -695,3 +755,4 @@ module.exports = {
   archiveSemester, backupData,
   uploadFile
 };
+

@@ -1,4 +1,4 @@
-const dayjs = require('dayjs');
+﻿const dayjs = require('dayjs');
 const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
@@ -15,9 +15,99 @@ const dateRange = function(req) {
     end: req.query.endDate || helpers.formatDate(new Date())
   };
 };
+const roomTypeLabels = {
+  study_room: '自习室', seminar_room: '共享空间', media_room: '影音室',
+  competition_room: '备赛间', roadshow_space: '路演空间', dance_room: '舞蹈室',
+  reading_room: '阅览室', multi_purpose_hall: '多功能厅', study_center: '学业辅导中心',
+  career_center: '生涯发展咨询室', job_studio: '求职就业工作室',
+  innovation_workshop: '创新工作坊', party_room: '党团活动室',
+  national_defense_studio: '国防教育工作室', mentor_room: '导师交流室',
+  psychology_room: '心理咨询室', tutor: '团员模范岗', data_room: '资料室'
+};
+
+const getRoomTypeLabel = function(type) {
+  return roomTypeLabels[type] || type || '其他空间';
+};
+
+const buildMockDashboard = function(req) {
+  const tables = require('../config/mock-db').__tables;
+  const today = helpers.formatDate(new Date());
+  const start30 = dayjs().subtract(30, 'day').format('YYYY-MM-DD');
+  const isGlobal = req.adminScope && req.adminScope.isGlobal;
+  const buildingId = req.adminScope ? Number(req.adminScope.buildingId) : null;
+  const rooms = (tables.rooms || []).filter(function(room) {
+    return isGlobal || Number(room.building_id) === buildingId;
+  });
+  const roomIds = new Set(rooms.map(function(room) { return Number(room.id); }));
+  const reservations = (tables.reservations || []).filter(function(row) {
+    return roomIds.has(Number(row.room_id));
+  });
+  const users = new Map((tables.users || []).map(function(user) { return [Number(user.id), user]; }));
+  const roomById = new Map(rooms.map(function(room) { return [Number(room.id), room]; }));
+  const activeStatuses = ['approved', 'checked_in', 'completed'];
+
+  const dates = [];
+  const trendReservations = [];
+  const trendUsed = [];
+  const trendNoshow = [];
+  for (let index = 6; index >= 0; index -= 1) {
+    const date = dayjs().subtract(index, 'day').format('YYYY-MM-DD');
+    const dayRows = reservations.filter(function(row) { return row.date === date; });
+    dates.push(dayjs(date).format('MM-DD'));
+    trendReservations.push(dayRows.length);
+    trendUsed.push(dayRows.filter(function(row) { return activeStatuses.includes(row.status); }).length);
+    trendNoshow.push(dayRows.filter(function(row) { return row.status === 'noshow'; }).length);
+  }
+
+  const typeCounts = new Map();
+  rooms.filter(function(room) { return room.status === 'open'; }).forEach(function(room) {
+    typeCounts.set(room.type, (typeCounts.get(room.type) || 0) + 1);
+  });
+
+  const ranking = rooms.map(function(room) {
+    const count = reservations.filter(function(row) {
+      return Number(row.room_id) === Number(room.id) && row.date >= start30 && activeStatuses.includes(row.status);
+    }).length;
+    return { name: room.name, reservation_count: count };
+  }).sort(function(a, b) { return b.reservation_count - a.reservation_count; }).slice(0, 8);
+
+  const pendingItems = reservations
+    .filter(function(row) { return row.status === 'pending' || row.status === 'counselor_pending'; })
+    .sort(function(a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); })
+    .slice(0, 10)
+    .map(function(row) {
+      const user = users.get(Number(row.user_id)) || {};
+      const room = roomById.get(Number(row.room_id)) || {};
+      return {
+        id: row.id,
+        tag: row.status === 'counselor_pending' ? '辅导员审核' : '待审核',
+        text: (user.real_name || user.nickname || '') + ' 申请 ' + (room.name || '') + (row.purpose ? ' - ' + row.purpose : ''),
+        time: row.date + ' ' + row.start_time
+      };
+    });
+
+  return {
+    todayReservations: reservations.filter(function(row) { return row.date === today; }).length,
+    pendingCount: reservations.filter(function(row) { return row.status === 'pending' || row.status === 'counselor_pending'; }).length,
+    usingCount: reservations.filter(function(row) { return row.status === 'checked_in'; }).length,
+    noshowCount: reservations.filter(function(row) { return row.status === 'noshow' && row.date === today; }).length,
+    trend: { dates: dates, reservations: trendReservations, used: trendUsed, noshow: trendNoshow },
+    roomTypeStats: Array.from(typeCounts.entries()).map(function(entry) {
+      return { name: getRoomTypeLabel(entry[0]), value: entry[1] };
+    }),
+    usageRanking: {
+      rooms: ranking.map(function(row) { return row.name; }),
+      rates: ranking.map(function(row) { var count = Number(row.reservation_count || 0); return count > 0 ? Math.min(100, Math.max(1, Math.round(count / 30 * 100))) : 0; })
+    },
+    pendingItems: pendingItems
+  };
+};
 
 const dashboard = async function(req, res) {
   try {
+    if (db.isMock()) {
+      return response.success(res, buildMockDashboard(req));
+    }
     const today = helpers.formatDate(new Date());
     const scope = buildingFilter(req, 'rm');
     const count = async function(condition, params) {
@@ -73,7 +163,7 @@ const dashboard = async function(req, res) {
       usingCount,
       noshowCount,
       trend: { dates, reservations, used, noshow },
-      roomTypeStats: roomTypes.map(function(row) { return { name: row.type, value: Number(row.count || 0) }; }),
+      roomTypeStats: roomTypes.map(function(row) { return { name: getRoomTypeLabel(row.type), value: Number(row.count || 0) }; }),
       usageRanking: {
         rooms: ranking.map(function(row) { return row.name; }),
         rates: ranking.map(function(row) { return Math.min(100, Math.round(Number(row.reservation_count || 0) / 30 * 100)); })
@@ -263,3 +353,5 @@ module.exports = {
   userStats,
   exportData
 };
+
+

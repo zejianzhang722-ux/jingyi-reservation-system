@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="功能房预约工作台"
-    eyebrow="TODAY OPS"
+    eyebrow="今日概览"
     description="集中查看待审核、使用中、异常记录和空间使用趋势。"
   >
     <template #actions>
@@ -122,11 +122,11 @@ function initPieChart(data) {
   pieChart = echarts.init(pieChartRef.value)
   pieChart.setOption({
     tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
+    legend: { type: 'scroll', bottom: 0 },
     series: [{
       type: 'pie',
       radius: ['42%', '68%'],
-      center: ['50%', '42%'],
+      center: ['50%', '40%'],
       label: { formatter: '{b}' },
       data: data || []
     }]
@@ -206,7 +206,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .stat-cards,
 .content-row {
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 
 .panel-card {
@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
 }
 
 .chart-container {
-  height: 320px;
+  height: 360px;
 }
 
 .pending-list {
@@ -253,3 +253,5 @@ onBeforeUnmount(() => {
   color: var(--jy-text-secondary, #8C8C9A);
 }
 </style>
+
+

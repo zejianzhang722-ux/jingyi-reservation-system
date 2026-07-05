@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="monitor-page">
     <el-card shadow="never" class="filter-card">
       <el-form :model="filters" inline>
@@ -40,15 +40,22 @@
       <el-card v-for="room in rooms" :key="room.id" shadow="hover" class="room-card" @click="showTimeline(room)">
         <div class="room-header">
           <span class="room-name">{{ room.name }}</span>
-          <el-tag :type="getRoomStatusType(room.status)" size="small">{{ getRoomStatusLabel(room.status) }}</el-tag>
+          <el-tag :type="getRoomStatusType(room.currentStatus || room.status)" size="small">{{ getRoomStatusLabel(room.currentStatus || room.status) }}</el-tag>
         </div>
         <div class="room-info">
           <span class="room-type">{{ getTypeLabel(room.type) }}</span>
           <span class="room-capacity">容纳 {{ room.capacity }} 人</span>
         </div>
-        <div class="room-timeline-mini">
-          <div v-for="slot in room.todaySlots?.slice(0, 8)" :key="slot.time" class="timeline-block" :class="{ occupied: slot.occupied }" :title="`${slot.time} ${slot.occupied ? slot.userName : '空闲'}`"></div>
+        <div class="room-timeline-mini" v-if="room.todaySlots?.length">
+          <div
+            v-for="slot in room.todaySlots.slice(0, 8)"
+            :key="slot.time"
+            class="timeline-block"
+            :class="{ occupied: slot.occupied }"
+            :title="slot.detail"
+          ></div>
         </div>
+        <div class="room-timeline-empty" v-else>暂无今日时间线</div>
         <div class="room-current" v-if="room.currentUser">
           <el-icon><User /></el-icon>
           <span>当前使用：{{ room.currentUser }}</span>
@@ -56,7 +63,7 @@
       </el-card>
     </div>
 
-    <el-dialog v-model="timelineDialogVisible" :title="`${currentRoom?.name || ''} - 时间线详情`" width="700px">
+    <el-dialog v-model="timelineDialogVisible" :title="`${currentRoom?.name || ''} - 时间线详情`" width="760px">
       <div ref="timelineDetailRef" class="timeline-chart"></div>
     </el-dialog>
   </div>
@@ -66,8 +73,8 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import { io } from 'socket.io-client'
-import { getList, getTimeline } from '@/api/room'
-import { getBuildings } from '@/api/room'
+import { getList, getTimeline, getBuildings } from '@/api/room'
+import { normalizeTimelineResponse, buildMiniTimeline, getTimelineSlotState } from '@/utils/roomTimeline'
 
 const filters = reactive({ buildingId: '', type: '' })
 const rooms = ref([])
@@ -103,12 +110,19 @@ function getRoomStatusLabel(status) {
   return map[status] || '未知'
 }
 
+function normalizeRoom(room) {
+  return {
+    ...room,
+    todaySlots: room.todaySlots?.length ? room.todaySlots : buildMiniTimeline(room.todayTimeline || room.timeline || [])
+  }
+}
+
 async function loadRooms() {
   try {
     const res = await getList({ buildingId: filters.buildingId, type: filters.type, pageSize: 100 })
-    rooms.value = res.data?.list || []
+    rooms.value = (res.data?.list || []).map(normalizeRoom)
   } catch (e) {
-    // handled
+    rooms.value = []
   }
 }
 
@@ -117,7 +131,7 @@ async function loadBuildings() {
     const res = await getBuildings({ pageSize: 100 })
     buildingOptions.value = res.data?.list || []
   } catch (e) {
-    // handled
+    buildingOptions.value = []
   }
 }
 
@@ -134,40 +148,39 @@ async function showTimeline(room) {
 
 function renderTimeline(data) {
   setTimeout(() => {
-    if (timelineChart) {
-      timelineChart.dispose()
-    }
+    if (timelineChart) timelineChart.dispose()
     if (!timelineDetailRef.value) return
+
     timelineChart = echarts.init(timelineDetailRef.value)
-    const hours = Array.from({ length: 14 }, (_, i) => `${i + 8}:00`)
-    const slots = data?.slots || hours.map(() => ({ occupied: false, userName: '' }))
-    const option = {
+    const slots = normalizeTimelineResponse(data)
+    const hours = slots.map(slot => slot.time)
+    const empty = !slots.length
+
+    timelineChart.setOption({
+      title: empty ? { text: '暂无时间线数据', left: 'center', top: 'middle', textStyle: { color: '#8C8C9A', fontSize: 14 } } : undefined,
       tooltip: {
         formatter: (p) => {
-          const s = slots[p.dataIndex]
-          return `${hours[p.dataIndex]} ${s.occupied ? `占用 (${s.userName})` : '空闲'}`
+          const slot = slots[p.dataIndex]
+          return slot ? getTimelineSlotState(slot).detail : '暂无时间线数据'
         }
       },
-      grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
-      xAxis: { type: 'category', data: hours },
+      grid: { left: 24, right: 24, bottom: 32, top: 36, containLabel: true },
+      xAxis: { type: 'category', data: hours, axisLabel: { interval: 1 } },
       yAxis: { type: 'category', data: ['状态'], axisLabel: { show: false } },
-      series: [
-        {
-          type: 'heatmap',
-          data: slots.map((s, i) => [i, 0, s.occupied ? 1 : 0]),
-          label: {
-            show: true,
-            formatter: (p) => slots[p.dataIndex].occupied ? '占用' : '空闲',
-            color: '#fff'
-          },
-          visualMap: false,
-          itemStyle: {
-            color: (p) => slots[p.dataIndex].occupied ? '#FF4D4F' : '#52C41A'
-          }
+      series: [{
+        type: 'heatmap',
+        data: slots.map((slot, i) => [i, 0, getTimelineSlotState(slot).occupied ? 1 : 0]),
+        label: {
+          show: true,
+          formatter: (p) => slots[p.dataIndex] ? getTimelineSlotState(slots[p.dataIndex]).label : '',
+          color: '#fff'
+        },
+        visualMap: false,
+        itemStyle: {
+          color: (p) => slots[p.dataIndex] && getTimelineSlotState(slots[p.dataIndex]).occupied ? '#FF4D4F' : '#52C41A'
         }
-      ]
-    }
-    timelineChart.setOption(option)
+      }]
+    })
   }, 100)
 }
 
@@ -203,9 +216,7 @@ function initSocket() {
   })
   socket.on('room-status-update', (data) => {
     const idx = rooms.value.findIndex(r => r.id === data.roomId)
-    if (idx !== -1) {
-      rooms.value[idx] = { ...rooms.value[idx], ...data }
-    }
+    if (idx !== -1) rooms.value[idx] = normalizeRoom({ ...rooms.value[idx], ...data })
   })
 }
 
@@ -251,10 +262,15 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
 .room-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 16px;
   font-weight: 600;
   color: #333;
@@ -272,6 +288,12 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 2px;
   margin-bottom: 8px;
+}
+
+.room-timeline-empty {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #8C8C9A;
 }
 
 .timeline-block {
@@ -294,6 +316,6 @@ onBeforeUnmount(() => {
 }
 
 .timeline-chart {
-  height: 200px;
+  height: 260px;
 }
 </style>

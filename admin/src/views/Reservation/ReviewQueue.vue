@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="预约审核"
-    eyebrow="REVIEW QUEUE"
+    eyebrow="审核队列"
     description="按房间和日期筛选待处理预约，支持详情抽屉、单条处理和批量处理。"
   >
     <template #actions>
@@ -230,3 +230,4 @@ onMounted(() => {
   gap: 8px;
 }
 </style>
+

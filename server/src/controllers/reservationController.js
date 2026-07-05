@@ -1,8 +1,9 @@
-const db = require('../config/database');
+﻿const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const reservationService = require('../services/reservationService');
 const waitlistService = require('../services/waitlistService');
+const reservationPresenter = require('../utils/reservationPresenter');
 
 const list = async function(req, res) {
   try {
@@ -16,6 +17,23 @@ const list = async function(req, res) {
     const isAdmin = ['admin', 'super_admin', 'counselor'].includes(userRole);
 
     if (isAdmin && !req.adminScope) return response.error(res, '管理员数据范围未初始化', 500);
+
+    if (db.isMock()) {
+      const rows = reservationPresenter.getMockReservationRows({
+        adminScope: req.adminScope || { isGlobal: false, buildingId: null },
+        status: status,
+        date: date,
+        roomId: roomId,
+        startDate: req.query.startDate,
+        endDate: req.query.endDate,
+        keyword: req.query.keyword
+      }).sort(function(a, b) {
+        const byDate = String(b.date || '').localeCompare(String(a.date || ''));
+        return byDate || String(b.timeSlot || '').localeCompare(String(a.timeSlot || ''));
+      });
+      const paged = reservationPresenter.paginateRows(rows, page, pageSize);
+      return response.paginate(res, paged.list, paged.total, paged.page, paged.pageSize);
+    }
 
     let where = ' WHERE 1=1';
     const params = [];
@@ -58,7 +76,7 @@ const list = async function(req, res) {
       'SELECT COUNT(*) AS total FROM reservations r JOIN rooms rm ON rm.id = r.room_id' + where,
       params
     );
-    return response.paginate(res, reservations, Number(countResult[0].total) || 0, page, pageSize);
+    return response.paginate(res, reservations.map(reservationPresenter.formatReservationRow), Number(countResult[0].total) || 0, page, pageSize);
   } catch (err) {
     logger.error('获取预约列表异常:', err);
     return response.error(res, err.message || '获取预约列表失败', err.httpStatus || 500);
@@ -168,3 +186,4 @@ const leaveWaitlist = async function(req, res) {
 };
 
 module.exports = { list, detail, checkConflict, joinWaitlist, leaveWaitlist };
+

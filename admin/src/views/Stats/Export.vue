@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="导出报表"
-    eyebrow="REPORT EXPORT"
+    eyebrow="报表导出"
     description="按报表类型、时间范围、功能房和字段导出运营数据；本页历史记录仅保留当前浏览器会话内的导出结果。"
   >
     <template #actions>
@@ -213,3 +213,4 @@ onMounted(() => {
   gap: 12px;
 }
 </style>
+

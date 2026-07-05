@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="数据概览"
-    eyebrow="ANALYTICS"
+    eyebrow="数据统计"
     description="按时间范围和功能房查看预约趋势、使用率、高峰时段、爽约率和用户活跃度。"
   >
     <template #actions>
@@ -59,6 +59,14 @@ import { getReservations, getUsageRate, getPeakHours, getNoshow, getUsers } from
 import { getList as getRoomList } from '@/api/room'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
+import {
+  formatReservationTrend,
+  formatUsageRate,
+  formatPeakHours,
+  formatNoshowRate,
+  formatUserActivity,
+  getRangeDays
+} from '@/utils/statsFormatters'
 
 const trendChartRef = ref(null)
 const usageChartRef = ref(null)
@@ -101,19 +109,22 @@ async function loadAllData() {
     getReservations(params), getUsageRate(params), getPeakHours(params), getNoshow(params), getUsers(params)
   ])
 
-  renderTrendChart(reservations.status === 'fulfilled' ? reservations.value.data : null)
-  renderUsageChart(usage.status === 'fulfilled' ? usage.value.data : null)
-  renderPeakChart(peak.status === 'fulfilled' ? peak.value.data : null)
-  renderNoshowChart(noshow.status === 'fulfilled' ? noshow.value.data : null)
-  renderUserChart(users.status === 'fulfilled' ? users.value.data : null)
+  const rangeDays = getRangeDays(params.startDate, params.endDate)
+  renderTrendChart(formatReservationTrend(reservations.status === 'fulfilled' ? reservations.value.data : null))
+  renderUsageChart(formatUsageRate(usage.status === 'fulfilled' ? usage.value.data : null, rangeDays))
+  renderPeakChart(formatPeakHours(peak.status === 'fulfilled' ? peak.value.data : null))
+  renderNoshowChart(formatNoshowRate(noshow.status === 'fulfilled' ? noshow.value.data : null))
+  renderUserChart(formatUserActivity(users.status === 'fulfilled' ? users.value.data : null))
 }
 
 function renderTrendChart(data) {
   if (!trendChart) trendChart = echarts.init(trendChartRef.value)
+  const empty = !data?.dates?.length
   trendChart.setOption({
+    title: empty ? { text: '暂无预约趋势数据', left: 'center', top: 'middle', textStyle: { color: '#8C8C9A', fontSize: 14 } } : undefined,
     tooltip: { trigger: 'axis' },
     legend: { data: ['预约总数', '已使用', '已取消'] },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    grid: { left: 36, right: 24, bottom: 72, top: 34, containLabel: true },
     xAxis: { type: 'category', data: data?.dates || [] },
     yAxis: { type: 'value' },
     series: [
@@ -126,10 +137,12 @@ function renderTrendChart(data) {
 
 function renderUsageChart(data) {
   if (!usageChart) usageChart = echarts.init(usageChartRef.value)
+  const empty = !data?.rooms?.length
   usageChart.setOption({
+    title: empty ? { text: '暂无使用率数据', left: 'center', top: 'middle', textStyle: { color: '#8C8C9A', fontSize: 14 } } : undefined,
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', data: data?.rooms || [] },
+    grid: { left: 36, right: 24, bottom: 72, top: 34, containLabel: true },
+    xAxis: { type: 'category', data: data?.rooms || [], axisLabel: { interval: 0, rotate: 28, overflow: 'truncate', width: 88 } },
     yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
     series: [{ type: 'bar', data: data?.rates || [], barWidth: 30, label: { show: true, position: 'top', formatter: '{c}%' }, itemStyle: { color: '#0066CC' } }]
   })
@@ -137,9 +150,11 @@ function renderUsageChart(data) {
 
 function renderPeakChart(data) {
   if (!peakChart) peakChart = echarts.init(peakChartRef.value)
+  const empty = !data?.hours?.length
   peakChart.setOption({
+    title: empty ? { text: '暂无高峰时段数据', left: 'center', top: 'middle', textStyle: { color: '#8C8C9A', fontSize: 14 } } : undefined,
     tooltip: { trigger: 'axis' },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    grid: { left: 36, right: 24, bottom: 34, top: 54, containLabel: true },
     xAxis: { type: 'category', data: data?.hours || [] },
     yAxis: { type: 'value' },
     series: [{ type: 'bar', data: data?.counts || [], itemStyle: { color: '#52C41A' }, barWidth: 20 }]
@@ -148,21 +163,25 @@ function renderPeakChart(data) {
 
 function renderNoshowChart(data) {
   if (!noshowChart) noshowChart = echarts.init(noshowChartRef.value)
+  const empty = !data?.labels?.length
   noshowChart.setOption({
+    title: empty ? { text: '暂无爽约数据', left: 'center', top: 'middle', textStyle: { color: '#8C8C9A', fontSize: 14 } } : undefined,
     tooltip: { trigger: 'axis', formatter: '{b}: {c}%' },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', data: data?.dates || [] },
+    grid: { left: 36, right: 24, bottom: 72, top: 34, containLabel: true },
+    xAxis: { type: 'category', data: data?.labels || [], axisLabel: { interval: 0, rotate: 28, overflow: 'truncate', width: 88 } },
     yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
-    series: [{ type: 'line', smooth: true, data: data?.rates || [], itemStyle: { color: '#FA8C16' }, markLine: { data: [{ yAxis: 5, name: '目标线', lineStyle: { color: '#FF4D4F', type: 'dashed' } }] } }]
+    series: [{ type: 'bar', data: data?.rates || [], itemStyle: { color: '#FA8C16' }, label: { show: true, position: 'top', formatter: '{c}%' } }]
   })
 }
 
 function renderUserChart(data) {
   if (!userChart) userChart = echarts.init(userChartRef.value)
+  const empty = !data?.dates?.length
   userChart.setOption({
+    title: empty ? { text: '暂无用户活跃数据', left: 'center', top: 'middle', textStyle: { color: '#8C8C9A', fontSize: 14 } } : undefined,
     tooltip: { trigger: 'axis' },
     legend: { data: ['活跃用户', '新增用户'] },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    grid: { left: 36, right: 24, bottom: 72, top: 34, containLabel: true },
     xAxis: { type: 'category', data: data?.dates || [] },
     yAxis: { type: 'value' },
     series: [
@@ -190,7 +209,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .chart-row {
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 
 .card-title {
@@ -198,10 +217,14 @@ onBeforeUnmount(() => {
 }
 
 .chart-container {
-  height: 320px;
+  height: 380px;
 }
 
 .chart-container.tall {
-  height: 300px;
+  height: 360px;
 }
 </style>
+
+
+
+

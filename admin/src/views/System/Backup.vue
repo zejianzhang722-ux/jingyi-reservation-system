@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="数据备份"
-    eyebrow="BACKUP RECOVERY"
+    eyebrow="备份恢复"
     description="创建加密备份、查看备份运行记录，并对已完成备份执行完整性校验。"
   >
     <template #actions>
@@ -224,3 +224,4 @@ onMounted(() => {
   color: var(--jy-text-primary, #1A1A2E);
 }
 </style>
+

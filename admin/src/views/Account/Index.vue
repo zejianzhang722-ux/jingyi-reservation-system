@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <PageShell
     title="账号管理"
-    eyebrow="USER & ROLE"
+    eyebrow="账号与权限"
     description="宿生账号和管理账号分开维护，避免账号类型混淆，并按当前角色限制可操作范围。"
   >
     <template #actions>
@@ -383,3 +383,4 @@ onMounted(() => {
   color: var(--jy-danger, #FF4D4F);
 }
 </style>
+
