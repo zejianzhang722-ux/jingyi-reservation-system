@@ -4,7 +4,7 @@ const config = require('../config');
 const redis = require('../config/redis');
 const logger = require('../config/logger');
 const response = require('../utils/response');
-const { getRefreshTokenKey } = require('../middleware/auth');
+const { getRefreshTokenKey, loadCurrentPrincipal } = require('../middleware/auth');
 
 const createJti = function() {
   return crypto.randomBytes(16).toString('hex');
@@ -60,7 +60,12 @@ const refresh = async function(req, res) {
       return response.error(res, '登录状态已失效，请重新登录', 401);
     }
 
-    const rotatedTokens = generateRotatedTokens(decoded);
+    const currentPrincipal = await loadCurrentPrincipal(decoded);
+    if (!currentPrincipal) {
+      return response.error(res, '账号已停用或不存在', 403);
+    }
+
+    const rotatedTokens = generateRotatedTokens(currentPrincipal);
     await redis.set(redisKey, rotatedTokens.refreshToken, 'EX', 7 * 24 * 3600);
 
     return response.success(res, rotatedTokens, '刷新成功');

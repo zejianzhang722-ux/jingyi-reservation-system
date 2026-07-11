@@ -1,7 +1,30 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const redis = require('../config/redis');
+const db = require('../config/database');
 const response = require('../utils/response');
+
+const loadCurrentPrincipal = async function(decoded) {
+  if (!decoded || !decoded.id) return null;
+
+  if (decoded.role === 'student') {
+    const [rows] = await db.query('SELECT id, role, status, building_id, openid FROM users WHERE id = ?', [Number(decoded.id)]);
+    if (!rows.length || rows[0].status === 'banned') return null;
+    return Object.assign({}, decoded, {
+      role: rows[0].role || 'student',
+      buildingId: rows[0].building_id,
+      openid: rows[0].openid || decoded.openid || null
+    });
+  }
+
+  const [rows] = await db.query('SELECT id, role, status, building_id, username FROM admins WHERE id = ?', [Number(decoded.id)]);
+  if (!rows.length || rows[0].status !== 'active') return null;
+  return Object.assign({}, decoded, {
+    role: rows[0].role === 'superadmin' ? 'super_admin' : rows[0].role,
+    buildingId: rows[0].building_id,
+    openid: rows[0].username || decoded.openid || null
+  });
+};
 
 const getRefreshTokenKey = function(decoded) {
   if (!decoded || !decoded.id) return null;
@@ -38,7 +61,11 @@ const auth = async function(req, res, next) {
     if (await isStoredRefreshToken(decoded, tokenStr)) {
       return response.error(res, '认证令牌类型无效', 401);
     }
-    req.user = decoded;
+    const currentPrincipal = await loadCurrentPrincipal(decoded);
+    if (!currentPrincipal) {
+      return response.error(res, '账号已停用或不存在', 403);
+    }
+    req.user = currentPrincipal;
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
@@ -54,7 +81,7 @@ const optionalAuth = async function(req, res, next) {
     const tokenStr = token.substring(7);
     try {
       const decoded = jwt.verify(tokenStr, config.jwt.secret);
-      req.user = await isStoredRefreshToken(decoded, tokenStr) ? null : decoded;
+      req.user = await isStoredRefreshToken(decoded, tokenStr) ? null : await loadCurrentPrincipal(decoded);
     } catch (err) {
       req.user = null;
     }
@@ -110,5 +137,6 @@ module.exports = {
   requireAdmin,
   checkTokenBlacklist,
   getRefreshTokenKey,
-  isStoredRefreshToken
+  isStoredRefreshToken,
+  loadCurrentPrincipal
 };
