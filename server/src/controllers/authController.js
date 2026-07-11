@@ -64,6 +64,10 @@ const wechatLogin = async function(req, res) {
     let sessionKey = null;
     let matchedUser = null;
 
+    if (code && code.startsWith('mock_code_') && !config.wechat.allowMockLogin) {
+      return response.error(res, '模拟登录仅限测试环境', 403);
+    }
+
     if (code && code.startsWith('mock_code_')) {
       openid = 'test_openid_' + code.replace('mock_code_', '');
       sessionKey = 'mock_session_key';

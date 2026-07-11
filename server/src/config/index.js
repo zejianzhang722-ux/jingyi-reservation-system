@@ -35,7 +35,8 @@ const config = {
   },
   wechat: {
     appId: process.env.WECHAT_APPID || '',
-    appSecret: process.env.WECHAT_APPSECRET || ''
+    appSecret: process.env.WECHAT_APPSECRET || '',
+    allowMockLogin: process.env.NODE_ENV === 'test' && process.env.ALLOW_MOCK_WECHAT_LOGIN === 'true'
   },
   upload: {
     dir: process.env.UPLOAD_DIR || './uploads',

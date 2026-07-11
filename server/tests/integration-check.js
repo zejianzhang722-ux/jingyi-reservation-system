@@ -1,7 +1,10 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = Number(process.env.TEST_PORT || 3100);
 const BASE_URL = 'http://127.0.0.1:' + PORT + '/api/v1';
+const MOCK_FEEDBACK_FILE = path.join(__dirname, '..', 'data', 'mock-feedbacks.json');
 
 function wait(ms) {
   return new Promise(function(resolve) { setTimeout(resolve, ms); });
@@ -65,6 +68,13 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function apiResult(path, options) {
+  const res = await fetch(BASE_URL + path, Object.assign({
+    headers: { 'Content-Type': 'application/json' }
+  }, options || {}));
+  return { status: res.status, json: await res.json() };
+}
+
 function formatDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -73,9 +83,16 @@ function formatDate(date) {
 }
 
 async function main() {
+  const originalMockFeedbacks = fs.existsSync(MOCK_FEEDBACK_FILE) ? fs.readFileSync(MOCK_FEEDBACK_FILE) : null;
   let server = startServer();
   try {
     await waitForHealth(server);
+
+    const mockLoginAttempt = await apiResult('/auth/login/wechat', {
+      method: 'POST',
+      body: JSON.stringify({ code: 'mock_code_security_check', studentNo: '2024001001' })
+    });
+    assert(mockLoginAttempt.status === 403, 'SEC01 mock WeChat login must be disabled');
 
     const rooms = await api('/room');
     assert(Array.isArray(rooms) && rooms.length > 0, 'S02 首页功能房列表为空');
@@ -92,7 +109,15 @@ async function main() {
       body: JSON.stringify({ studentNo: '2024001001', cardNo: '200001' })
     });
     const studentToken = studentLogin.token;
+    const studentRefreshToken = studentLogin.refreshToken;
     assert(studentToken, 'S01 学生登录后没有拿到令牌');
+
+    const accessOnlyRefresh = await apiResult('/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + studentToken },
+      body: JSON.stringify({})
+    });
+    assert(accessOnlyRefresh.status === 401, 'SEC02 access token must not refresh a session');
 
     const studentHeaders = { Authorization: 'Bearer ' + studentToken };
     const profile = await api('/user/profile', { headers: studentHeaders });
@@ -194,6 +219,23 @@ async function main() {
       body: JSON.stringify({ reply: '已收到，验收处理完成' })
     });
 
+    await api('/admin/accounts/student-1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + adminToken },
+      body: JSON.stringify({ status: 'disabled' })
+    });
+
+    const disabledStudentAccess = await apiResult('/user/profile', {
+      headers: { Authorization: 'Bearer ' + studentToken }
+    });
+    assert(disabledStudentAccess.status === 401 || disabledStudentAccess.status === 403, 'SEC03 disabled account access token must be rejected');
+
+    const disabledStudentRefresh = await apiResult('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken: studentRefreshToken })
+    });
+    assert(disabledStudentRefresh.status === 401 || disabledStudentRefresh.status === 403, 'SEC04 disabled account refresh token must be rejected');
+
     await stopServer(server);
     server = startServer();
     await waitForHealth(server);
@@ -214,6 +256,7 @@ async function main() {
     console.log('integration-check passed');
   } finally {
     await stopServer(server);
+    if (originalMockFeedbacks) fs.writeFileSync(MOCK_FEEDBACK_FILE, originalMockFeedbacks);
   }
 }
 
