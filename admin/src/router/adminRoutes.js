@@ -1,3 +1,5 @@
+import { sortRoutesForRole } from '../utils/adminRolePolicy.js'
+
 export const roleGroups = {
   allAdmins: ['super_admin', 'admin', 'counselor'],
   superOnly: ['super_admin'],
@@ -12,7 +14,7 @@ export const adminChildren = [
   { path: 'reservation/all', name: 'ReservationAll', component: () => import('@/views/Reservation/AllList.vue'), meta: { title: '全部预约', icon: 'List', parent: '预约运营', roles: roleGroups.allAdmins, description: '查询和追踪全部预约记录' } },
   { path: 'reservation/counselor', name: 'CounselorPending', component: () => import('@/views/Reservation/CounselorPending.vue'), meta: { title: '辅导员审核', icon: 'UserFilled', parent: '预约运营', roles: roleGroups.reviewers, description: '处理需要辅导员确认的预约' } },
   { path: 'checkin/manage', name: 'CheckinManage', component: () => import('@/views/Checkin/Manage.vue'), meta: { title: '签到核销', icon: 'Check', parent: '预约运营', roles: roleGroups.allAdmins, description: '核验签到、处理迟到与爽约' } },
-  { path: 'reading-room/logs', name: 'ReadingRoomLogs', component: () => import('@/views/ReadingRoom/Logs.vue'), meta: { title: '阅览室记录', icon: 'Reading', parent: '预约运营', roles: roleGroups.allAdmins, description: '查看阅览室出入与使用记录' } },
+  { path: 'reading-room/logs', name: 'ReadingRoomLogs', component: () => import('@/views/ReadingRoom/Logs.vue'), meta: { title: '阅览室记录', icon: 'Reading', parent: '预约运营', roles: roleGroups.operators, description: '查看阅览室出入与使用记录' } },
 
   { path: 'room/monitor', name: 'RoomMonitor', component: () => import('@/views/Room/Monitor.vue'), meta: { title: '空间监控', icon: 'Monitor', parent: '空间管理', roles: roleGroups.allAdmins, description: '查看功能房实时使用情况' } },
   { path: 'room/manage', name: 'RoomManage', component: () => import('@/views/Room/Manage.vue'), meta: { title: '功能房', icon: 'OfficeBuilding', parent: '空间管理', roles: roleGroups.operators, description: '维护功能房基础信息、状态与设施' } },
@@ -56,9 +58,9 @@ export function buildNavigation(role) {
   return navSections
     .map(section => ({
       ...section,
-      children: section.children
+      children: sortRoutesForRole(section.children
         .map(name => routeMap.get(name))
-        .filter(route => route && hasRouteRole(route, role))
+        .filter(route => route && hasRouteRole(route, role)), role)
         .map(route => ({
           name: route.name,
           path: '/' + route.path,
