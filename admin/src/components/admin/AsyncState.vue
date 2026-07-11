@@ -3,12 +3,12 @@
     <el-skeleton :rows="3" animated />
     <span class="sr-only">正在加载</span>
   </div>
-  <el-result v-else-if="error" icon="error" title="加载失败" :sub-title="errorMessage">
+  <el-result v-else-if="error" role="alert" aria-live="assertive" icon="error" title="加载失败" :sub-title="errorMessage">
     <template #extra>
       <el-button type="primary" @click="$emit('retry')">重新加载</el-button>
     </template>
   </el-result>
-  <el-empty v-else-if="empty" description="暂无数据" />
+  <el-empty v-else-if="empty" aria-live="polite" description="暂无数据" />
   <slot v-else />
 </template>
 
