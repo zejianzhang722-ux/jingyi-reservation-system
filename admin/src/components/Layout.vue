@@ -61,7 +61,13 @@
           </div>
           <div class="header-right">
             <el-button class="quick-btn" :icon="Search" circle @click="quickSearchVisible = true" />
-            <el-button class="quick-btn notify-btn" :icon="Bell" circle @click="goPending">
+            <el-button
+              class="quick-btn notify-btn"
+              :icon="Bell"
+              circle
+              :aria-label="pendingCount > 0 ? `待审核预约，${pendingCount} 条` : '待审核预约'"
+              @click="goPending"
+            >
               <span
                 v-if="pendingCount > 0"
                 class="pending-badge"
@@ -122,12 +128,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search, Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { buildNavigation } from '@/router/adminRoutes'
-import { getPendingReminderCount } from '@/api/stats'
+import { getPendingCount } from '@/api/reservation'
 
 const route = useRoute()
 const router = useRouter()
@@ -136,6 +142,7 @@ const isCollapse = ref(false)
 const quickSearchVisible = ref(false)
 const quickKeyword = ref('')
 const pendingCount = ref(0)
+let pendingRequestVersion = 0
 
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '工作台')
@@ -161,17 +168,22 @@ const roleMap = {
 const roleLabel = computed(() => roleMap[userStore.userInfo.role] || '管理员')
 
 async function loadPendingCount() {
-  pendingCount.value = 0
-  if (!userStore.token) return
-  try {
-    pendingCount.value = await getPendingReminderCount()
-  } catch {
+  const requestVersion = ++pendingRequestVersion
+  if (!userStore.token) {
     pendingCount.value = 0
+    return
+  }
+  try {
+    const count = await getPendingCount()
+    if (requestVersion === pendingRequestVersion) pendingCount.value = count
+  } catch {
+    if (requestVersion === pendingRequestVersion) pendingCount.value = 0
   }
 }
 
 watch(() => userStore.token, loadPendingCount, { immediate: true })
 watch(() => route.fullPath, loadPendingCount)
+onBeforeUnmount(() => { pendingRequestVersion += 1 })
 
 function goPending() {
   const target = userStore.userInfo.role === 'counselor'

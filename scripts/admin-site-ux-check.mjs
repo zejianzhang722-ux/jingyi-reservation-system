@@ -122,16 +122,50 @@ assert.match(globalCss, /:focus-visible/)
 assert.match(globalCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/)
 
 const layout = await readFile(new URL('../admin/src/components/Layout.vue', import.meta.url), 'utf8')
-const statsApi = await readFile(new URL('../admin/src/api/stats.js', import.meta.url), 'utf8')
+const reservationApi = await readFile(new URL('../admin/src/api/reservation.js', import.meta.url), 'utf8')
 
 assert.doesNotMatch(layout, /\.notify-btn::after/, 'notification button must not show an unconditional red dot')
 assert.match(layout, /v-if="pendingCount > 0"[^>]*class="pending-badge"[^>]*role="status"[^>]*aria-label=/)
 assert.match(layout, /\{\{\s*pendingCount\s*\}\}/, 'notification badge must show the actionable count')
-assert.match(layout, /getPendingReminderCount/, 'layout must load reminder data from the stats API')
-assert.match(statsApi, /getDashboard\(\)[\s\S]*pendingCount/, 'reminder count must be derived from dashboard stats')
+assert.match(reservationApi, /request\.get\(['"]\/reservation\/pending-count['"]\)/, 'reminders must use the role-scoped pending count endpoint')
+assert.doesNotMatch(layout, /getPendingReminderCount|@\/api\/stats/, 'layout must not load the full dashboard for one reminder')
+assert.match(layout, /getPendingCount/, 'layout must use the reservation count API')
 assert.match(layout, /userStore\.token[\s\S]*loadPendingCount/, 'reminders must load after authentication')
 assert.match(layout, /watch\(\s*\(\)\s*=>\s*route\.fullPath[\s\S]*loadPendingCount/, 'route changes must refresh reminders')
 assert.match(layout, /pendingCount\.value\s*=\s*0[\s\S]*catch/, 'failed reminder loads must not leave a false badge')
 assert.match(layout, /role\s*===\s*'counselor'[\s\S]*['"]\/reservation\/counselor['"][\s\S]*['"]\/reservation\/pending['"]/, 'notification target must follow the reviewer role')
+assert.match(layout, /<el-button[^>]*notify-btn[^>]*:aria-label=/, 'notification button itself must have an accessible name')
+assert.match(layout, /let\s+pendingRequestVersion\s*=\s*0/, 'reminder loader must track request generations')
+assert.match(layout, /onBeforeUnmount\(\(\)\s*=>\s*\{?\s*pendingRequestVersion\s*\+=\s*1/, 'unmount must invalidate pending requests')
+assert.match(layout, /requestVersion\s*===\s*pendingRequestVersion/, 'only the newest reminder request may update state')
+
+async function verifyLatestRequestWins() {
+  let version = 0
+  let visibleCount = 0
+  let active = true
+  const apply = async promise => {
+    const requestVersion = ++version
+    try {
+      const count = await promise
+      if (active && requestVersion === version) visibleCount = count
+    } catch {
+      if (active && requestVersion === version) visibleCount = 0
+    }
+  }
+  let resolveOld
+  const oldRequest = new Promise(resolve => { resolveOld = resolve })
+  const oldRun = apply(oldRequest)
+  await apply(Promise.resolve(2))
+  resolveOld(9)
+  await oldRun
+  assert.equal(visibleCount, 2, 'an older response must not overwrite the latest count')
+  const unmountedRun = apply(Promise.resolve(7))
+  active = false
+  version += 1
+  await unmountedRun
+  assert.equal(visibleCount, 2, 'an unmounted layout must ignore late responses')
+}
+
+await verifyLatestRequestWins()
 
 console.log('admin-site-ux-check passed')
