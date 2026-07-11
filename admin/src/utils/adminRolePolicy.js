@@ -64,12 +64,21 @@ const region = (valid, nextValue, previousValue) => ({
 
 export function mergeDashboardPayload(previous, data, role) {
   const metricKeys = ['todayReservations', 'pendingCount', 'usingCount', 'noshowCount']
-  const metricsValid = metricKeys.every(key => Number.isFinite(data?.[key]))
+  const isNonNegativeNumber = value => Number.isFinite(value) && value >= 0
+  const metricsValid = metricKeys.every(key => isNonNegativeNumber(data?.[key]))
   const pendingValid = Array.isArray(data?.pendingItems)
-  const trendValid = Array.isArray(data?.trend?.dates) && Array.isArray(data?.trend?.reservations) &&
-    Array.isArray(data?.trend?.used) && Array.isArray(data?.trend?.noshow)
-  const roomTypesValid = Array.isArray(data?.roomTypeStats)
-  const rankingValid = Array.isArray(data?.usageRanking?.rooms) && Array.isArray(data?.usageRanking?.rates)
+  const trendLists = [data?.trend?.dates, data?.trend?.reservations, data?.trend?.used, data?.trend?.noshow]
+  const trendValid = trendLists.every(Array.isArray) &&
+    trendLists.every(items => items.length === trendLists[0].length) &&
+    trendLists.slice(1).every(items => items.every(isNonNegativeNumber))
+  const roomTypesValid = Array.isArray(data?.roomTypeStats) && data.roomTypeStats.every(item =>
+    typeof item?.name === 'string' && item.name.trim() && isNonNegativeNumber(item.value))
+  const rankingRooms = data?.usageRanking?.rooms
+  const rankingRates = data?.usageRanking?.rates
+  const rankingValid = Array.isArray(rankingRooms) && Array.isArray(rankingRates) &&
+    rankingRooms.length === rankingRates.length &&
+    rankingRooms.every(room => typeof room === 'string' && room.trim()) &&
+    rankingRates.every(rate => isNonNegativeNumber(rate) && rate <= 100)
 
   return {
     metrics: region(metricsValid, metricKeys.map(key => data[key]), previous.metrics),

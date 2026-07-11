@@ -103,6 +103,7 @@ const barChartRef = ref(null)
 let trendChart = null
 let pieChart = null
 let barChart = null
+let dashboardRequestVersion = 0
 
 const metricDefinitions = [
   { key: 'today', caption: '今日提交和生效预约', icon: 'Calendar', tone: 'primary' },
@@ -182,8 +183,10 @@ function initBarChart(data) {
 }
 
 async function loadData() {
+  const requestVersion = ++dashboardRequestVersion
   try {
     const res = await getDashboard()
+    if (requestVersion !== dashboardRequestVersion) return
     const data = res.data || res || {}
     const merged = mergeDashboardPayload({
       metrics: dashboardRegions.metrics.value,
@@ -212,6 +215,7 @@ async function loadData() {
       })
     }
   } catch (e) {
+    if (requestVersion !== dashboardRequestVersion) return
     for (const key of Object.keys(regionErrors.value)) regionErrors.value[key] = true
   }
 }
@@ -231,6 +235,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  dashboardRequestVersion += 1
   window.removeEventListener('resize', handleResize)
   trendChart?.dispose()
   pieChart?.dispose()

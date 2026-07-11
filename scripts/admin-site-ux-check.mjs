@@ -35,6 +35,19 @@ assert.equal(partialDashboard.roomTypes.status, 'error')
 assert.deepEqual(partialDashboard.ranking.value, previousDashboard.ranking)
 assert.equal(partialDashboard.ranking.status, 'error')
 
+for (const invalidPayload of [
+  { todayReservations: -1, pendingCount: 1, usingCount: 1, noshowCount: 0 },
+  { todayReservations: 1, pendingCount: Number.NaN, usingCount: 1, noshowCount: 0 }
+]) {
+  assert.equal(mergeDashboardPayload(previousDashboard, invalidPayload, 'admin').metrics.status, 'error')
+}
+assert.equal(mergeDashboardPayload(previousDashboard, { trend: { dates: ['a'], reservations: [1, 2], used: [1], noshow: [0] } }, 'admin').trend.status, 'error')
+assert.equal(mergeDashboardPayload(previousDashboard, { trend: { dates: ['a'], reservations: [1], used: [Infinity], noshow: [0] } }, 'admin').trend.status, 'error')
+assert.equal(mergeDashboardPayload(previousDashboard, { usageRanking: { rooms: ['A'], rates: [101] } }, 'admin').ranking.status, 'error')
+assert.equal(mergeDashboardPayload(previousDashboard, { usageRanking: { rooms: ['A'], rates: [] } }, 'admin').ranking.status, 'error')
+assert.equal(mergeDashboardPayload(previousDashboard, { roomTypeStats: [{ name: '', value: 1 }] }, 'admin').roomTypes.status, 'error')
+assert.equal(mergeDashboardPayload(previousDashboard, { roomTypeStats: [{ name: '琴房', value: -1 }] }, 'admin').roomTypes.status, 'error')
+
 const state = createAsyncState([])
 assert.equal(state.status, 'idle')
 assert.deepEqual(state.value, [])
@@ -176,6 +189,36 @@ assert.doesNotMatch(dashboard, /catch\s*\([^)]*\)\s*\{\s*pendingItems\.value\s*=
 assert.match(dashboard, /@click="loadData"[^>]*>\s*重试/, 'dashboard failure should offer retry')
 assert.match(dashboard, /regionErrors/, 'dashboard should expose independent region errors')
 assert.match(dashboard, /mergeDashboardPayload/, 'dashboard should merge valid regions without clearing failed regions')
+assert.match(dashboard, /let\s+dashboardRequestVersion\s*=\s*0/, 'dashboard should track request generations')
+assert.match(dashboard, /requestVersion\s*!==\s*dashboardRequestVersion/, 'stale dashboard responses must be ignored before updating regions or charts')
+assert.match(dashboard, /onBeforeUnmount\([\s\S]*dashboardRequestVersion\s*\+=\s*1/, 'unmount should invalidate dashboard requests')
+
+async function verifyLatestDashboardRequestWins() {
+  let version = 0
+  let visible = 'initial'
+  let chart = 'initial'
+  const apply = async promise => {
+    const requestVersion = ++version
+    const value = await promise
+    if (requestVersion !== version) return
+    visible = value
+    chart = value
+  }
+  let resolveOld
+  const old = apply(new Promise(resolve => { resolveOld = resolve }))
+  await apply(Promise.resolve('new'))
+  resolveOld('old')
+  await old
+  assert.equal(visible, 'new')
+  assert.equal(chart, 'new')
+  const late = apply(Promise.resolve('after-unmount'))
+  version += 1
+  await late
+  assert.equal(visible, 'new')
+  assert.equal(chart, 'new')
+}
+
+await verifyLatestDashboardRequestWins()
 
 async function verifyLatestRequestWins() {
   let version = 0
