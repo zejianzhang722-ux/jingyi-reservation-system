@@ -19,7 +19,13 @@ for (const role of roles) {
   assert.equal(getRoleLabel(role), ROLE_LABELS[role])
   assert.ok(ROLE_NAV_PRIORITY[role]?.length, `${role} should have navigation priorities`)
   assert.ok(ROLE_DASHBOARD_COPY[role], `${role} should have dashboard copy`)
+  assert.ok(ROLE_DASHBOARD_COPY[role].title?.trim(), `${role} should have an independent dashboard title`)
+  assert.ok(ROLE_DASHBOARD_COPY[role].description?.trim(), `${role} should have an independent dashboard description`)
+  assert.equal(ROLE_DASHBOARD_COPY[role].metrics?.length, 4, `${role} should have four tailored metric labels`)
 }
+
+assert.equal(new Set(roles.map(role => ROLE_DASHBOARD_COPY[role].title)).size, roles.length, 'dashboard titles should differ by role')
+assert.equal(new Set(roles.map(role => ROLE_SHORTCUTS[role].map(item => item.name).join(','))).size, roles.length, 'shortcut sets should differ by role')
 
 const navigationFor = role => buildNavigation(role)
 const navigationNamesFor = role => navigationFor(role).flatMap(section => section.children.map(item => item.name))
@@ -80,6 +86,7 @@ for (const role of roles) {
     const route = routeByName.get(shortcut.name)
     assert.ok(route, `${role} shortcut ${shortcut.name} should point to a route`)
     assert.ok(hasRouteRole(route, role), `${role} shortcut ${shortcut.name} should be allowed`)
+    assert.equal(shortcut.destination, `/${route.path}`, `${role} shortcut ${shortcut.name} should expose a valid destination`)
   }
 }
 

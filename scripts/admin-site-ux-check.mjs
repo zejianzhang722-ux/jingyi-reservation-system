@@ -122,6 +122,7 @@ assert.match(globalCss, /:focus-visible/)
 assert.match(globalCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/)
 
 const layout = await readFile(new URL('../admin/src/components/Layout.vue', import.meta.url), 'utf8')
+const dashboard = await readFile(new URL('../admin/src/views/Dashboard/Index.vue', import.meta.url), 'utf8')
 const reservationApi = await readFile(new URL('../admin/src/api/reservation.js', import.meta.url), 'utf8')
 
 assert.doesNotMatch(layout, /\.notify-btn::after/, 'notification button must not show an unconditional red dot')
@@ -138,6 +139,16 @@ assert.match(layout, /<el-button[^>]*notify-btn[^>]*:aria-label=/, 'notification
 assert.match(layout, /let\s+pendingRequestVersion\s*=\s*0/, 'reminder loader must track request generations')
 assert.match(layout, /onBeforeUnmount\(\(\)\s*=>\s*\{?\s*pendingRequestVersion\s*\+=\s*1/, 'unmount must invalidate pending requests')
 assert.match(layout, /requestVersion\s*===\s*pendingRequestVersion/, 'only the newest reminder request may update state')
+
+assert.match(dashboard, /ROLE_DASHBOARD_COPY/, 'dashboard should use role-specific copy')
+assert.match(dashboard, /ROLE_SHORTCUTS/, 'dashboard should render role-specific shortcuts')
+assert.match(dashboard, /:title="dashboardCopy\.title"/, 'dashboard title should follow the current role')
+assert.match(dashboard, /router\.push\(item\.destination\)/, 'dashboard shortcuts should be navigable')
+assert.match(dashboard, /<button[^>]*v-for="item in pendingItems"[^>]*@click="router\.push\(item\.destination\)"/, 'pending items should navigate to their destination')
+assert.match(dashboard, /pendingItems\.value\s*=\s*\(data\.pendingItems\s*\|\|\s*\[\]\)/, 'successful dashboard loads should update pending items')
+assert.doesNotMatch(dashboard, /catch\s*\([^)]*\)\s*\{\s*pendingItems\.value\s*=\s*\[\]/, 'failed dashboard loads must preserve previous pending items')
+assert.match(dashboard, /dashboardError/, 'dashboard should distinguish load failure from empty data')
+assert.match(dashboard, /@click="loadData"[^>]*>\s*重试/, 'dashboard failure should offer retry')
 
 async function verifyLatestRequestWins() {
   let version = 0

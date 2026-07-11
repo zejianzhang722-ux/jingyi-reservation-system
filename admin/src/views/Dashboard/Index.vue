@@ -1,12 +1,20 @@
 ﻿<template>
   <PageShell
-    title="功能房预约工作台"
+    :title="dashboardCopy.title"
     eyebrow="今日概览"
-    description="集中查看待审核、使用中、异常记录和空间使用趋势。"
+    :description="dashboardCopy.description"
   >
     <template #actions>
+      <el-button v-for="item in shortcuts" :key="item.name" @click="router.push(item.destination)">{{ item.title }}</el-button>
       <el-button type="primary" :icon="Refresh" @click="loadData">刷新数据</el-button>
     </template>
+
+    <el-alert v-if="dashboardError" type="error" :closable="false" show-icon class="dashboard-error">
+      <template #title>
+        数据加载失败，已保留上次成功结果
+        <el-button link type="primary" @click="loadData">重试</el-button>
+      </template>
+    </el-alert>
 
     <el-row :gutter="16" class="stat-cards">
       <el-col :xs="12" :sm="6" v-for="item in statCards" :key="item.key">
@@ -35,13 +43,13 @@
             </div>
           </template>
           <div class="pending-list" v-if="pendingItems.length">
-            <div v-for="item in pendingItems" :key="item.id" class="pending-item">
+            <button v-for="item in pendingItems" :key="item.id" class="pending-item" type="button" @click="router.push(item.destination)">
               <div>
                 <el-tag :type="item.tagType || 'warning'" size="small">{{ item.tag || '待处理' }}</el-tag>
                 <span class="pending-text">{{ item.text }}</span>
               </div>
               <span class="pending-time">{{ item.time }}</span>
-            </div>
+            </button>
           </div>
           <el-empty v-else description="暂无待处理事项" :image-size="80" />
         </el-card>
@@ -74,12 +82,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { Refresh } from '@element-plus/icons-vue'
 import { getDashboard } from '@/api/stats'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { useUserStore } from '@/store/user'
+import { ROLE_DASHBOARD_COPY, ROLE_SHORTCUTS } from '@/utils/adminRolePolicy'
+
+const router = useRouter()
+const userStore = useUserStore()
+const role = computed(() => userStore.userInfo?.role || 'admin')
+const dashboardCopy = computed(() => ROLE_DASHBOARD_COPY[role.value] || ROLE_DASHBOARD_COPY.admin)
+const shortcuts = computed(() => ROLE_SHORTCUTS[role.value] || ROLE_SHORTCUTS.admin)
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -89,14 +106,21 @@ let trendChart = null
 let pieChart = null
 let barChart = null
 
-const statCards = ref([
-  { key: 'today', label: '今日预约', value: 0, caption: '今日提交和生效预约', icon: 'Calendar', tone: 'primary' },
-  { key: 'pending', label: '待审核', value: 0, caption: '需要管理员处理', icon: 'Clock', tone: 'warning' },
-  { key: 'using', label: '使用中', value: 0, caption: '当前正在使用', icon: 'VideoPlay', tone: 'success' },
-  { key: 'noshow', label: '今日异常', value: 0, caption: '迟到、爽约和异常', icon: 'WarningFilled', tone: 'danger' }
-])
+const metricDefinitions = [
+  { key: 'today', caption: '今日提交和生效预约', icon: 'Calendar', tone: 'primary' },
+  { key: 'pending', caption: '需要当前角色处理', icon: 'Clock', tone: 'warning' },
+  { key: 'using', caption: '当前正在使用', icon: 'VideoPlay', tone: 'success' },
+  { key: 'noshow', caption: '迟到、爽约和异常', icon: 'WarningFilled', tone: 'danger' }
+]
+const metricValues = ref([0, 0, 0, 0])
+const statCards = computed(() => metricDefinitions.map((item, index) => ({
+  ...item,
+  label: dashboardCopy.value.metrics[index],
+  value: metricValues.value[index]
+})))
 
 const pendingItems = ref([])
+const dashboardError = ref(false)
 
 function initTrendChart(data) {
   trendChart = echarts.init(trendChartRef.value)
@@ -153,14 +177,13 @@ function initBarChart(data) {
 }
 
 async function loadData() {
+  dashboardError.value = false
   try {
     const res = await getDashboard()
     const data = res.data || res || {}
-    statCards.value[0].value = data.todayReservations || 0
-    statCards.value[1].value = data.pendingCount || 0
-    statCards.value[2].value = data.usingCount || 0
-    statCards.value[3].value = data.noshowCount || 0
-    pendingItems.value = data.pendingItems || []
+    metricValues.value = [data.todayReservations || 0, data.pendingCount || 0, data.usingCount || 0, data.noshowCount || 0]
+    const defaultDestination = role.value === 'counselor' ? '/reservation/counselor' : '/reservation/pending'
+    pendingItems.value = (data.pendingItems || []).map(item => ({ ...item, destination: item.destination || defaultDestination }))
 
     if (trendChart) {
       trendChart.setOption({ xAxis: { data: data.trend?.dates || [] }, series: [
@@ -177,7 +200,7 @@ async function loadData() {
       })
     }
   } catch (e) {
-    pendingItems.value = []
+    dashboardError.value = true
   }
 }
 
@@ -209,6 +232,10 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
 }
 
+.dashboard-error {
+  margin-bottom: 16px;
+}
+
 .panel-card {
   border-radius: 10px;
 }
@@ -230,10 +257,15 @@ onBeforeUnmount(() => {
 }
 
 .pending-item {
+  width: 100%;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
   display: flex;
   justify-content: space-between;
   gap: 16px;
   padding: 12px 0;
+  border: 0;
   border-bottom: 1px solid var(--jy-border-light, #F0F0F5);
 }
 
