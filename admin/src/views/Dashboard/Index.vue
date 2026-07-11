@@ -9,18 +9,12 @@
       <el-button type="primary" :icon="Refresh" @click="loadData">刷新数据</el-button>
     </template>
 
-    <el-alert v-if="dashboardError" type="error" :closable="false" show-icon class="dashboard-error">
-      <template #title>
-        数据加载失败，已保留上次成功结果
-        <el-button link type="primary" @click="loadData">重试</el-button>
-      </template>
-    </el-alert>
-
     <el-row :gutter="16" class="stat-cards">
       <el-col :xs="12" :sm="6" v-for="item in statCards" :key="item.key">
         <MetricCard :label="item.label" :value="item.value" :caption="item.caption" :icon="item.icon" :tone="item.tone" />
       </el-col>
     </el-row>
+    <el-alert v-if="regionErrors.metrics" title="指标数据暂时不可用，已保留上次结果" type="error" :closable="false"><el-button link @click="loadData">重试</el-button></el-alert>
 
     <el-row :gutter="16" class="content-row">
       <el-col :xs="24" :lg="15">
@@ -29,6 +23,7 @@
             <div class="panel-header">
               <span>近 7 天预约趋势</span>
               <el-tag size="small" type="info">实时统计</el-tag>
+              <el-button v-if="regionErrors.trend" link type="danger" @click="loadData">趋势加载失败，重试</el-button>
             </div>
           </template>
           <div ref="trendChartRef" class="chart-container"></div>
@@ -40,6 +35,7 @@
             <div class="panel-header">
               <span>待处理事项</span>
               <el-tag size="small" type="danger">{{ pendingItems.length }}</el-tag>
+              <el-button v-if="regionErrors.pending" link type="danger" @click="loadData">待办加载失败，重试</el-button>
             </div>
           </template>
           <div class="pending-list" v-if="pendingItems.length">
@@ -62,6 +58,7 @@
           <template #header>
             <div class="panel-header">
               <span>功能房使用率排行</span>
+              <el-button v-if="regionErrors.ranking" link type="danger" @click="loadData">加载失败，重试</el-button>
             </div>
           </template>
           <div ref="barChartRef" class="chart-container"></div>
@@ -72,6 +69,7 @@
           <template #header>
             <div class="panel-header">
               <span>空间类型分布</span>
+              <el-button v-if="regionErrors.roomTypes" link type="danger" @click="loadData">加载失败，重试</el-button>
             </div>
           </template>
           <div ref="pieChartRef" class="chart-container"></div>
@@ -90,7 +88,7 @@ import { getDashboard } from '@/api/stats'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
 import { useUserStore } from '@/store/user'
-import { ROLE_DASHBOARD_COPY, ROLE_SHORTCUTS } from '@/utils/adminRolePolicy'
+import { ROLE_DASHBOARD_COPY, ROLE_SHORTCUTS, mergeDashboardPayload } from '@/utils/adminRolePolicy'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -120,7 +118,14 @@ const statCards = computed(() => metricDefinitions.map((item, index) => ({
 })))
 
 const pendingItems = ref([])
-const dashboardError = ref(false)
+const dashboardRegions = {
+  metrics: metricValues,
+  pending: pendingItems,
+  trend: ref({ dates: [], reservations: [], used: [], noshow: [] }),
+  roomTypes: ref([]),
+  ranking: ref({ rooms: [], rates: [] })
+}
+const regionErrors = ref({ metrics: false, pending: false, trend: false, roomTypes: false, ranking: false })
 
 function initTrendChart(data) {
   trendChart = echarts.init(trendChartRef.value)
@@ -177,30 +182,37 @@ function initBarChart(data) {
 }
 
 async function loadData() {
-  dashboardError.value = false
   try {
     const res = await getDashboard()
     const data = res.data || res || {}
-    metricValues.value = [data.todayReservations || 0, data.pendingCount || 0, data.usingCount || 0, data.noshowCount || 0]
-    const defaultDestination = role.value === 'counselor' ? '/reservation/counselor' : '/reservation/pending'
-    pendingItems.value = (data.pendingItems || []).map(item => ({ ...item, destination: item.destination || defaultDestination }))
+    const merged = mergeDashboardPayload({
+      metrics: dashboardRegions.metrics.value,
+      pending: dashboardRegions.pending.value,
+      trend: dashboardRegions.trend.value,
+      roomTypes: dashboardRegions.roomTypes.value,
+      ranking: dashboardRegions.ranking.value
+    }, data, role.value)
+    for (const key of Object.keys(dashboardRegions)) {
+      dashboardRegions[key].value = merged[key].value
+      regionErrors.value[key] = merged[key].status === 'error'
+    }
 
     if (trendChart) {
-      trendChart.setOption({ xAxis: { data: data.trend?.dates || [] }, series: [
-        { data: data.trend?.reservations || [] },
-        { data: data.trend?.used || [] },
-        { data: data.trend?.noshow || [] }
+      trendChart.setOption({ xAxis: { data: dashboardRegions.trend.value.dates }, series: [
+        { data: dashboardRegions.trend.value.reservations },
+        { data: dashboardRegions.trend.value.used },
+        { data: dashboardRegions.trend.value.noshow }
       ] })
     }
-    if (pieChart) pieChart.setOption({ series: [{ data: data.roomTypeStats || [] }] })
+    if (pieChart) pieChart.setOption({ series: [{ data: dashboardRegions.roomTypes.value }] })
     if (barChart) {
       barChart.setOption({
-        yAxis: { data: data.usageRanking?.rooms || [] },
-        series: [{ data: data.usageRanking?.rates || [] }]
+        yAxis: { data: dashboardRegions.ranking.value.rooms },
+        series: [{ data: dashboardRegions.ranking.value.rates }]
       })
     }
   } catch (e) {
-    dashboardError.value = true
+    for (const key of Object.keys(regionErrors.value)) regionErrors.value[key] = true
   }
 }
 
@@ -229,10 +241,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .stat-cards,
 .content-row {
-  margin-bottom: 16px;
-}
-
-.dashboard-error {
   margin-bottom: 16px;
 }
 

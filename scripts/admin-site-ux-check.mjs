@@ -8,6 +8,32 @@ import {
   failLoad,
   finishLoad
 } from '../admin/src/utils/asyncState.js'
+import { mergeDashboardPayload } from '../admin/src/utils/adminRolePolicy.js'
+
+const previousDashboard = {
+  metrics: [1, 2, 3, 4],
+  pending: [{ id: 1, destination: '/reservation/pending' }],
+  trend: { dates: ['昨天'], reservations: [1], used: [1], noshow: [0] },
+  roomTypes: [{ name: '琴房', value: 1 }],
+  ranking: { rooms: ['琴房'], rates: [50] }
+}
+const partialDashboard = mergeDashboardPayload(previousDashboard, {
+  todayReservations: 8,
+  pendingCount: 3,
+  usingCount: 2,
+  noshowCount: 1,
+  pendingItems: [{ id: 2, destination: '/system/logs' }]
+}, 'counselor')
+assert.deepEqual(partialDashboard.metrics.value, [8, 3, 2, 1])
+assert.equal(partialDashboard.metrics.status, 'success')
+assert.equal(partialDashboard.pending.value[0].destination, '/reservation/counselor')
+assert.equal(partialDashboard.pending.status, 'success')
+assert.deepEqual(partialDashboard.trend.value, previousDashboard.trend)
+assert.equal(partialDashboard.trend.status, 'error')
+assert.deepEqual(partialDashboard.roomTypes.value, previousDashboard.roomTypes)
+assert.equal(partialDashboard.roomTypes.status, 'error')
+assert.deepEqual(partialDashboard.ranking.value, previousDashboard.ranking)
+assert.equal(partialDashboard.ranking.status, 'error')
 
 const state = createAsyncState([])
 assert.equal(state.status, 'idle')
@@ -145,10 +171,11 @@ assert.match(dashboard, /ROLE_SHORTCUTS/, 'dashboard should render role-specific
 assert.match(dashboard, /:title="dashboardCopy\.title"/, 'dashboard title should follow the current role')
 assert.match(dashboard, /router\.push\(item\.destination\)/, 'dashboard shortcuts should be navigable')
 assert.match(dashboard, /<button[^>]*v-for="item in pendingItems"[^>]*@click="router\.push\(item\.destination\)"/, 'pending items should navigate to their destination')
-assert.match(dashboard, /pendingItems\.value\s*=\s*\(data\.pendingItems\s*\|\|\s*\[\]\)/, 'successful dashboard loads should update pending items')
+assert.match(dashboard, /dashboardRegions\[key\]\.value\s*=\s*merged\[key\]\.value/, 'successful dashboard regions should update independently')
 assert.doesNotMatch(dashboard, /catch\s*\([^)]*\)\s*\{\s*pendingItems\.value\s*=\s*\[\]/, 'failed dashboard loads must preserve previous pending items')
-assert.match(dashboard, /dashboardError/, 'dashboard should distinguish load failure from empty data')
 assert.match(dashboard, /@click="loadData"[^>]*>\s*重试/, 'dashboard failure should offer retry')
+assert.match(dashboard, /regionErrors/, 'dashboard should expose independent region errors')
+assert.match(dashboard, /mergeDashboardPayload/, 'dashboard should merge valid regions without clearing failed regions')
 
 async function verifyLatestRequestWins() {
   let version = 0

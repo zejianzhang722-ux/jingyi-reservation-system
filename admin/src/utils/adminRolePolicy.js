@@ -51,6 +51,37 @@ export function getRoleLabel(role) {
   return ROLE_LABELS[role] || '管理员'
 }
 
+export function resolveRoleDestination(destination, role) {
+  const shortcuts = ROLE_SHORTCUTS[role] || ROLE_SHORTCUTS.admin
+  const fallback = role === 'counselor' ? '/reservation/counselor' : '/reservation/pending'
+  return shortcuts.some(item => item.destination === destination) ? destination : fallback
+}
+
+const region = (valid, nextValue, previousValue) => ({
+  status: valid ? (Array.isArray(nextValue) && nextValue.length === 0 ? 'empty' : 'success') : 'error',
+  value: valid ? nextValue : previousValue
+})
+
+export function mergeDashboardPayload(previous, data, role) {
+  const metricKeys = ['todayReservations', 'pendingCount', 'usingCount', 'noshowCount']
+  const metricsValid = metricKeys.every(key => Number.isFinite(data?.[key]))
+  const pendingValid = Array.isArray(data?.pendingItems)
+  const trendValid = Array.isArray(data?.trend?.dates) && Array.isArray(data?.trend?.reservations) &&
+    Array.isArray(data?.trend?.used) && Array.isArray(data?.trend?.noshow)
+  const roomTypesValid = Array.isArray(data?.roomTypeStats)
+  const rankingValid = Array.isArray(data?.usageRanking?.rooms) && Array.isArray(data?.usageRanking?.rates)
+
+  return {
+    metrics: region(metricsValid, metricKeys.map(key => data[key]), previous.metrics),
+    pending: region(pendingValid, pendingValid
+      ? data.pendingItems.map(item => ({ ...item, destination: resolveRoleDestination(item.destination, role) }))
+      : previous.pending, previous.pending),
+    trend: region(trendValid, data?.trend, previous.trend),
+    roomTypes: region(roomTypesValid, data?.roomTypeStats, previous.roomTypes),
+    ranking: region(rankingValid, data?.usageRanking, previous.ranking)
+  }
+}
+
 export function sortRoutesForRole(routes, role) {
   const priorities = new Map((ROLE_NAV_PRIORITY[role] || []).map((name, index) => [name, index]))
   return routes

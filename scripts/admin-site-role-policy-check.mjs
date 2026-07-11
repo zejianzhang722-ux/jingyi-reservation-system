@@ -5,6 +5,7 @@ import {
   ROLE_LABELS,
   ROLE_NAV_PRIORITY,
   ROLE_SHORTCUTS,
+  resolveRoleDestination,
   getRoleLabel,
   sortRoutesForRole
 } from '../admin/src/utils/adminRolePolicy.js'
@@ -23,6 +24,10 @@ for (const role of roles) {
   assert.ok(ROLE_DASHBOARD_COPY[role].description?.trim(), `${role} should have an independent dashboard description`)
   assert.equal(ROLE_DASHBOARD_COPY[role].metrics?.length, 4, `${role} should have four tailored metric labels`)
 }
+
+assert.equal(resolveRoleDestination('/system/logs', 'counselor'), '/reservation/counselor')
+assert.equal(resolveRoleDestination('/reservation/all', 'counselor'), '/reservation/all')
+assert.equal(resolveRoleDestination('https://example.com', 'admin'), '/reservation/pending')
 
 assert.equal(new Set(roles.map(role => ROLE_DASHBOARD_COPY[role].title)).size, roles.length, 'dashboard titles should differ by role')
 assert.equal(new Set(roles.map(role => ROLE_SHORTCUTS[role].map(item => item.name).join(','))).size, roles.length, 'shortcut sets should differ by role')
