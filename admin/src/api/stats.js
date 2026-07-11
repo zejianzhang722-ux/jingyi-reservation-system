@@ -4,6 +4,13 @@ export function getDashboard() {
   return request.get('/stats/dashboard')
 }
 
+export async function getPendingReminderCount() {
+  const response = await getDashboard()
+  const dashboard = response?.data || response || {}
+  const pendingCount = Number(dashboard.pendingCount)
+  return Number.isFinite(pendingCount) && pendingCount > 0 ? pendingCount : 0
+}
+
 export function getReservations(params) {
   return request.get('/stats/reservations', { params })
 }

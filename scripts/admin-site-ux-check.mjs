@@ -121,4 +121,17 @@ const globalCss = await readFile(new URL('../admin/src/styles/global.css', impor
 assert.match(globalCss, /:focus-visible/)
 assert.match(globalCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/)
 
+const layout = await readFile(new URL('../admin/src/components/Layout.vue', import.meta.url), 'utf8')
+const statsApi = await readFile(new URL('../admin/src/api/stats.js', import.meta.url), 'utf8')
+
+assert.doesNotMatch(layout, /\.notify-btn::after/, 'notification button must not show an unconditional red dot')
+assert.match(layout, /v-if="pendingCount > 0"[^>]*class="pending-badge"[^>]*role="status"[^>]*aria-label=/)
+assert.match(layout, /\{\{\s*pendingCount\s*\}\}/, 'notification badge must show the actionable count')
+assert.match(layout, /getPendingReminderCount/, 'layout must load reminder data from the stats API')
+assert.match(statsApi, /getDashboard\(\)[\s\S]*pendingCount/, 'reminder count must be derived from dashboard stats')
+assert.match(layout, /userStore\.token[\s\S]*loadPendingCount/, 'reminders must load after authentication')
+assert.match(layout, /watch\(\s*\(\)\s*=>\s*route\.fullPath[\s\S]*loadPendingCount/, 'route changes must refresh reminders')
+assert.match(layout, /pendingCount\.value\s*=\s*0[\s\S]*catch/, 'failed reminder loads must not leave a false badge')
+assert.match(layout, /role\s*===\s*'counselor'[\s\S]*['"]\/reservation\/counselor['"][\s\S]*['"]\/reservation\/pending['"]/, 'notification target must follow the reviewer role')
+
 console.log('admin-site-ux-check passed')
