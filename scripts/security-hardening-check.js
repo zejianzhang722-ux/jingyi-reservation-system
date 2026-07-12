@@ -122,6 +122,7 @@ async function main() {
   const statsRoutes = source('server/src/routes/stats.js')
   const posterRoutes = source('server/src/routes/poster.js')
   const configSource = source('server/src/config/index.js')
+  const seedSource = source('server/sql/seed.sql')
 
   assert(!/express\.static\(uploadsDir/.test(appSource), 'raw upload directory must not be served with unrestricted express.static')
   assert(/app\.use\('\/uploads', mediaRouter\)/.test(appSource), 'sanitized media router must serve public images')
@@ -135,6 +136,8 @@ async function main() {
   assert(!/jingyi-reservation-jwt-secret-2026-dev/.test(configSource), 'legacy JWT default must be removed')
   assert(!/wx_test_secret/.test(configSource), 'legacy WeChat default must be removed')
   assert(!/password:\s*process\.env\.MYSQL_PASSWORD\s*\|\|\s*'123456'/.test(configSource), 'legacy database password default must be removed')
+  assert(/'admin'\s*,\s*[^\n]+\s*,\s*'admin'\s*,\s*[1-9]\d*/.test(seedSource), 'seed admin must have a building scope')
+  assert(/'counselor'\s*,\s*[^\n]+\s*,\s*'counselor'\s*,\s*[1-9]\d*/.test(seedSource), 'seed counselor must exist with a building scope')
 
   console.log('security-hardening-check passed')
 }

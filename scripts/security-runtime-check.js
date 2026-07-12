@@ -117,6 +117,14 @@ async function main() {
     const counselor = await loginAdmin('counselor', 'counselor123')
     const superAdmin = await loginAdmin('superadmin', 'super123')
 
+    assert(Number.isInteger(Number(admin.userInfo.buildingId)) && Number(admin.userInfo.buildingId) > 0, 'admin fixture must have a building scope')
+    assert(Number.isInteger(Number(counselor.userInfo.buildingId)) && Number(counselor.userInfo.buildingId) > 0, 'counselor fixture must have a building scope')
+    assert(!superAdmin.userInfo.buildingId, 'super administrator fixture must remain global')
+
+    expectStatus(await api('/stats/dashboard', { headers: authHeaders(admin.token) }), 200, 'admin dashboard scope')
+    expectStatus(await api('/stats/dashboard', { headers: authHeaders(counselor.token) }), 200, 'counselor dashboard scope')
+    expectStatus(await api('/stats/dashboard', { headers: authHeaders(superAdmin.token) }), 200, 'super administrator dashboard scope')
+
     for (let i = 0; i < 12; i++) {
       const repeatedStudentLogin = await api('/auth/login/student', {
         method: 'POST',
@@ -164,10 +172,10 @@ async function main() {
 
     expectStatus(await api('/reservation/pending', { headers: authHeaders(admin.token) }), 200, 'admin pending list')
     expectStatus(await api('/reservation/5/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 403, 'admin cannot approve counselor pending')
-    expectStatus(await api('/reservation/10/approve', { method: 'PUT', headers: authHeaders(counselor.token) }), 403, 'counselor cannot approve normal pending')
+    expectStatus(await api('/reservation/7/approve', { method: 'PUT', headers: authHeaders(counselor.token) }), 403, 'counselor cannot approve normal pending')
 
-    expectStatus(await api('/reservation/7/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 200, 'admin approves pending')
-    expectStatus(await api('/reservation/7/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 409, 'duplicate approval conflict')
+    expectStatus(await api('/reservation/10/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 200, 'admin approves pending in own building')
+    expectStatus(await api('/reservation/10/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 409, 'duplicate approval conflict')
     expectStatus(await api('/reservation/5/approve', { method: 'PUT', headers: authHeaders(counselor.token) }), 200, 'counselor approves counselor pending')
 
     const counselorReservation = await api('/reservation', {
