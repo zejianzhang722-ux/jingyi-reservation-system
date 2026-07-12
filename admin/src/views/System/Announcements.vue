@@ -41,9 +41,9 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="success" size="small" link @click="handlePublish(row)" v-if="row.status === 'draft'">发布</el-button>
-            <el-button type="warning" size="small" link @click="handleArchive(row)" v-if="row.status === 'published'">归档</el-button>
-            <el-button type="danger" size="small" link @click="handleDelete(row)">删除</el-button>
+            <el-button type="success" size="small" link @click="handlePublish(row)" :disabled="actionSubmitting" v-if="row.status === 'draft'">发布</el-button>
+            <el-button type="warning" size="small" link @click="handleArchive(row)" :disabled="actionSubmitting" v-if="row.status === 'published'">归档</el-button>
+            <el-button type="danger" size="small" link @click="handleDelete(row)" :disabled="actionSubmitting">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -88,7 +88,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
+        <el-button type="primary" :loading="submitLoading" :disabled="actionSubmitting" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
   </PageShell>
@@ -98,11 +98,14 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { createActionLock } from '@/utils/approvalState'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
 
 const loading = ref(false)
 const submitLoading = ref(false)
+const actionSubmitting = ref(false)
+const actionLock = createActionLock()
 const tableData = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -137,8 +140,7 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    tableData.value = []
-    pagination.total = 0
+    // Keep the last successful snapshot visible during a transient refresh failure.
   } finally {
     loading.value = false
   }
@@ -157,16 +159,25 @@ function handleEdit(row) {
 }
 
 async function handlePublish(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
     await updateAnnouncement(row.id, { status: 'published' })
     ElMessage.success('发布成功')
     loadData()
   } catch (e) {
     // handled by interceptor
+  } finally {
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
 async function handleArchive(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
     await ElMessageBox.confirm('确认归档该公告？', '提示')
     await updateAnnouncement(row.id, { status: 'archived' })
@@ -174,10 +185,16 @@ async function handleArchive(row) {
     loadData()
   } catch (e) {
     // cancelled
+  } finally {
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
 async function handleDelete(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
     await ElMessageBox.confirm(`确认删除公告“${row.title}”？`, '提示', { type: 'warning' })
     await deleteAnnouncement(row.id)
@@ -185,6 +202,9 @@ async function handleDelete(row) {
     loadData()
   } catch (e) {
     // cancelled
+  } finally {
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
@@ -193,6 +213,10 @@ function resetForm() {
 }
 
 async function handleSubmit() {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
+  try {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
   submitLoading.value = true
@@ -210,6 +234,11 @@ async function handleSubmit() {
     // handled by interceptor
   } finally {
     submitLoading.value = false
+    actionSubmitting.value = false
+    actionLock.release(token)
+  }
+  } finally {
+    if (actionLock.release(token)) actionSubmitting.value = false
   }
 }
 

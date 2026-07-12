@@ -42,12 +42,6 @@ defineProps({
   box-shadow: var(--jy-shadow-card, 0 2px 8px rgba(0, 21, 41, 0.06));
   position: relative;
   overflow: hidden;
-  transition: transform var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease), box-shadow var(--jy-motion-normal, 260ms) var(--jy-motion-ease, ease);
-}
-
-.page-shell-header:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--jy-shadow-hover, 0 6px 16px rgba(0, 21, 41, 0.12));
 }
 
 .page-shell-header::before {
@@ -59,7 +53,6 @@ defineProps({
   height: 210px;
   border-radius: 999px;
   background: radial-gradient(circle, rgba(0, 102, 204, 0.12), transparent 65%);
-  animation: jy-soft-float 6s ease-in-out infinite;
 }
 
 .page-shell-copy,

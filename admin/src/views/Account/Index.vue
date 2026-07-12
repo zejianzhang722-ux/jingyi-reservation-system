@@ -76,7 +76,7 @@
               size="small"
               link
               @click="handleDelete(row)"
-              :disabled="row.role === 'super_admin'"
+              :disabled="actionSubmitting || row.role === 'super_admin'"
             >停用</el-button>
           </template>
         </el-table-column>
@@ -121,7 +121,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
+        <el-button type="primary" :loading="submitLoading" :disabled="actionSubmitting" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
 
@@ -138,7 +138,7 @@
       </el-upload>
       <template #footer>
         <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importLoading" @click="doImport">确认导入</el-button>
+        <el-button type="primary" :loading="importLoading" :disabled="actionSubmitting" @click="doImport">确认导入</el-button>
       </template>
     </el-dialog>
   </PageShell>
@@ -152,6 +152,7 @@ import { useUserStore } from '@/store/user'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { createActionLock, runLockedConfirmedAction } from '@/utils/approvalState'
 
 const userStore = useUserStore()
 const currentRole = computed(() => userStore.userInfo?.role || 'admin')
@@ -164,6 +165,8 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const importDialogVisible = ref(false)
 const importLoading = ref(false)
+const actionSubmitting = ref(false)
+const actionLock = createActionLock()
 let importFile = null
 
 const filters = reactive({ keyword: '', role: '', status: '' })
@@ -220,8 +223,7 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    tableData.value = []
-    pagination.total = 0
+    // Keep the last successful total visible during a transient refresh failure.
   } finally {
     loading.value = false
   }
@@ -259,14 +261,15 @@ function handleEdit(row) {
 }
 
 async function handleDelete(row) {
-  try {
-    await ElMessageBox.confirm(`确认停用账号“${row.username}”？`, '提示', { type: 'warning' })
-    await remove(row.id)
-    ElMessage.success('已停用')
-    loadData()
-  } catch (e) {
-    // cancelled
-  }
+  await runLockedConfirmedAction(actionLock, {
+    confirm: () => ElMessageBox.confirm(`确认停用账号“${row.username}”？`, '提示', { type: 'warning' }),
+    action: () => remove(row.id),
+    onSuccess: () => {
+      ElMessage.success('已停用')
+      loadData()
+    },
+    onStateChange: value => { actionSubmitting.value = value }
+  })
 }
 
 function resetForm() {
@@ -274,11 +277,13 @@ function resetForm() {
 }
 
 async function handleSubmit() {
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) return
-
-  submitLoading.value = true
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
+    const valid = await formRef.value.validate().catch(() => false)
+    if (!valid) return
+    submitLoading.value = true
     if (isEdit.value) {
       const data = { realName: form.realName, role: form.role }
       if (form.password) data.password = form.password
@@ -294,6 +299,8 @@ async function handleSubmit() {
     // handled by interceptor
   } finally {
     submitLoading.value = false
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
@@ -307,39 +314,40 @@ function handleFileChange(file) {
 }
 
 async function doImport() {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   if (!importFile) {
     ElMessage.warning('请选择Excel文件')
+    actionSubmitting.value = false
+    actionLock.release(token)
     return
   }
   importLoading.value = true
   try {
     const XLSX = await import('xlsx')
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json(ws)
-        const excelRoleMap = { '超级管理员': 'super_admin', '导生管理员': 'admin', '书院辅导员': 'counselor', '宿生': 'student' }
-        const normalizedRows = rows.map(row => ({
-          username: row['账号'] || row['学号'] || '',
-          realName: row['真实姓名'] || row['姓名'] || '',
-          password: row['密码'] || row['一卡通卡号'] || '',
-          role: activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin')
-        }))
-        const res = await saveRows(normalizedRows)
-        const data = res.data || {}
-        ElMessage.success(`导入完成：成功 ${data.successCount || 0} 个，失败 ${data.failCount || 0} 个`)
-        importDialogVisible.value = false
-        loadData()
-      } finally {
-        importLoading.value = false
-      }
-    }
-    reader.readAsArrayBuffer(importFile)
+    const dataBuffer = await importFile.arrayBuffer()
+    const wb = XLSX.read(dataBuffer, { type: 'array' })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(ws)
+    const excelRoleMap = { '超级管理员': 'super_admin', '导生管理员': 'admin', '书院辅导员': 'counselor', '宿生': 'student' }
+    const normalizedRows = rows.map(row => ({
+      username: row['账号'] || row['学号'] || '',
+      realName: row['真实姓名'] || row['姓名'] || '',
+      password: row['密码'] || row['一卡通卡号'] || '',
+      role: activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin')
+    }))
+    const res = await saveRows(normalizedRows)
+    const data = res.data || {}
+    ElMessage.success(`导入完成：成功 ${data.successCount || 0} 个，失败 ${data.failCount || 0} 个`)
+    importDialogVisible.value = false
+    loadData()
   } catch (e) {
     ElMessage.error('导入失败')
+  } finally {
     importLoading.value = false
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 

@@ -1,10 +1,11 @@
 ﻿<template>
   <PageShell
-    title="功能房预约工作台"
+    :title="dashboardCopy.title"
     eyebrow="今日概览"
-    description="集中查看待审核、使用中、异常记录和空间使用趋势。"
+    :description="dashboardCopy.description"
   >
     <template #actions>
+      <el-button v-for="item in shortcuts" :key="item.name" @click="router.push(item.destination)">{{ item.title }}</el-button>
       <el-button type="primary" :icon="Refresh" @click="loadData">刷新数据</el-button>
     </template>
 
@@ -13,6 +14,7 @@
         <MetricCard :label="item.label" :value="item.value" :caption="item.caption" :icon="item.icon" :tone="item.tone" />
       </el-col>
     </el-row>
+    <el-alert v-if="regionErrors.metrics" title="指标数据暂时不可用，已保留上次结果" type="error" :closable="false"><el-button link @click="loadData">重试</el-button></el-alert>
 
     <el-row :gutter="16" class="content-row">
       <el-col :xs="24" :lg="15">
@@ -21,6 +23,7 @@
             <div class="panel-header">
               <span>近 7 天预约趋势</span>
               <el-tag size="small" type="info">实时统计</el-tag>
+              <el-button v-if="regionErrors.trend" link type="danger" @click="loadData">趋势加载失败，重试</el-button>
             </div>
           </template>
           <div ref="trendChartRef" class="chart-container"></div>
@@ -32,16 +35,17 @@
             <div class="panel-header">
               <span>待处理事项</span>
               <el-tag size="small" type="danger">{{ pendingItems.length }}</el-tag>
+              <el-button v-if="regionErrors.pending" link type="danger" @click="loadData">待办加载失败，重试</el-button>
             </div>
           </template>
           <div class="pending-list" v-if="pendingItems.length">
-            <div v-for="item in pendingItems" :key="item.id" class="pending-item">
+            <button v-for="item in pendingItems" :key="item.id" class="pending-item" type="button" @click="router.push(item.destination)">
               <div>
                 <el-tag :type="item.tagType || 'warning'" size="small">{{ item.tag || '待处理' }}</el-tag>
                 <span class="pending-text">{{ item.text }}</span>
               </div>
               <span class="pending-time">{{ item.time }}</span>
-            </div>
+            </button>
           </div>
           <el-empty v-else description="暂无待处理事项" :image-size="80" />
         </el-card>
@@ -54,6 +58,7 @@
           <template #header>
             <div class="panel-header">
               <span>功能房使用率排行</span>
+              <el-button v-if="regionErrors.ranking" link type="danger" @click="loadData">加载失败，重试</el-button>
             </div>
           </template>
           <div ref="barChartRef" class="chart-container"></div>
@@ -64,6 +69,7 @@
           <template #header>
             <div class="panel-header">
               <span>空间类型分布</span>
+              <el-button v-if="regionErrors.roomTypes" link type="danger" @click="loadData">加载失败，重试</el-button>
             </div>
           </template>
           <div ref="pieChartRef" class="chart-container"></div>
@@ -74,12 +80,22 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { Refresh } from '@element-plus/icons-vue'
 import { getDashboard } from '@/api/stats'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { useUserStore } from '@/store/user'
+import { ROLE_DASHBOARD_COPY, ROLE_SHORTCUTS, mergeDashboardPayload } from '@/utils/adminRolePolicy'
+import { createLatestRequest } from '@/utils/latestRequest'
+
+const router = useRouter()
+const userStore = useUserStore()
+const role = computed(() => userStore.userInfo?.role || 'admin')
+const dashboardCopy = computed(() => ROLE_DASHBOARD_COPY[role.value] || ROLE_DASHBOARD_COPY.admin)
+const shortcuts = computed(() => ROLE_SHORTCUTS[role.value] || ROLE_SHORTCUTS.admin)
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -88,15 +104,30 @@ const barChartRef = ref(null)
 let trendChart = null
 let pieChart = null
 let barChart = null
+const dashboardRequest = createLatestRequest()
 
-const statCards = ref([
-  { key: 'today', label: '今日预约', value: 0, caption: '今日提交和生效预约', icon: 'Calendar', tone: 'primary' },
-  { key: 'pending', label: '待审核', value: 0, caption: '需要管理员处理', icon: 'Clock', tone: 'warning' },
-  { key: 'using', label: '使用中', value: 0, caption: '当前正在使用', icon: 'VideoPlay', tone: 'success' },
-  { key: 'noshow', label: '今日异常', value: 0, caption: '迟到、爽约和异常', icon: 'WarningFilled', tone: 'danger' }
-])
+const metricDefinitions = [
+  { key: 'today', caption: '今日提交和生效预约', icon: 'Calendar', tone: 'primary' },
+  { key: 'pending', caption: '需要当前角色处理', icon: 'Clock', tone: 'warning' },
+  { key: 'using', caption: '当前正在使用', icon: 'VideoPlay', tone: 'success' },
+  { key: 'noshow', caption: '迟到、爽约和异常', icon: 'WarningFilled', tone: 'danger' }
+]
+const metricValues = ref([0, 0, 0, 0])
+const statCards = computed(() => metricDefinitions.map((item, index) => ({
+  ...item,
+  label: dashboardCopy.value.metrics[index],
+  value: metricValues.value[index]
+})))
 
 const pendingItems = ref([])
+const dashboardRegions = {
+  metrics: metricValues,
+  pending: pendingItems,
+  trend: ref({ dates: [], reservations: [], used: [], noshow: [] }),
+  roomTypes: ref([]),
+  ranking: ref({ rooms: [], rates: [] })
+}
+const regionErrors = ref({ metrics: false, pending: false, trend: false, roomTypes: false, ranking: false })
 
 function initTrendChart(data) {
   trendChart = echarts.init(trendChartRef.value)
@@ -152,33 +183,38 @@ function initBarChart(data) {
   })
 }
 
-async function loadData() {
-  try {
-    const res = await getDashboard()
+function loadData() {
+  return dashboardRequest.run(getDashboard(), res => {
     const data = res.data || res || {}
-    statCards.value[0].value = data.todayReservations || 0
-    statCards.value[1].value = data.pendingCount || 0
-    statCards.value[2].value = data.usingCount || 0
-    statCards.value[3].value = data.noshowCount || 0
-    pendingItems.value = data.pendingItems || []
+    const merged = mergeDashboardPayload({
+      metrics: dashboardRegions.metrics.value,
+      pending: dashboardRegions.pending.value,
+      trend: dashboardRegions.trend.value,
+      roomTypes: dashboardRegions.roomTypes.value,
+      ranking: dashboardRegions.ranking.value
+    }, data, role.value)
+    for (const key of Object.keys(dashboardRegions)) {
+      dashboardRegions[key].value = merged[key].value
+      regionErrors.value[key] = merged[key].status === 'error'
+    }
 
     if (trendChart) {
-      trendChart.setOption({ xAxis: { data: data.trend?.dates || [] }, series: [
-        { data: data.trend?.reservations || [] },
-        { data: data.trend?.used || [] },
-        { data: data.trend?.noshow || [] }
+      trendChart.setOption({ xAxis: { data: dashboardRegions.trend.value.dates }, series: [
+        { data: dashboardRegions.trend.value.reservations },
+        { data: dashboardRegions.trend.value.used },
+        { data: dashboardRegions.trend.value.noshow }
       ] })
     }
-    if (pieChart) pieChart.setOption({ series: [{ data: data.roomTypeStats || [] }] })
+    if (pieChart) pieChart.setOption({ series: [{ data: dashboardRegions.roomTypes.value }] })
     if (barChart) {
       barChart.setOption({
-        yAxis: { data: data.usageRanking?.rooms || [] },
-        series: [{ data: data.usageRanking?.rates || [] }]
+        yAxis: { data: dashboardRegions.ranking.value.rooms },
+        series: [{ data: dashboardRegions.ranking.value.rates }]
       })
     }
-  } catch (e) {
-    pendingItems.value = []
-  }
+  }, () => {
+    for (const key of Object.keys(regionErrors.value)) regionErrors.value[key] = true
+  })
 }
 
 function handleResize() {
@@ -196,6 +232,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  dashboardRequest.invalidate()
   window.removeEventListener('resize', handleResize)
   trendChart?.dispose()
   pieChart?.dispose()
@@ -230,10 +267,15 @@ onBeforeUnmount(() => {
 }
 
 .pending-item {
+  width: 100%;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
   display: flex;
   justify-content: space-between;
   gap: 16px;
   padding: 12px 0;
+  border: 0;
   border-bottom: 1px solid var(--jy-border-light, #F0F0F5);
 }
 

@@ -61,7 +61,20 @@
           </div>
           <div class="header-right">
             <el-button class="quick-btn" :icon="Search" circle @click="quickSearchVisible = true" />
-            <el-button class="quick-btn notify-btn" :icon="Bell" circle @click="goPending" />
+            <el-button
+              class="quick-btn notify-btn"
+              :icon="Bell"
+              circle
+              :aria-label="pendingCount > 0 ? `待审核预约，${pendingCount} 条` : '待审核预约'"
+              @click="goPending"
+            >
+              <span
+                v-if="pendingCount > 0"
+                class="pending-badge"
+                role="status"
+                :aria-label="`有 ${pendingCount} 条待审核预约`"
+              >{{ pendingCount }}</span>
+            </el-button>
             <el-tag type="warning" effect="light">{{ roleLabel }}</el-tag>
             <el-dropdown @command="handleCommand">
               <span class="user-info">
@@ -115,11 +128,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search, Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { buildNavigation } from '@/router/adminRoutes'
+import { getPendingCount } from '@/api/reservation'
 
 const route = useRoute()
 const router = useRouter()
@@ -127,6 +141,8 @@ const userStore = useUserStore()
 const isCollapse = ref(false)
 const quickSearchVisible = ref(false)
 const quickKeyword = ref('')
+const pendingCount = ref(0)
+let pendingRequestVersion = 0
 
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '工作台')
@@ -151,8 +167,29 @@ const roleMap = {
 
 const roleLabel = computed(() => roleMap[userStore.userInfo.role] || '管理员')
 
+async function loadPendingCount() {
+  const requestVersion = ++pendingRequestVersion
+  if (!userStore.token) {
+    pendingCount.value = 0
+    return
+  }
+  try {
+    const count = await getPendingCount()
+    if (requestVersion === pendingRequestVersion) pendingCount.value = count
+  } catch {
+    if (requestVersion === pendingRequestVersion) pendingCount.value = 0
+  }
+}
+
+watch(() => userStore.token, loadPendingCount, { immediate: true })
+watch(() => route.fullPath, loadPendingCount)
+onBeforeUnmount(() => { pendingRequestVersion += 1 })
+
 function goPending() {
-  router.push('/reservation/pending')
+  const target = userStore.userInfo.role === 'counselor'
+    ? '/reservation/counselor'
+    : '/reservation/pending'
+  router.push(target)
 }
 
 function goQuick(path) {
@@ -358,16 +395,23 @@ function handleCommand(command) {
   position: relative;
 }
 
-.notify-btn::after {
-  content: '';
+.pending-badge {
   position: absolute;
-  right: 8px;
-  top: 8px;
-  width: 6px;
-  height: 6px;
+  right: -5px;
+  top: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 999px;
   background: var(--jy-danger, #FF4D4F);
-  box-shadow: 0 0 0 4px rgba(255, 77, 79, 0.14);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px #fff;
 }
 
 .route-summary {

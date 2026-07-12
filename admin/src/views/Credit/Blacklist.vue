@@ -45,7 +45,7 @@
         <el-table-column prop="violationCount" label="违规次数" width="100" />
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button type="success" size="small" link @click="handleUnban(row)">恢复正常</el-button>
+            <el-button type="success" size="small" link @click="handleUnban(row)" :disabled="actionSubmitting">恢复正常</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -78,7 +78,7 @@
       </el-form>
       <template #footer>
         <el-button @click="banDialogVisible = false">取消</el-button>
-        <el-button type="danger" :loading="submitLoading" @click="confirmBan">确认封禁</el-button>
+        <el-button type="danger" :loading="submitLoading" :disabled="actionSubmitting" @click="confirmBan">确认封禁</el-button>
       </template>
     </el-dialog>
   </PageShell>
@@ -88,12 +88,15 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getBlacklist, toggleBan } from '@/api/credit'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { createActionLock } from '@/utils/approvalState'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
 
 const loading = ref(false)
 const submitLoading = ref(false)
+const actionSubmitting = ref(false)
+const actionLock = createActionLock()
 const tableData = ref([])
 const banDialogVisible = ref(false)
 const formRef = ref(null)
@@ -120,8 +123,7 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    tableData.value = []
-    pagination.total = 0
+    // Keep the last successful snapshot visible during a transient refresh failure.
   } finally {
     loading.value = false
   }
@@ -139,6 +141,10 @@ function handleManualBan() {
 }
 
 async function confirmBan() {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
+  try {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
@@ -152,10 +158,18 @@ async function confirmBan() {
     // handled by interceptor
   } finally {
     submitLoading.value = false
+    actionSubmitting.value = false
+    actionLock.release(token)
+  }
+  } finally {
+    if (actionLock.release(token)) actionSubmitting.value = false
   }
 }
 
 async function handleUnban(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
     await ElMessageBox.confirm(`确认恢复 ${row.userName || row.studentId} 的账号状态？`, '提示', { type: 'success' })
     await toggleBan({ userId: row.userId || row.id, studentId: row.studentId, action: 'unban' })
@@ -163,6 +177,9 @@ async function handleUnban(row) {
     loadData()
   } catch (e) {
     // cancelled
+  } finally {
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 

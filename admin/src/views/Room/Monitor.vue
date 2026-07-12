@@ -122,7 +122,7 @@ async function loadRooms() {
     const res = await getList({ buildingId: filters.buildingId, type: filters.type, pageSize: 100 })
     rooms.value = (res.data?.list || []).map(normalizeRoom)
   } catch (e) {
-    rooms.value = []
+    // Keep the last successful snapshot visible during a transient refresh failure.
   }
 }
 
@@ -131,7 +131,7 @@ async function loadBuildings() {
     const res = await getBuildings({ pageSize: 100 })
     buildingOptions.value = res.data?.list || []
   } catch (e) {
-    buildingOptions.value = []
+    // Keep the last successful options visible during a transient refresh failure.
   }
 }
 

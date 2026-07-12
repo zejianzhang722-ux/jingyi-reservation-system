@@ -133,6 +133,7 @@ async function loadConfig() {
 }
 
 async function handleSave() {
+  if (saveLoading.value) return
   saveLoading.value = true
   try {
     await updateScoreConfig(form)

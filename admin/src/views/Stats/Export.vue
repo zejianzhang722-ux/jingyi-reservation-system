@@ -5,7 +5,7 @@
     description="按报表类型、时间范围、功能房和字段导出运营数据；本页历史记录仅保留当前浏览器会话内的导出结果。"
   >
     <template #actions>
-      <el-button type="primary" :loading="exporting" @click="handleExport">
+      <el-button type="primary" :loading="exporting" :disabled="exporting" @click="handleExport">
         <el-icon><Download /></el-icon>导出报表
       </el-button>
     </template>
@@ -21,6 +21,8 @@
         <MetricCard label="会话记录" :value="exportHistory.length" caption="本次打开页面后的导出" icon="Clock" tone="warning" />
       </el-col>
     </el-row>
+
+    <el-alert class="export-status" :title="exportResult || `当前范围：${currentRangeLabel}`" :type="exportResult ? 'success' : 'info'" :closable="false" show-icon />
 
     <el-card shadow="never">
       <template #header><span class="card-title">导出配置</span></template>
@@ -93,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { exportData } from '@/api/stats'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage } from 'element-plus'
@@ -103,6 +105,7 @@ import MetricCard from '@/components/admin/MetricCard.vue'
 const exporting = ref(false)
 const roomOptions = ref([])
 const exportHistory = ref([])
+const exportResult = ref('')
 
 const typeLabels = {
   reservations: '预约记录报表',
@@ -120,6 +123,7 @@ const form = reactive({
   columns: ['id', 'userName', 'studentId', 'roomName', 'date', 'timeSlot', 'status', 'purpose', 'createdAt'],
   format: 'xlsx'
 })
+const currentRangeLabel = computed(() => form.dateRange?.length ? `${form.dateRange[0]} 至 ${form.dateRange[1]}` : '尚未选择')
 
 async function loadRooms() {
   try {
@@ -131,6 +135,7 @@ async function loadRooms() {
 }
 
 async function handleExport() {
+  if (exporting.value) return
   if (!form.dateRange || !form.dateRange.length) {
     ElMessage.warning('请选择时间范围')
     return
@@ -141,6 +146,7 @@ async function handleExport() {
   }
 
   exporting.value = true
+  let objectUrl = ''
   try {
     const params = {
       type: form.type,
@@ -157,13 +163,13 @@ async function handleExport() {
         : 'text/csv'
     })
     const fileName = `${typeLabels[form.type]}_${form.dateRange[0]}_${form.dateRange[1]}.${form.format}`
-    const url = window.URL.createObjectURL(blob)
+    objectUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = objectUrl
     a.download = fileName
     a.click()
-    window.URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
+    exportResult.value = `已完成：${fileName}（${(blob.size / 1024).toFixed(1)} KB）`
 
     exportHistory.value.unshift({
       id: exportHistory.value.length + 1,
@@ -175,8 +181,10 @@ async function handleExport() {
       fileName
     })
   } catch (e) {
+    exportResult.value = '导出失败，请稍后重试'
     ElMessage.error('导出失败')
   } finally {
+    if (objectUrl) window.URL.revokeObjectURL(objectUrl)
     exporting.value = false
   }
 }
@@ -195,6 +203,8 @@ onMounted(() => {
   font-weight: 700;
   color: var(--jy-text-primary, #1A1A2E);
 }
+
+.export-status { margin-bottom: 16px; }
 
 .export-form {
   max-width: 720px;
