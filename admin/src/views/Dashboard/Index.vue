@@ -89,6 +89,7 @@ import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
 import { useUserStore } from '@/store/user'
 import { ROLE_DASHBOARD_COPY, ROLE_SHORTCUTS, mergeDashboardPayload } from '@/utils/adminRolePolicy'
+import { createLatestRequest } from '@/utils/latestRequest'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -103,7 +104,7 @@ const barChartRef = ref(null)
 let trendChart = null
 let pieChart = null
 let barChart = null
-let dashboardRequestVersion = 0
+const dashboardRequest = createLatestRequest()
 
 const metricDefinitions = [
   { key: 'today', caption: '今日提交和生效预约', icon: 'Calendar', tone: 'primary' },
@@ -182,11 +183,8 @@ function initBarChart(data) {
   })
 }
 
-async function loadData() {
-  const requestVersion = ++dashboardRequestVersion
-  try {
-    const res = await getDashboard()
-    if (requestVersion !== dashboardRequestVersion) return
+function loadData() {
+  return dashboardRequest.run(getDashboard(), res => {
     const data = res.data || res || {}
     const merged = mergeDashboardPayload({
       metrics: dashboardRegions.metrics.value,
@@ -214,10 +212,9 @@ async function loadData() {
         series: [{ data: dashboardRegions.ranking.value.rates }]
       })
     }
-  } catch (e) {
-    if (requestVersion !== dashboardRequestVersion) return
+  }, () => {
     for (const key of Object.keys(regionErrors.value)) regionErrors.value[key] = true
-  }
+  })
 }
 
 function handleResize() {
@@ -235,7 +232,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  dashboardRequestVersion += 1
+  dashboardRequest.invalidate()
   window.removeEventListener('resize', handleResize)
   trendChart?.dispose()
   pieChart?.dispose()

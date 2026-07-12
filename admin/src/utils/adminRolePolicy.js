@@ -70,6 +70,7 @@ export function mergeDashboardPayload(previous, data, role) {
   const trendLists = [data?.trend?.dates, data?.trend?.reservations, data?.trend?.used, data?.trend?.noshow]
   const trendValid = trendLists.every(Array.isArray) &&
     trendLists.every(items => items.length === trendLists[0].length) &&
+    trendLists[0].every(date => typeof date === 'string' && date.trim()) &&
     trendLists.slice(1).every(items => items.every(isNonNegativeNumber))
   const roomTypesValid = Array.isArray(data?.roomTypeStats) && data.roomTypeStats.every(item =>
     typeof item?.name === 'string' && item.name.trim() && isNonNegativeNumber(item.value))
