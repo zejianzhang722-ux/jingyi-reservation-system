@@ -76,7 +76,7 @@
               size="small"
               link
               @click="handleDelete(row)"
-              :disabled="row.role === 'super_admin'"
+              :disabled="actionSubmitting || row.role === 'super_admin'"
             >停用</el-button>
           </template>
         </el-table-column>
@@ -261,6 +261,9 @@ function handleEdit(row) {
 }
 
 async function handleDelete(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
     await ElMessageBox.confirm(`确认停用账号“${row.username}”？`, '提示', { type: 'warning' })
     await remove(row.id)
@@ -268,6 +271,9 @@ async function handleDelete(row) {
     loadData()
   } catch (e) {
     // cancelled
+  } finally {
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 

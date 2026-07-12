@@ -285,7 +285,7 @@ for (const name of ['Account/Index', 'Room/Manage', 'Credit/Blacklist', 'System/
 }
 
 const guardedManagementActions = {
-  'Account/Index': ['handleSubmit', 'doImport'],
+  'Account/Index': ['handleDelete', 'handleSubmit', 'doImport'],
   'Credit/Blacklist': ['confirmBan', 'handleUnban'],
   'System/Announcements': ['handlePublish', 'handleArchive', 'handleDelete', 'handleSubmit'],
   'System/Backup': ['handleCreateBackup', 'handleVerify']
@@ -299,6 +299,7 @@ for (const [name, handlers] of Object.entries(guardedManagementActions)) {
   assert.match(source, /actionLock\.release\(token\)/, `${name} must release only its own write token`)
 }
 assert.match(managementPages['Account/Index'], /:disabled="actionSubmitting"[\s\S]*@click="doImport"|@click="doImport"[\s\S]*:disabled="actionSubmitting"/, 'account import button must bind the shared lock state')
+assert.match(managementPages['Account/Index'], /@click="handleDelete\(row\)"[\s\S]{0,120}:disabled="actionSubmitting[^\"]*"|:disabled="actionSubmitting[^\"]*"[\s\S]{0,120}@click="handleDelete\(row\)"/, 'account disable button must bind the shared lock state')
 assert.match(managementPages['Credit/Blacklist'], /@click="handleUnban\(row\)"[^>]*:disabled="actionSubmitting"|:disabled="actionSubmitting"[^>]*@click="handleUnban\(row\)"/, 'unban button must bind the shared lock state')
 assert.equal((managementPages['System/Announcements'].match(/:disabled="actionSubmitting"/g) || []).length >= 3, true, 'announcement row actions must bind the shared lock state')
 assert.match(managementPages['System/Backup'], /@click="handleVerify\(row\)"[^>]*:loading="actionSubmitting"|:loading="actionSubmitting"[^>]*@click="handleVerify\(row\)"/, 'backup verify button must show the shared action state')
@@ -333,6 +334,14 @@ for (const [name, source, loadEvidence, primaryEvidence] of [
 }
 assert.doesNotMatch(managementPages['Room/Monitor'], /(?:create|update|delete|remove)(?:Room|Seat|Rules)\(/, 'Room/Monitor is read-only, so write guard and danger confirmation are N/A')
 for (const name of ['Room/Manage', 'Account/Index', 'Credit/Blacklist', 'System/Announcements']) assert.match(managementPages[name], /ElMessageBox\.confirm/, `${name} dangerous operation must require confirmation`)
+
+const accountWriteLock = createActionLock()
+const accountDisableToken = accountWriteLock.acquire()
+assert.ok(accountDisableToken, 'first account disable action must acquire the shared lock')
+assert.equal(accountWriteLock.acquire(), null, 'a repeated account disable trigger must be rejected while confirmation or request is pending')
+assert.equal(accountWriteLock.release(Symbol('duplicate-account-disable')), false, 'a rejected account disable trigger must not release the owner lock')
+assert.equal(accountWriteLock.locked, true)
+assert.equal(accountWriteLock.release(accountDisableToken), true)
 
 assert.match(statsOverview, /getRecentDateRange/, 'statistics must initialize an explicit recent-seven-day range')
 assert.match(statsOverview, /Promise\.allSettled/, 'statistics regions must settle independently')
