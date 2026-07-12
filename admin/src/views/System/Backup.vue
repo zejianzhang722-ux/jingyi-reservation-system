@@ -57,7 +57,7 @@
             </el-table-column>
             <el-table-column label="操作" width="130" fixed="right">
               <template #default="{ row }">
-                <el-button type="primary" size="small" link @click="handleVerify(row)" :disabled="row.status !== 'success' || !row.fileName">校验</el-button>
+                <el-button type="primary" size="small" link @click="handleVerify(row)" :loading="actionSubmitting" :disabled="actionSubmitting || row.status !== 'success' || !row.fileName">校验</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -108,10 +108,13 @@ import { getBackupList, createBackup, verifyBackup } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { createActionLock } from '@/utils/approvalState'
 
 const loading = ref(false)
 const backupLoading = ref(false)
 const backupList = ref([])
+const actionSubmitting = ref(false)
+const actionLock = createActionLock()
 
 const autoBackupForm = reactive({ enabled: false, frequency: 'daily', time: '03:00', keepCount: 7 })
 const storageInfo = reactive({ used: '0 MB', available: '1 GB', percentage: 0 })
@@ -160,7 +163,9 @@ async function loadData() {
 }
 
 async function handleCreateBackup() {
-  if (backupLoading.value) return
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   backupLoading.value = true
   try {
     await createBackup()
@@ -170,15 +175,23 @@ async function handleCreateBackup() {
     // handled by interceptor
   } finally {
     backupLoading.value = false
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
 async function handleVerify(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
     await verifyBackup(row.fileName)
     ElMessage.success('备份完整性校验通过')
   } catch (e) {
     // handled by interceptor
+  } finally {
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 

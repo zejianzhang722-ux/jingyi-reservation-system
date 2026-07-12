@@ -234,7 +234,7 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    pagination.total = 0
+    // Keep the last successful total visible during a transient refresh failure.
   } finally {
     loading.value = false
   }

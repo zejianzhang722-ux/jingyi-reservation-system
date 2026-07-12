@@ -277,8 +277,62 @@ for (const [name, source] of Object.entries(managementPages)) {
 for (const [name, source, guard] of [
   ['Room/RulesConfig', await readFile(new URL('../admin/src/views/Room/RulesConfig.vue', import.meta.url), 'utf8'), /async function handleSave\(\)\s*\{\s*if \(saveLoading\.value\) return/],
   ['Credit/ScoreConfig', await readFile(new URL('../admin/src/views/Credit/ScoreConfig.vue', import.meta.url), 'utf8'), /async function handleSave\(\)\s*\{\s*if \(saveLoading\.value\) return/],
-  ['System/Backup', managementPages['System/Backup'], /async function handleCreateBackup\(\)\s*\{\s*if \(backupLoading\.value\) return/]
+  ['System/Backup', managementPages['System/Backup'], /async function handleCreateBackup\(\)\s*\{\s*const token = actionLock\.acquire\(\)/]
 ]) assert.match(source, guard, `${name} must reject duplicate primary writes`)
+
+for (const name of ['Account/Index', 'Room/Manage', 'Credit/Blacklist', 'System/Announcements']) {
+  assert.doesNotMatch(managementPages[name], /catch\s*\([^)]*\)\s*\{[\s\S]{0,160}?pagination\.total\s*=\s*0/, `${name} must preserve the successful total when refresh fails`)
+}
+
+const guardedManagementActions = {
+  'Account/Index': ['handleSubmit', 'doImport'],
+  'Credit/Blacklist': ['confirmBan', 'handleUnban'],
+  'System/Announcements': ['handlePublish', 'handleArchive', 'handleDelete', 'handleSubmit'],
+  'System/Backup': ['handleCreateBackup', 'handleVerify']
+}
+for (const [name, handlers] of Object.entries(guardedManagementActions)) {
+  const source = managementPages[name]
+  assert.match(source, /createActionLock/, `${name} must use the owned-token action lock`)
+  for (const handler of handlers) {
+    assert.match(source, new RegExp(`async function ${handler}\\([^)]*\\)\\s*\\{[\\s\\S]{0,180}?actionLock\\.acquire\\(\\)`), `${name} ${handler} must acquire the shared write lock at entry`)
+  }
+  assert.match(source, /actionLock\.release\(token\)/, `${name} must release only its own write token`)
+}
+assert.match(managementPages['Account/Index'], /:disabled="actionSubmitting"[\s\S]*@click="doImport"|@click="doImport"[\s\S]*:disabled="actionSubmitting"/, 'account import button must bind the shared lock state')
+assert.match(managementPages['Credit/Blacklist'], /@click="handleUnban\(row\)"[^>]*:disabled="actionSubmitting"|:disabled="actionSubmitting"[^>]*@click="handleUnban\(row\)"/, 'unban button must bind the shared lock state')
+assert.equal((managementPages['System/Announcements'].match(/:disabled="actionSubmitting"/g) || []).length >= 3, true, 'announcement row actions must bind the shared lock state')
+assert.match(managementPages['System/Backup'], /@click="handleVerify\(row\)"[^>]*:loading="actionSubmitting"|:loading="actionSubmitting"[^>]*@click="handleVerify\(row\)"/, 'backup verify button must show the shared action state')
+
+const executablePageEvidence = [
+  ['Room/BuildingManage', '../admin/src/views/Room/BuildingManage.vue', /async function loadData/, /async function handleSubmit/, /ElMessageBox\.confirm/, /@click="handleAdd"/],
+  ['Room/SeatManage', '../admin/src/views/Room/SeatManage.vue', /async function loadSeats/, /async function confirmBatchAdd/, /ElMessageBox\.confirm/, /@click="handleBatchAdd"/],
+  ['Credit/Violations', '../admin/src/views/Credit/Violations.vue', /async function loadData/, /async function confirmCreate/, /function confirmCreate/, /@click="handleCreate"/],
+  ['System/Admins', '../admin/src/views/System/Admins.vue', /async function loadData/, /async function handleSubmit/, /ElMessageBox\.confirm/, /@click="handleAdd"/],
+  ['System/Logs', '../admin/src/views/System/Logs.vue', /async function loadData/, /getLogs/, /does-not-exist/, /@click="loadData"/]
+]
+for (const [name, path, loadEvidence, writeEvidence, dangerEvidence, primaryEvidence] of executablePageEvidence) {
+  const source = await readFile(new URL(path, import.meta.url), 'utf8')
+  assert.match(source, loadEvidence, `${name} must expose its load path`)
+  assert.match(source, writeEvidence, `${name} must expose its write or read-only API evidence`)
+  if (name === 'System/Logs') assert.doesNotMatch(source, /async function handle(?:Submit|Delete|Save|Create)/, `${name} is read-only and has no dangerous write`)
+  else assert.match(source, dangerEvidence, `${name} dangerous operation must be explicit or confirmed`)
+  assert.match(source, primaryEvidence, `${name} primary operation must be reachable`)
+}
+for (const [name, source, loadEvidence, primaryEvidence] of [
+  ['Room/Manage', managementPages['Room/Manage'], /async function loadData/, /@click="handleAdd"/],
+  ['Room/Monitor', managementPages['Room/Monitor'], /async function loadRooms/, /@click="loadRooms"/],
+  ['Room/RulesConfig', await readFile(new URL('../admin/src/views/Room/RulesConfig.vue', import.meta.url), 'utf8'), /async function loadRules/, /@click="handleSave"/],
+  ['Account/Index', managementPages['Account/Index'], /async function loadData/, /@click="handleAdd"/],
+  ['Credit/Blacklist', managementPages['Credit/Blacklist'], /async function loadData/, /@click="handleManualBan"/],
+  ['Credit/ScoreConfig', await readFile(new URL('../admin/src/views/Credit/ScoreConfig.vue', import.meta.url), 'utf8'), /async function loadConfig/, /@click="handleSave"/],
+  ['System/Announcements', managementPages['System/Announcements'], /async function loadData/, /@click="handleAdd"/],
+  ['System/Backup', managementPages['System/Backup'], /async function loadData/, /@click="handleCreateBackup"/]
+]) {
+  assert.match(source, loadEvidence, `${name} load evidence must be executable`)
+  assert.match(source, primaryEvidence, `${name} primary operation must be reachable`)
+}
+assert.doesNotMatch(managementPages['Room/Monitor'], /(?:create|update|delete|remove)(?:Room|Seat|Rules)\(/, 'Room/Monitor is read-only, so write guard and danger confirmation are N/A')
+for (const name of ['Room/Manage', 'Account/Index', 'Credit/Blacklist', 'System/Announcements']) assert.match(managementPages[name], /ElMessageBox\.confirm/, `${name} dangerous operation must require confirmation`)
 
 assert.match(statsOverview, /getRecentDateRange/, 'statistics must initialize an explicit recent-seven-day range')
 assert.match(statsOverview, /Promise\.allSettled/, 'statistics regions must settle independently')
