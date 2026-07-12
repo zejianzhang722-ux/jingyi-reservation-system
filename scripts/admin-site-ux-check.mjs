@@ -10,7 +10,7 @@ import {
 } from '../admin/src/utils/asyncState.js'
 import { mergeDashboardPayload } from '../admin/src/utils/adminRolePolicy.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
-import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '../admin/src/utils/approvalState.js'
+import { createActionLock, isConfirmationCancel, normalizeRejectionReason, runLockedConfirmedAction } from '../admin/src/utils/approvalState.js'
 import { deriveStatsSummary, formatNoshowRate, getRecentDateRange } from '../admin/src/utils/statsFormatters.js'
 import { createChartRenderScheduler } from '../admin/src/utils/chartRenderScheduler.js'
 
@@ -285,7 +285,7 @@ for (const name of ['Account/Index', 'Room/Manage', 'Credit/Blacklist', 'System/
 }
 
 const guardedManagementActions = {
-  'Account/Index': ['handleDelete', 'handleSubmit', 'doImport'],
+  'Account/Index': ['handleSubmit', 'doImport'],
   'Credit/Blacklist': ['confirmBan', 'handleUnban'],
   'System/Announcements': ['handlePublish', 'handleArchive', 'handleDelete', 'handleSubmit'],
   'System/Backup': ['handleCreateBackup', 'handleVerify']
@@ -299,6 +299,7 @@ for (const [name, handlers] of Object.entries(guardedManagementActions)) {
   assert.match(source, /actionLock\.release\(token\)/, `${name} must release only its own write token`)
 }
 assert.match(managementPages['Account/Index'], /:disabled="actionSubmitting"[\s\S]*@click="doImport"|@click="doImport"[\s\S]*:disabled="actionSubmitting"/, 'account import button must bind the shared lock state')
+assert.match(managementPages['Account/Index'], /async function handleDelete\([^)]*\)\s*\{[\s\S]{0,180}?runLockedConfirmedAction\(actionLock,/, 'account disable must use the tested shared confirmed-action executor')
 assert.match(managementPages['Account/Index'], /@click="handleDelete\(row\)"[\s\S]{0,120}:disabled="actionSubmitting[^\"]*"|:disabled="actionSubmitting[^\"]*"[\s\S]{0,120}@click="handleDelete\(row\)"/, 'account disable button must bind the shared lock state')
 assert.match(managementPages['Credit/Blacklist'], /@click="handleUnban\(row\)"[^>]*:disabled="actionSubmitting"|:disabled="actionSubmitting"[^>]*@click="handleUnban\(row\)"/, 'unban button must bind the shared lock state')
 assert.equal((managementPages['System/Announcements'].match(/:disabled="actionSubmitting"/g) || []).length >= 3, true, 'announcement row actions must bind the shared lock state')
@@ -342,6 +343,39 @@ assert.equal(accountWriteLock.acquire(), null, 'a repeated account disable trigg
 assert.equal(accountWriteLock.release(Symbol('duplicate-account-disable')), false, 'a rejected account disable trigger must not release the owner lock')
 assert.equal(accountWriteLock.locked, true)
 assert.equal(accountWriteLock.release(accountDisableToken), true)
+
+async function verifyAccountDisableFlow() {
+  const lock = createActionLock()
+  const states = []
+  let resolveConfirm
+  let resolveRequest
+  const first = runLockedConfirmedAction(lock, {
+    confirm: () => new Promise(resolve => { resolveConfirm = resolve }),
+    action: () => new Promise(resolve => { resolveRequest = resolve }),
+    onStateChange: value => states.push(value)
+  })
+  await Promise.resolve()
+  assert.equal(await runLockedConfirmedAction(lock, { confirm: async () => {}, action: async () => {} }), false, 'second account disable must be rejected while confirmation is pending')
+  resolveConfirm()
+  await Promise.resolve()
+  assert.equal(await runLockedConfirmedAction(lock, { confirm: async () => {}, action: async () => {} }), false, 'second account disable must be rejected while request is pending')
+  resolveRequest()
+  assert.equal(await first, true)
+  assert.deepEqual(states, [true, false])
+  assert.equal(await runLockedConfirmedAction(lock, { confirm: async () => {}, action: async () => {} }), true, 'lock must recover after success')
+
+  let cancelErrors = 0
+  assert.equal(await runLockedConfirmedAction(lock, { confirm: async () => { throw 'cancel' }, action: async () => assert.fail('cancelled action must not run'), onError: () => { cancelErrors += 1 } }), false)
+  assert.equal(cancelErrors, 0, 'confirmation cancellation must not be reported as an action failure')
+  assert.equal(await runLockedConfirmedAction(lock, { confirm: async () => {}, action: async () => {} }), true, 'lock must recover after cancellation')
+
+  const failure = new Error('disable failed')
+  let reported
+  assert.equal(await runLockedConfirmedAction(lock, { confirm: async () => {}, action: async () => { throw failure }, onError: error => { reported = error } }), false)
+  assert.equal(reported, failure)
+  assert.equal(await runLockedConfirmedAction(lock, { confirm: async () => {}, action: async () => {} }), true, 'lock must recover after request failure')
+}
+await verifyAccountDisableFlow()
 
 assert.match(statsOverview, /getRecentDateRange/, 'statistics must initialize an explicit recent-seven-day range')
 assert.match(statsOverview, /Promise\.allSettled/, 'statistics regions must settle independently')

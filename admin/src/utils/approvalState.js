@@ -29,3 +29,21 @@ export function createActionLock(onChange = () => {}) {
 export function isConfirmationCancel(error) {
   return error === 'cancel' || error === 'close' || error?.message === 'cancel' || error?.message === 'close'
 }
+
+export async function runLockedConfirmedAction(lock, { confirm, action, onSuccess, onError, onStateChange } = {}) {
+  const token = lock.acquire()
+  if (!token) return false
+  onStateChange?.(true)
+  try {
+    await confirm?.()
+    await action?.()
+    await onSuccess?.()
+    return true
+  } catch (error) {
+    if (!isConfirmationCancel(error)) await onError?.(error)
+    return false
+  } finally {
+    onStateChange?.(false)
+    lock.release(token)
+  }
+}

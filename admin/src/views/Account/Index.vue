@@ -152,7 +152,7 @@ import { useUserStore } from '@/store/user'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
-import { createActionLock } from '@/utils/approvalState'
+import { createActionLock, runLockedConfirmedAction } from '@/utils/approvalState'
 
 const userStore = useUserStore()
 const currentRole = computed(() => userStore.userInfo?.role || 'admin')
@@ -261,20 +261,15 @@ function handleEdit(row) {
 }
 
 async function handleDelete(row) {
-  const token = actionLock.acquire()
-  if (!token) return
-  actionSubmitting.value = true
-  try {
-    await ElMessageBox.confirm(`确认停用账号“${row.username}”？`, '提示', { type: 'warning' })
-    await remove(row.id)
-    ElMessage.success('已停用')
-    loadData()
-  } catch (e) {
-    // cancelled
-  } finally {
-    actionSubmitting.value = false
-    actionLock.release(token)
-  }
+  await runLockedConfirmedAction(actionLock, {
+    confirm: () => ElMessageBox.confirm(`确认停用账号“${row.username}”？`, '提示', { type: 'warning' }),
+    action: () => remove(row.id),
+    onSuccess: () => {
+      ElMessage.success('已停用')
+      loadData()
+    },
+    onStateChange: value => { actionSubmitting.value = value }
+  })
 }
 
 function resetForm() {
