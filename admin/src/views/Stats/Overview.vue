@@ -16,10 +16,10 @@
     </FilterBar>
 
     <el-row :gutter="16" class="summary-row">
-      <el-col :xs="12" :lg="6"><MetricCard label="预约量" :value="summary.reservationCount" caption="当前范围" icon="Tickets" tone="primary" /></el-col>
-      <el-col :xs="12" :lg="6"><MetricCard label="平均使用率" :value="`${summary.averageUsageRate}%`" caption="当前范围" icon="DataAnalysis" tone="success" /></el-col>
+      <el-col :xs="12" :lg="6"><MetricCard label="预约量" :value="summary.reservationCount ?? '不可用'" caption="当前范围" icon="Tickets" tone="primary" /></el-col>
+      <el-col :xs="12" :lg="6"><MetricCard label="平均使用率" :value="summary.averageUsageRate === null ? '不可用' : `${summary.averageUsageRate}%`" caption="当前范围" icon="DataAnalysis" tone="success" /></el-col>
       <el-col :xs="12" :lg="6"><MetricCard label="最繁忙时段" :value="summary.busiestHour" caption="预约峰值" icon="Clock" tone="warning" /></el-col>
-      <el-col :xs="12" :lg="6"><MetricCard label="爽约率" :value="`${summary.noshowRate}%`" caption="各功能房平均" icon="Warning" tone="danger" /></el-col>
+      <el-col :xs="12" :lg="6"><MetricCard label="爽约率" :value="summary.noshowRate === null ? '不可用' : `${summary.noshowRate}%`" caption="当前范围整体" icon="Warning" tone="danger" /></el-col>
     </el-row>
 
     <el-row :gutter="16" class="chart-row">
@@ -70,6 +70,7 @@ import MetricCard from '@/components/admin/MetricCard.vue'
 import AsyncState from '@/components/admin/AsyncState.vue'
 import { createAsyncState, beginLoad, finishLoad, failLoad } from '@/utils/asyncState'
 import { createLatestRequest } from '@/utils/latestRequest'
+import { createChartRenderScheduler } from '@/utils/chartRenderScheduler'
 import {
   formatReservationTrend,
   formatUsageRate,
@@ -99,8 +100,10 @@ const chartStates = reactive({
   trend: createAsyncState(null), usage: createAsyncState(null), peak: createAsyncState(null),
   noshow: createAsyncState(null), users: createAsyncState(null)
 })
-const summary = reactive({ reservationCount: 0, averageUsageRate: 0, busiestHour: '暂无', noshowRate: 0 })
+const summary = reactive({ reservationCount: null, averageUsageRate: null, busiestHour: '暂无', noshowRate: null })
 const statsRequest = createLatestRequest()
+const chartRenderScheduler = createChartRenderScheduler()
+let mounted = false
 
 async function loadRooms() {
   try {
@@ -124,6 +127,7 @@ async function loadAllData() {
     roomId: filters.roomId
   }
 
+  chartRenderScheduler.cancelAll()
   disposeCharts()
   Object.values(chartStates).forEach(beginLoad)
   const request = Promise.allSettled([
@@ -133,23 +137,24 @@ async function loadAllData() {
 }
 
 function applyResults(results, params) {
+  const currentData = {}
   const definitions = [
-    ['trend', results[0], formatReservationTrend, data => !data.dates.length, renderTrendChart],
-    ['usage', results[1], raw => formatUsageRate(raw, getRangeDays(params.startDate, params.endDate)), data => !data.rooms.length, renderUsageChart],
-    ['peak', results[2], formatPeakHours, data => !data.hours.length, renderPeakChart],
-    ['noshow', results[3], formatNoshowRate, data => !data.labels.length, renderNoshowChart],
-    ['users', results[4], formatUserActivity, data => !data.dates.length, renderUserChart]
+    ['trend', results[0], formatReservationTrend, data => !data.dates.length, renderTrendChart, trendChartRef],
+    ['usage', results[1], raw => formatUsageRate(raw, getRangeDays(params.startDate, params.endDate)), data => !data.rooms.length, renderUsageChart, usageChartRef],
+    ['peak', results[2], formatPeakHours, data => !data.hours.length, renderPeakChart, peakChartRef],
+    ['noshow', results[3], formatNoshowRate, data => !data.labels.length, renderNoshowChart, noshowChartRef],
+    ['users', results[4], formatUserActivity, data => !data.dates.length, renderUserChart, userChartRef]
   ]
-  definitions.forEach(([key, result, format, isEmpty, render]) => {
+  definitions.forEach(([key, result, format, isEmpty, render, elementRef]) => {
     if (result.status === 'rejected') return failLoad(chartStates[key], result.reason)
     const data = format(result.value.data)
+    currentData[key] = data
     finishLoad(chartStates[key], data, isEmpty(data))
-    if (!isEmpty(data)) requestAnimationFrame(() => render(data))
+    if (!isEmpty(data)) chartRenderScheduler.schedule(() => {
+      if (mounted && elementRef.value) render(data)
+    })
   })
-  Object.assign(summary, deriveStatsSummary({
-    trend: chartStates.trend.value, usage: chartStates.usage.value,
-    peak: chartStates.peak.value, noshow: chartStates.noshow.value
-  }))
+  Object.assign(summary, deriveStatsSummary(currentData))
 }
 
 function renderTrendChart(data) {
@@ -236,13 +241,16 @@ function disposeCharts() {
 }
 
 onMounted(() => {
+  mounted = true
   loadRooms()
   loadAllData()
   window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
+  mounted = false
   statsRequest.invalidate()
+  chartRenderScheduler.destroy()
   window.removeEventListener('resize', handleResize)
   disposeCharts()
 })

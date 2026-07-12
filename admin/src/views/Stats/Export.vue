@@ -146,6 +146,7 @@ async function handleExport() {
   }
 
   exporting.value = true
+  let objectUrl = ''
   try {
     const params = {
       type: form.type,
@@ -162,12 +163,11 @@ async function handleExport() {
         : 'text/csv'
     })
     const fileName = `${typeLabels[form.type]}_${form.dateRange[0]}_${form.dateRange[1]}.${form.format}`
-    const url = window.URL.createObjectURL(blob)
+    objectUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = objectUrl
     a.download = fileName
     a.click()
-    window.URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
     exportResult.value = `已完成：${fileName}（${(blob.size / 1024).toFixed(1)} KB）`
 
@@ -184,6 +184,7 @@ async function handleExport() {
     exportResult.value = '导出失败，请稍后重试'
     ElMessage.error('导出失败')
   } finally {
+    if (objectUrl) window.URL.revokeObjectURL(objectUrl)
     exporting.value = false
   }
 }

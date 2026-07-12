@@ -11,7 +11,8 @@ import {
 import { mergeDashboardPayload } from '../admin/src/utils/adminRolePolicy.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
 import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '../admin/src/utils/approvalState.js'
-import { deriveStatsSummary, getRecentDateRange } from '../admin/src/utils/statsFormatters.js'
+import { deriveStatsSummary, formatNoshowRate, getRecentDateRange } from '../admin/src/utils/statsFormatters.js'
+import { createChartRenderScheduler } from '../admin/src/utils/chartRenderScheduler.js'
 
 const fixedToday = new Date('2026-07-12T12:00:00+08:00')
 assert.deepEqual(getRecentDateRange(fixedToday), ['2026-07-06', '2026-07-12'], 'statistics should default to the inclusive recent seven days')
@@ -20,7 +21,35 @@ assert.deepEqual(deriveStatsSummary({
   usage: { rooms: ['琴房', '舞蹈房'], rates: [50, 70] },
   peak: { hours: ['09:00', '14:00'], counts: [2, 6] },
   noshow: { labels: ['琴房', '舞蹈房'], rates: [10, 20] }
-}), { reservationCount: 8, averageUsageRate: 60, busiestHour: '14:00', noshowRate: 15 })
+}), { reservationCount: 8, averageUsageRate: 60, busiestHour: '14:00', noshowRate: null })
+assert.deepEqual(formatNoshowRate({ roomNoshowStats: [
+  { name: '琴房', noshow_count: 1, reservation_count: 1 },
+  { name: '舞蹈房', noshow_count: 9, reservation_count: 99 }
+] }).rates, [100, 9], 'room no-show rate must use each room reservation count, not its share of no-shows')
+assert.deepEqual(formatNoshowRate({ roomNoshowStats: [{ name: '琴房', noshow_count: 1 }] }).rates, [], 'no-show rates without denominators must be unavailable')
+assert.equal(deriveStatsSummary({ trend: { total: [1, 9], noshow: [1, 0] } }).noshowRate, 10, 'overall no-show rate must be total no-shows divided by total reservations')
+assert.equal(deriveStatsSummary({ trend: { total: [1, 9] } }).noshowRate, null, 'missing no-show totals must remain unavailable')
+
+function createFakeRaf() {
+  let nextId = 0
+  const callbacks = new Map()
+  return {
+    request(callback) { callbacks.set(++nextId, callback); return nextId },
+    cancel(id) { callbacks.delete(id) },
+    flush() { const pending = [...callbacks.values()]; callbacks.clear(); pending.forEach(callback => callback()) }
+  }
+}
+const fakeRaf = createFakeRaf()
+const scheduler = createChartRenderScheduler(fakeRaf.request, fakeRaf.cancel)
+const rendered = []
+scheduler.schedule(() => rendered.push('old'))
+scheduler.cancelAll()
+fakeRaf.flush()
+assert.deepEqual(rendered, [], 'refresh must cancel queued chart renders')
+scheduler.schedule(() => rendered.push('unmounted'))
+scheduler.destroy()
+fakeRaf.flush()
+assert.deepEqual(rendered, [], 'unmount must prevent queued chart renders')
 
 assert.equal(normalizeRejectionReason('  申请信息不完整，请补充后重新提交  '), '申请信息不完整，请补充后重新提交')
 assert.throws(() => normalizeRejectionReason(''), /退回原因/)
