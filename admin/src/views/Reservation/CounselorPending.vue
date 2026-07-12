@@ -17,6 +17,9 @@
       </el-form>
     </el-card>
 
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
+      <template #default><el-button link type="primary" @click="loadData">重试</el-button></template>
+    </el-alert>
     <el-card shadow="never">
       <div class="table-header">
         <span class="table-title">辅导员审批列表</span>
@@ -34,8 +37,8 @@
         <el-table-column prop="counselorName" label="辅导员" width="100" />
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button type="success" size="small" link @click="handleApprove(row)">通过</el-button>
-            <el-button type="danger" size="small" link @click="handleReject(row)">驳回</el-button>
+            <el-button type="success" size="small" link :loading="actionSubmitting" :disabled="actionSubmitting" @click="handleApprove(row)">通过</el-button>
+            <el-button type="danger" size="small" link :disabled="actionSubmitting" @click="handleReject(row)">驳回</el-button>
             <el-button type="primary" size="small" link @click="handleDetail(row)">详情</el-button>
           </template>
         </el-table-column>
@@ -61,8 +64,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="rejectDialogVisible = false">取消</el-button>
-        <el-button type="danger" @click="confirmReject">确认驳回</el-button>
+        <el-button :disabled="actionSubmitting" @click="rejectDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="actionSubmitting" :disabled="actionSubmitting" @click="confirmReject">确认驳回</el-button>
       </template>
     </el-dialog>
 
@@ -85,8 +88,11 @@ import { ref, reactive, onMounted } from 'vue'
 import { getCounselorPending, approve, reject } from '@/api/reservation'
 import { getBuildings } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { normalizeRejectionReason } from '@/utils/approvalState'
 
 const loading = ref(false)
+const loadError = ref('')
+const actionSubmitting = ref(false)
 const tableData = ref([])
 const buildingOptions = ref([])
 const rejectDialogVisible = ref(false)
@@ -99,12 +105,13 @@ const rejectForm = reactive({ reason: '', id: null })
 
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await getCounselorPending({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    // handled
+    loadError.value = '列表加载失败，请重试'
   } finally {
     loading.value = false
   }
@@ -127,13 +134,18 @@ function resetFilters() {
 }
 
 async function handleApprove(row) {
+  if (actionSubmitting.value) return
   try {
     await ElMessageBox.confirm('确认通过该预约申请？', '提示', { type: 'success' })
+    if (actionSubmitting.value) return
+    actionSubmitting.value = true
     await approve(row.id)
     ElMessage.success('已通过')
-    loadData()
+    await loadData()
   } catch (e) {
     // cancelled
+  } finally {
+    actionSubmitting.value = false
   }
 }
 
@@ -144,17 +156,24 @@ function handleReject(row) {
 }
 
 async function confirmReject() {
-  if (!rejectForm.reason) {
-    ElMessage.warning('请输入驳回原因')
+  if (actionSubmitting.value) return
+  let reason
+  try {
+    reason = normalizeRejectionReason(rejectForm.reason)
+  } catch (error) {
+    ElMessage.warning(error.message)
     return
   }
+  actionSubmitting.value = true
   try {
-    await reject(rejectForm.id, { reason: rejectForm.reason })
+    await reject(rejectForm.id, { reason })
     ElMessage.success('已驳回')
     rejectDialogVisible.value = false
-    loadData()
+    await loadData()
   } catch (e) {
     // handled
+  } finally {
+    actionSubmitting.value = false
   }
 }
 

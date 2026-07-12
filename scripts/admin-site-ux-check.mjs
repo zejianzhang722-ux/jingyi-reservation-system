@@ -10,6 +10,12 @@ import {
 } from '../admin/src/utils/asyncState.js'
 import { mergeDashboardPayload } from '../admin/src/utils/adminRolePolicy.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
+import { normalizeRejectionReason } from '../admin/src/utils/approvalState.js'
+
+assert.equal(normalizeRejectionReason('  申请信息不完整，请补充后重新提交  '), '申请信息不完整，请补充后重新提交')
+assert.throws(() => normalizeRejectionReason(''), /退回原因/)
+assert.throws(() => normalizeRejectionReason('   '), /退回原因/)
+assert.throws(() => normalizeRejectionReason('批量退回'), /具体/)
 
 const previousDashboard = {
   metrics: [1, 2, 3, 4],
@@ -166,6 +172,25 @@ assert.match(globalCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/)
 const layout = await readFile(new URL('../admin/src/components/Layout.vue', import.meta.url), 'utf8')
 const dashboard = await readFile(new URL('../admin/src/views/Dashboard/Index.vue', import.meta.url), 'utf8')
 const reservationApi = await readFile(new URL('../admin/src/api/reservation.js', import.meta.url), 'utf8')
+const reviewQueue = await readFile(new URL('../admin/src/views/Reservation/ReviewQueue.vue', import.meta.url), 'utf8')
+const pendingList = await readFile(new URL('../admin/src/views/Reservation/PendingList.vue', import.meta.url), 'utf8')
+const counselorPending = await readFile(new URL('../admin/src/views/Reservation/CounselorPending.vue', import.meta.url), 'utf8')
+
+assert.match(pendingList, /<ReviewQueue\s*\/>/, 'pending list should inherit the safe review queue')
+for (const [name, source] of [['review queue', reviewQueue], ['counselor pending', counselorPending]]) {
+  assert.match(source, /actionSubmitting/, `${name} must guard approval submissions`)
+  assert.match(source, /if\s*\(actionSubmitting\.value\)\s*return/, `${name} must allow only one approval request in flight`)
+  assert.match(source, /confirm\([\s\S]*?if\s*\(actionSubmitting\.value\)\s*return[\s\S]*?actionSubmitting\.value\s*=\s*true/, `${name} must recheck the guard after confirmation`)
+  assert.match(source, /:loading="actionSubmitting"/, `${name} must show submission progress`)
+  assert.match(source, /:disabled="actionSubmitting/, `${name} must disable related actions while submitting`)
+  assert.doesNotMatch(source, /catch\s*\([^)]*\)\s*\{\s*tableData\.value\s*=\s*\[\]/, `${name} must preserve rows when loading fails`)
+  assert.match(source, /loadError/, `${name} must expose a retryable loading failure`)
+  assert.match(source, /@click="loadData"/, `${name} must offer retry`)
+}
+assert.match(reviewQueue, /batchReject/, 'batch rejection must collect a reason before submission')
+assert.match(reviewQueue, /normalizeRejectionReason/, 'batch and single rejection must share reason validation')
+assert.doesNotMatch(reviewQueue, /reason:\s*action\s*===\s*['"]reject['"]\s*\?\s*['"]批量退回['"]/, 'batch rejection must not use a generic reason')
+assert.match(reviewQueue, /selectedIds\.value\s*=\s*\[\][\s\S]*await\s+loadData|await\s+loadData\([\s\S]*selectedIds\.value\s*=\s*\[\]/, 'selection may clear only after a successful action')
 
 assert.doesNotMatch(layout, /\.notify-btn::after/, 'notification button must not show an unconditional red dot')
 assert.match(layout, /v-if="pendingCount > 0"[^>]*class="pending-badge"[^>]*role="status"[^>]*aria-label=/)
