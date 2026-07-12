@@ -248,6 +248,13 @@ const pendingList = await readFile(new URL('../admin/src/views/Reservation/Pendi
 const counselorPending = await readFile(new URL('../admin/src/views/Reservation/CounselorPending.vue', import.meta.url), 'utf8')
 const statsOverview = await readFile(new URL('../admin/src/views/Stats/Overview.vue', import.meta.url), 'utf8')
 const statsExport = await readFile(new URL('../admin/src/views/Stats/Export.vue', import.meta.url), 'utf8')
+const scopedStatsController = await readFile(new URL('../server/src/controllers/scopedStatsController.js', import.meta.url), 'utf8')
+const statsController = await readFile(new URL('../server/src/controllers/statsController.js', import.meta.url), 'utf8')
+
+for (const [name, source] of [['scoped stats', scopedStatsController], ['global stats', statsController]]) {
+  assert.match(source, /SUM\(CASE WHEN r\.status = ['"]noshow['"] THEN 1 ELSE 0 END\)\s+AS\s+noshow_count/i, `${name} room no-show query must count no-shows without filtering other reservations out`)
+  assert.match(source, /COUNT\(\*\)\s+AS\s+reservation_count/i, `${name} room no-show response must provide the room reservation denominator`)
+}
 
 // Task 7 management-page evidence table (load failure / write guard / danger confirmation / primary action):
 // Room/BuildingManage: preserve rows / guarded submit / named delete confirmation / add button reachable.
