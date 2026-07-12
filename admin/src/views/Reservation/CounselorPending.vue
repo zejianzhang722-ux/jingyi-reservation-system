@@ -20,6 +20,7 @@
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
       <template #default><el-button link type="primary" @click="loadData">重试</el-button></template>
     </el-alert>
+    <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
     <el-card shadow="never">
       <div class="table-header">
         <span class="table-title">辅导员审批列表</span>
@@ -88,11 +89,13 @@ import { ref, reactive, onMounted } from 'vue'
 import { getCounselorPending, approve, reject } from '@/api/reservation'
 import { getBuildings } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { normalizeRejectionReason } from '@/utils/approvalState'
+import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '@/utils/approvalState'
 
 const loading = ref(false)
 const loadError = ref('')
 const actionSubmitting = ref(false)
+const actionError = ref('')
+const actionLock = createActionLock(value => { actionSubmitting.value = value })
 const tableData = ref([])
 const buildingOptions = ref([])
 const rejectDialogVisible = ref(false)
@@ -134,18 +137,18 @@ function resetFilters() {
 }
 
 async function handleApprove(row) {
-  if (actionSubmitting.value) return
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   try {
     await ElMessageBox.confirm('确认通过该预约申请？', '提示', { type: 'success' })
-    if (actionSubmitting.value) return
-    actionSubmitting.value = true
     await approve(row.id)
     ElMessage.success('已通过')
     await loadData()
   } catch (e) {
-    // cancelled
+    if (!isConfirmationCancel(e)) actionError.value = '审批失败，请重试'
   } finally {
-    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
@@ -156,7 +159,6 @@ function handleReject(row) {
 }
 
 async function confirmReject() {
-  if (actionSubmitting.value) return
   let reason
   try {
     reason = normalizeRejectionReason(rejectForm.reason)
@@ -164,16 +166,18 @@ async function confirmReject() {
     ElMessage.warning(error.message)
     return
   }
-  actionSubmitting.value = true
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   try {
     await reject(rejectForm.id, { reason })
     ElMessage.success('已驳回')
     rejectDialogVisible.value = false
     await loadData()
   } catch (e) {
-    // handled
+    actionError.value = '驳回失败，请重试'
   } finally {
-    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 

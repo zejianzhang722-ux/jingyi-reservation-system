@@ -10,12 +10,44 @@ import {
 } from '../admin/src/utils/asyncState.js'
 import { mergeDashboardPayload } from '../admin/src/utils/adminRolePolicy.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
-import { normalizeRejectionReason } from '../admin/src/utils/approvalState.js'
+import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '../admin/src/utils/approvalState.js'
 
 assert.equal(normalizeRejectionReason('  申请信息不完整，请补充后重新提交  '), '申请信息不完整，请补充后重新提交')
 assert.throws(() => normalizeRejectionReason(''), /退回原因/)
 assert.throws(() => normalizeRejectionReason('   '), /退回原因/)
 assert.throws(() => normalizeRejectionReason('批量退回'), /具体/)
+const actionLock = createActionLock()
+const firstToken = actionLock.acquire()
+assert.ok(firstToken, 'first action must acquire the lock')
+assert.equal(actionLock.locked, true)
+assert.equal(actionLock.acquire(), null, 'a concurrent action must not acquire the lock')
+assert.equal(actionLock.release(Symbol('not-owner')), false, 'a non-owner must not release the active action')
+assert.equal(actionLock.locked, true, 'the first request must remain locked')
+assert.equal(actionLock.release(firstToken), true)
+assert.equal(actionLock.locked, false)
+let finishFirstAction
+const pendingConfirmation = new Promise(resolve => { finishFirstAction = resolve })
+async function runLockedAction(lock, confirmation) {
+  const token = lock.acquire()
+  if (!token) return false
+  try {
+    await confirmation
+    return true
+  } finally {
+    lock.release(token)
+  }
+}
+const concurrentLock = createActionLock()
+const firstAction = runLockedAction(concurrentLock, pendingConfirmation)
+assert.equal(await runLockedAction(concurrentLock, Promise.resolve()), false, 'second confirmation must be rejected while the first is unfinished')
+assert.equal(concurrentLock.release(Symbol('second-action')), false, 'rejected action cannot unlock the unfinished request')
+assert.equal(concurrentLock.locked, true)
+finishFirstAction()
+assert.equal(await firstAction, true)
+assert.equal(concurrentLock.locked, false)
+assert.equal(isConfirmationCancel('cancel'), true)
+assert.equal(isConfirmationCancel('close'), true)
+assert.equal(isConfirmationCancel(new Error('network')), false)
 
 const previousDashboard = {
   metrics: [1, 2, 3, 4],
@@ -179,8 +211,8 @@ const counselorPending = await readFile(new URL('../admin/src/views/Reservation/
 assert.match(pendingList, /<ReviewQueue\s*\/>/, 'pending list should inherit the safe review queue')
 for (const [name, source] of [['review queue', reviewQueue], ['counselor pending', counselorPending]]) {
   assert.match(source, /actionSubmitting/, `${name} must guard approval submissions`)
-  assert.match(source, /if\s*\(actionSubmitting\.value\)\s*return/, `${name} must allow only one approval request in flight`)
-  assert.match(source, /confirm\([\s\S]*?if\s*\(actionSubmitting\.value\)\s*return[\s\S]*?actionSubmitting\.value\s*=\s*true/, `${name} must recheck the guard after confirmation`)
+  assert.match(source, /actionLock\.acquire\(\)/, `${name} must allow only one approval request in flight`)
+  assert.match(source, /actionLock\.release\(token\)/, `${name} must release only the owned action`)
   assert.match(source, /:loading="actionSubmitting"/, `${name} must show submission progress`)
   assert.match(source, /:disabled="actionSubmitting/, `${name} must disable related actions while submitting`)
   assert.doesNotMatch(source, /catch\s*\([^)]*\)\s*\{\s*tableData\.value\s*=\s*\[\]/, `${name} must preserve rows when loading fails`)
@@ -188,7 +220,10 @@ for (const [name, source] of [['review queue', reviewQueue], ['counselor pending
   assert.match(source, /@click="loadData"/, `${name} must offer retry`)
 }
 assert.match(reviewQueue, /batchReject/, 'batch rejection must collect a reason before submission')
+assert.match(reviewQueue, /const ids = \[\.\.\.selectedIds\.value\]/, 'batch approval must snapshot selected ids before confirmation')
+assert.match(reviewQueue, /ids\.length[\s\S]*batchAudit\(\{ ids, action/, 'batch confirmation and request must use the same snapshot')
 assert.match(reviewQueue, /normalizeRejectionReason/, 'batch and single rejection must share reason validation')
+assert.match(reviewQueue, /isConfirmationCancel/, 'confirmation cancellation must be distinguished from real failures')
 assert.doesNotMatch(reviewQueue, /reason:\s*action\s*===\s*['"]reject['"]\s*\?\s*['"]批量退回['"]/, 'batch rejection must not use a generic reason')
 assert.match(reviewQueue, /selectedIds\.value\s*=\s*\[\][\s\S]*await\s+loadData|await\s+loadData\([\s\S]*selectedIds\.value\s*=\s*\[\]/, 'selection may clear only after a successful action')
 

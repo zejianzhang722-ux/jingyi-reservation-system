@@ -31,6 +31,7 @@
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
       <template #default><el-button link type="primary" @click="loadData">重试</el-button></template>
     </el-alert>
+    <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" stripe>
         <el-table-column type="selection" width="50" />
@@ -111,11 +112,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
-import { normalizeRejectionReason } from '@/utils/approvalState'
+import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '@/utils/approvalState'
 
 const loading = ref(false)
 const loadError = ref('')
 const actionSubmitting = ref(false)
+const actionError = ref('')
+const actionLock = createActionLock(value => { actionSubmitting.value = value })
 const tableData = ref([])
 const selectedIds = ref([])
 const roomOptions = ref([])
@@ -163,18 +166,18 @@ function handleSelectionChange(rows) {
 }
 
 async function handleApprove(row) {
-  if (actionSubmitting.value) return
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   try {
     await ElMessageBox.confirm('确认通过该预约申请？', '提示', { type: 'success' })
-    if (actionSubmitting.value) return
-    actionSubmitting.value = true
     await approve(row.id)
     ElMessage.success('已通过')
     await loadData()
   } catch (e) {
-    // cancelled or handled by interceptor
+    if (!isConfirmationCancel(e)) actionError.value = '审批失败，请重试'
   } finally {
-    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
@@ -191,7 +194,6 @@ function applyReturnTemplate(value) {
 }
 
 async function confirmReturn() {
-  if (actionSubmitting.value) return
   let reason
   try {
     reason = normalizeRejectionReason(returnForm.reason)
@@ -199,7 +201,9 @@ async function confirmReturn() {
     ElMessage.warning(error.message)
     return
   }
-  actionSubmitting.value = true
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   try {
     if (returnForm.ids.length) await batchAudit({ ids: returnForm.ids, action: 'reject', reason })
     else await returnReservation(returnForm.id, { reason })
@@ -208,9 +212,9 @@ async function confirmReturn() {
     if (returnForm.ids.length) selectedIds.value = []
     await loadData()
   } catch (e) {
-    // handled by interceptor
+    actionError.value = '退回失败，请重试'
   } finally {
-    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
@@ -220,20 +224,22 @@ function openDetail(row) {
 }
 
 async function handleBatch(action) {
-  if (actionSubmitting.value) return
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   const text = action === 'approve' ? '通过' : '退回'
   try {
-    await ElMessageBox.confirm(`确认批量${text}选中的 ${selectedIds.value.length} 条预约？`, '提示', { type: 'warning' })
-    if (actionSubmitting.value) return
-    actionSubmitting.value = true
-    await batchAudit({ ids: selectedIds.value, action, reason: '' })
+    await ElMessageBox.confirm(`确认批量${text}选中的 ${ids.length} 条预约？`, '提示', { type: 'warning' })
+    await batchAudit({ ids, action, reason: '' })
     ElMessage.success(`已批量${text}`)
     selectedIds.value = []
     await loadData()
   } catch (e) {
-    // cancelled or handled by interceptor
+    if (!isConfirmationCancel(e)) actionError.value = `批量${text}失败，请重试`
   } finally {
-    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
