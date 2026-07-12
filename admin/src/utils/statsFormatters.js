@@ -69,3 +69,29 @@ export function getRangeDays(startDate, endDate) {
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 30;
   return Math.max(1, Math.round((end - start) / 86400000) + 1);
 }
+
+export function getRecentDateRange(today = new Date()) {
+  const end = new Date(today)
+  const start = new Date(today)
+  start.setDate(start.getDate() - 6)
+  const format = date => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  return [format(start), format(end)]
+}
+
+export function deriveStatsSummary({ trend, usage, peak, noshow }) {
+  const sum = values => normalizeRows(values).reduce((total, value) => total + toNumber(value), 0)
+  const average = values => values?.length ? Math.round(sum(values) / values.length) : 0
+  const peakCounts = peak?.counts || []
+  const peakIndex = peakCounts.length ? peakCounts.indexOf(Math.max(...peakCounts.map(toNumber))) : -1
+  return {
+    reservationCount: sum(trend?.total),
+    averageUsageRate: average(usage?.rates),
+    busiestHour: peakIndex >= 0 ? peak.hours[peakIndex] : '暂无',
+    noshowRate: average(noshow?.rates)
+  }
+}

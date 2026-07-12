@@ -11,6 +11,16 @@ import {
 import { mergeDashboardPayload } from '../admin/src/utils/adminRolePolicy.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
 import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '../admin/src/utils/approvalState.js'
+import { deriveStatsSummary, getRecentDateRange } from '../admin/src/utils/statsFormatters.js'
+
+const fixedToday = new Date('2026-07-12T12:00:00+08:00')
+assert.deepEqual(getRecentDateRange(fixedToday), ['2026-07-06', '2026-07-12'], 'statistics should default to the inclusive recent seven days')
+assert.deepEqual(deriveStatsSummary({
+  trend: { total: [3, 5], used: [2, 4], cancelled: [0, 1] },
+  usage: { rooms: ['琴房', '舞蹈房'], rates: [50, 70] },
+  peak: { hours: ['09:00', '14:00'], counts: [2, 6] },
+  noshow: { labels: ['琴房', '舞蹈房'], rates: [10, 20] }
+}), { reservationCount: 8, averageUsageRate: 60, busiestHour: '14:00', noshowRate: 15 })
 
 assert.equal(normalizeRejectionReason('  申请信息不完整，请补充后重新提交  '), '申请信息不完整，请补充后重新提交')
 assert.throws(() => normalizeRejectionReason(''), /退回原因/)
@@ -207,6 +217,22 @@ const reservationApi = await readFile(new URL('../admin/src/api/reservation.js',
 const reviewQueue = await readFile(new URL('../admin/src/views/Reservation/ReviewQueue.vue', import.meta.url), 'utf8')
 const pendingList = await readFile(new URL('../admin/src/views/Reservation/PendingList.vue', import.meta.url), 'utf8')
 const counselorPending = await readFile(new URL('../admin/src/views/Reservation/CounselorPending.vue', import.meta.url), 'utf8')
+const statsOverview = await readFile(new URL('../admin/src/views/Stats/Overview.vue', import.meta.url), 'utf8')
+const statsExport = await readFile(new URL('../admin/src/views/Stats/Export.vue', import.meta.url), 'utf8')
+
+assert.match(statsOverview, /getRecentDateRange/, 'statistics must initialize an explicit recent-seven-day range')
+assert.match(statsOverview, /Promise\.allSettled/, 'statistics regions must settle independently')
+assert.match(statsOverview, /createLatestRequest/, 'statistics must coordinate overlapping refreshes')
+assert.match(statsOverview, /statsRequest\.run/, 'statistics must apply only the newest refresh')
+assert.match(statsOverview, /chartStates/, 'each statistics chart must expose its own state')
+assert.equal((statsOverview.match(/<AsyncState/g) || []).length, 5, 'each statistics chart must render loading, error, empty, and success independently')
+assert.match(statsOverview, /deriveStatsSummary/, 'summary cards must be derived from normalized chart data')
+assert.match(statsOverview, /onBeforeUnmount\([\s\S]*statsRequest\.invalidate\(\)/, 'unmount must invalidate statistics requests')
+assert.doesNotMatch(statsOverview, /formatReservationTrend\(reservations\.status === 'fulfilled' \? reservations\.value\.data : null\)/, 'failed regions must not be formatted as empty data')
+assert.match(statsExport, /if \(exporting\.value\) return/, 'export must reject duplicate clicks')
+assert.match(statsExport, /:disabled="exporting"/, 'export action must be disabled while running')
+assert.match(statsExport, /currentRangeLabel/, 'export page must show the currently selected range')
+assert.match(statsExport, /exportResult/, 'export page must show the latest export result')
 
 assert.match(pendingList, /<ReviewQueue\s*\/>/, 'pending list should inherit the safe review queue')
 for (const [name, source] of [['review queue', reviewQueue], ['counselor pending', counselorPending]]) {
