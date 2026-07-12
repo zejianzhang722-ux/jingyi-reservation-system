@@ -120,7 +120,7 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    tableData.value = []
+    // Keep the last successful snapshot visible during a transient refresh failure.
     pagination.total = 0
   } finally {
     loading.value = false

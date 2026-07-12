@@ -249,6 +249,37 @@ const counselorPending = await readFile(new URL('../admin/src/views/Reservation/
 const statsOverview = await readFile(new URL('../admin/src/views/Stats/Overview.vue', import.meta.url), 'utf8')
 const statsExport = await readFile(new URL('../admin/src/views/Stats/Export.vue', import.meta.url), 'utf8')
 
+// Task 7 management-page evidence table (load failure / write guard / danger confirmation / primary action):
+// Room/BuildingManage: preserve rows / guarded submit / named delete confirmation / add button reachable.
+// Room/Manage: preserve rows / guarded submit and seat save / named close confirmation / add and seat-save buttons reachable.
+// Room/Monitor: preserve rooms and buildings / read-only / no dangerous write / refresh and room cards reachable.
+// Room/RulesConfig: preserve current rules / guarded save / no destructive action / save button reachable.
+// Room/SeatManage: preserve seats and room choices / guarded create and mutations / named single and batch delete confirmations / add button reachable.
+// Account/Index: preserve rows / guarded submit and import / named disable confirmation / add and import buttons reachable.
+// Credit/Blacklist: preserve rows / guarded ban and restore / named ban form and restore confirmation / ban button reachable.
+// Credit/ScoreConfig: preserve current config / guarded save / no destructive action / save button reachable.
+// Credit/Violations: preserve rows / guarded create / explicit violation form / create button reachable.
+// System/Admins: preserve rows / guarded submit and delete / named delete confirmation / add button reachable.
+// System/Announcements: preserve rows / guarded publish/archive/delete/submit / archive and named delete confirmations / add button reachable.
+// System/Backup: preserve records / guarded create and verify / no destructive restore exposed / backup and verify buttons reachable.
+// System/Logs: preserve rows / read-only / no dangerous write / search and reset buttons reachable.
+const managementPages = Object.fromEntries(await Promise.all([
+  ['Room/Manage', '../admin/src/views/Room/Manage.vue'],
+  ['Room/Monitor', '../admin/src/views/Room/Monitor.vue'],
+  ['Account/Index', '../admin/src/views/Account/Index.vue'],
+  ['Credit/Blacklist', '../admin/src/views/Credit/Blacklist.vue'],
+  ['System/Announcements', '../admin/src/views/System/Announcements.vue'],
+  ['System/Backup', '../admin/src/views/System/Backup.vue']
+].map(async ([name, path]) => [name, await readFile(new URL(path, import.meta.url), 'utf8')])))
+for (const [name, source] of Object.entries(managementPages)) {
+  assert.doesNotMatch(source, /catch\s*\([^)]*\)\s*\{[\s\S]{0,120}?(?:tableData|rooms|buildingOptions|backupList)\.value\s*=\s*\[\]/, `${name} must preserve successfully loaded data when refresh fails`)
+}
+for (const [name, source, guard] of [
+  ['Room/RulesConfig', await readFile(new URL('../admin/src/views/Room/RulesConfig.vue', import.meta.url), 'utf8'), /async function handleSave\(\)\s*\{\s*if \(saveLoading\.value\) return/],
+  ['Credit/ScoreConfig', await readFile(new URL('../admin/src/views/Credit/ScoreConfig.vue', import.meta.url), 'utf8'), /async function handleSave\(\)\s*\{\s*if \(saveLoading\.value\) return/],
+  ['System/Backup', managementPages['System/Backup'], /async function handleCreateBackup\(\)\s*\{\s*if \(backupLoading\.value\) return/]
+]) assert.match(source, guard, `${name} must reject duplicate primary writes`)
+
 assert.match(statsOverview, /getRecentDateRange/, 'statistics must initialize an explicit recent-seven-day range')
 assert.match(statsOverview, /Promise\.allSettled/, 'statistics regions must settle independently')
 assert.match(statsOverview, /createLatestRequest/, 'statistics must coordinate overlapping refreshes')

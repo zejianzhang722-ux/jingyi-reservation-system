@@ -234,7 +234,6 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    tableData.value = []
     pagination.total = 0
   } finally {
     loading.value = false
@@ -252,7 +251,7 @@ async function loadBuildings() {
     const res = await getBuildings({ pageSize: 100 })
     buildingOptions.value = res.data?.list || []
   } catch (e) {
-    buildingOptions.value = []
+    // Keep the last successful options visible during a transient refresh failure.
   }
 }
 
@@ -280,6 +279,7 @@ function resetForm() {
 }
 
 async function handleSubmit() {
+  if (submitLoading.value) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
   submitLoading.value = true
@@ -366,6 +366,7 @@ function revertSeatChanges() {
 }
 
 async function saveSeatChanges() {
+  if (seatSaving.value) return
   seatSaving.value = true
   try {
     for (const id of removedSeatIds.value) {

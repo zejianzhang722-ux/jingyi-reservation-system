@@ -220,7 +220,6 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    tableData.value = []
     pagination.total = 0
   } finally {
     loading.value = false

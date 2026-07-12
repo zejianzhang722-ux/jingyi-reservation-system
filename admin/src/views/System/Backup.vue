@@ -153,13 +153,14 @@ async function loadData() {
     backupList.value = Array.isArray(data) ? data.map(normalizeBackup) : (data.list || []).map(normalizeBackup)
     if (data.storage) Object.assign(storageInfo, data.storage)
   } catch (e) {
-    backupList.value = []
+    // Keep the last successful snapshot visible during a transient refresh failure.
   } finally {
     loading.value = false
   }
 }
 
 async function handleCreateBackup() {
+  if (backupLoading.value) return
   backupLoading.value = true
   try {
     await createBackup()
