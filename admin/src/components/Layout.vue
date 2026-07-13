@@ -49,14 +49,22 @@
       <el-header class="layout-header">
         <div class="header-content">
           <div class="header-left">
-            <el-icon class="collapse-btn" @click="isCollapse = !isCollapse">
-              <Fold v-if="!isCollapse" />
-              <Expand v-else />
-            </el-icon>
+            <el-button
+              text
+              class="collapse-btn"
+              :aria-label="collapseButtonLabel"
+              :title="collapseButtonLabel"
+              @click="isCollapse = !isCollapse"
+            >
+              <el-icon>
+                <Fold v-if="!isCollapse" />
+                <Expand v-else />
+              </el-icon>
+            </el-button>
             <div class="route-summary">
               <el-breadcrumb separator="/" class="breadcrumb">
                 <el-breadcrumb-item>管理后台</el-breadcrumb-item>
-                <el-breadcrumb-item v-if="route.meta.parent">{{ route.meta.parent }}</el-breadcrumb-item>
+                <el-breadcrumb-item v-if="currentParent">{{ currentParent }}</el-breadcrumb-item>
                 <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
               </el-breadcrumb>
               <transition name="title-slide" mode="out-in">
@@ -140,7 +148,7 @@ import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search, Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
-import { buildNavigation } from '@/router/adminRoutes'
+import { buildNavigation, getNavigationSectionForRoute } from '@/router/adminRoutes'
 import { getPendingCount } from '@/api/reservation'
 import {
   createNavigationMenuSync,
@@ -168,6 +176,8 @@ let menuSyncDepth = 0
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '工作台')
 const currentDescription = computed(() => route.meta.description || '功能房预约管理后台')
+const currentParent = computed(() => getNavigationSectionForRoute(route.name) || route.meta.parent || '')
+const collapseButtonLabel = computed(() => isCollapse.value ? '展开侧栏' : '收起侧栏')
 const navigation = computed(() => buildNavigation(userStore.userInfo.role || 'admin'))
 const workspaceLabel = computed(() => getWorkspaceLabel(userStore.userInfo.role))
 const navigationStateKey = computed(() => getNavigationStorageKey(userStore.userInfo))
@@ -475,9 +485,10 @@ function handleCommand(command) {
 
 .collapse-btn {
   font-size: 20px;
-  cursor: pointer;
   color: var(--jy-text-secondary, #8C8C9A);
-  padding: 6px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: 8px;
   transition: background-color var(--jy-motion-fast, 160ms) ease, transform var(--jy-motion-fast, 160ms) ease;
 }

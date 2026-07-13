@@ -5,11 +5,13 @@ import { createRequire } from 'node:module'
 import { buildTimelineView, createLatestRequestGate, createTimelineRequestCoordinator } from '../admin/src/utils/roomTimeline.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
 import { normalizeAccountImportRows, readAccountImportWorkbook } from '../admin/src/utils/accountImport.js'
-import { buildNavigation } from '../admin/src/router/adminRoutes.js'
+import * as adminRoutes from '../admin/src/router/adminRoutes.js'
 
 const require = createRequire(import.meta.url)
 const adminRequire = createRequire(new URL('../admin/package.json', import.meta.url))
 const XLSX = adminRequire('xlsx')
+const { adminChildren, buildNavigation, getNavigationSectionForRoute } = adminRoutes
+assert.equal(typeof getNavigationSectionForRoute, 'function')
 
 const expectedNavigationGroups = {
   admin: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表'],
@@ -22,7 +24,13 @@ for (const [role, expectedGroups] of Object.entries(expectedNavigationGroups)) {
   assert.deepEqual(navigation.map(group => group.title), expectedGroups)
   assert.ok(navigation.every(group => group.key && group.icon && group.children.length), `${role} should not receive an empty group`)
   assert.equal(new Set(navigation.flatMap(group => group.children.map(item => item.name))).size, navigation.flatMap(group => group.children).length)
+  for (const group of navigation) {
+    for (const item of group.children) {
+      assert.equal(getNavigationSectionForRoute(item.name), group.title, `${role}/${item.name} breadcrumb should match its navigation group`)
+    }
+  }
 }
+assert.ok(adminChildren.every(route => !Object.hasOwn(route.meta, 'parent')), 'route metadata should not duplicate navigation section titles')
 
 const adminNavigation = buildNavigation('admin')
 assert.ok(!adminNavigation.some(group => group.title === '系统管理'))
@@ -106,6 +114,11 @@ assert.match(layoutSource, /createNavigationMenuSync/)
 assert.match(layoutSource, /menuSync\.sync/)
 assert.match(layoutSource, /nextTick/)
 assert.match(layoutSource, /watch\(\s*\(\) => isCollapse\.value/)
+assert.match(layoutSource, /currentParent/)
+assert.match(layoutSource, /getNavigationSectionForRoute/)
+assert.match(layoutSource, /<el-button[^>]+class="collapse-btn"/)
+assert.match(layoutSource, /:aria-label="collapseButtonLabel"/)
+assert.match(layoutSource, /:title="collapseButtonLabel"/)
 
 const importWorkbook = XLSX.utils.book_new()
 const importSheet = XLSX.utils.aoa_to_sheet([
