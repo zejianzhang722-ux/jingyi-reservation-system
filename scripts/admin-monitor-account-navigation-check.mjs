@@ -79,6 +79,14 @@ assert.equal(
   errorPolicy.getErrorPresentation({ response: { status: 400, data: { message: 'SELECT * FROM admins failed' } }, config: {} }).message,
   errorPolicy.getErrorPresentation({ response: { status: 422 }, config: {} }).message
 )
+assert.equal(
+  errorPolicy.getErrorPresentation({ response: { status: 409, data: { message: '预约已被处理：92831' } }, config: {} }).message,
+  '预约已被处理，请刷新后重试'
+)
+assert.equal(
+  errorPolicy.getErrorPresentation({ response: { status: 409, data: { message: '该预约已被其他管理员处理： 382' } }, config: {} }).message,
+  '预约已被处理，请刷新后重试'
+)
 
 let operationLogPresenter = {}
 try { operationLogPresenter = require('../server/src/utils/operationLogPresenter.js') } catch (error) {}
@@ -105,17 +113,63 @@ const presentedHttpLog = operationLogPresenter.presentOperationLog({
 })
 assert.equal(presentedHttpLog.actionLabel, '新增功能房')
 assert.equal(presentedHttpLog.detail, '新增功能房')
-assert.equal(operationLogPresenter.presentOperationLog({ action: 'sync_roster', target_table: 'users' }).actionLabel, '宿生账号相关操作')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'sync_roster', target_table: 'users' }).actionLabel, '处理宿生账号')
 assert.equal(operationLogPresenter.presentOperationLog({ action: 'http.post.reservation.cancel', target_table: 'reservation' }).moduleLabel, '预约管理')
 assert.equal(operationLogPresenter.presentOperationLog({ action: 'http.post.poster.approve', target_table: 'poster' }).moduleLabel, '海报审核')
+const realOperationSamples = [
+  ['http.put.reservation_id.approve', 'reservation', 'audit', '通过预约', '预约管理'],
+  ['http.post.audit.batch', 'audit', 'audit', '批量审核预约', '预约审核'],
+  ['http.post.poster_id.clean', 'poster', 'audit', '清理海报', '海报审核'],
+  ['http.post.poster_id.violation', 'poster', 'audit', '标记海报违规', '海报审核'],
+  ['http.post.checkin', 'checkin', 'operate', '预约签到', '签到核销'],
+  ['http.post.checkin.checkout', 'checkin', 'operate', '预约核销', '签到核销'],
+  ['http.post.checkin.manual', 'checkin', 'operate', '人工签到', '签到核销'],
+  ['http.post.checkin.patrol', 'checkin', 'operate', '巡查预约', '签到核销'],
+  ['http.post.reservation_id.rebook', 'reservation', 'operate', '重新预约', '预约管理'],
+  ['http.post.reservation.waitlist', 'reservation', 'operate', '加入预约候补', '预约管理'],
+  ['http.put.feedback_id.resolve', 'feedback', 'operate', '处理反馈', '反馈管理'],
+  ['http.post.admin.backups_fileName_verify', 'backups', 'operate', '校验数据备份', '数据备份'],
+  ['http.post.admin.archive', 'archive', 'operate', '学期归档', '系统管理'],
+  ['http.put.student-admin_id_credit', 'student-admin', 'operate', '调整信用分', '宿生账号'],
+  ['http.put.student_admin_id_status', 'student_admin', 'operate', '调整账号状态', '宿生账号'],
+  ['http.post.reservation.check-conflict', 'reservation', 'operate', '处理预约', '预约管理'],
+  ['http.post.admin.rooms', 'rooms', 'create', '新增功能房', '功能房管理'],
+  ['http.post.admin.seats.batch', 'seats', 'create', '批量新增座位', '座位管理'],
+  ['http.post.account-batch', 'account-batch', 'create', '批量新增账号', '批量账号导入'],
+  ['http.post.admin.backup', 'backup', 'create', '创建数据备份', '数据备份'],
+  ['batch_create_seats', 'seats', 'create', '批量新增座位', '座位管理']
+]
+for (const [action, targetTable, category, actionLabel, moduleLabel] of realOperationSamples) {
+  const presented = operationLogPresenter.presentOperationLog({ action, target_table: targetTable })
+  assert.equal(presented.actionCategory, category, action)
+  assert.equal(presented.actionLabel, actionLabel, action)
+  assert.equal(presented.moduleLabel, moduleLabel, action)
+  assert.equal(operationLogPresenter.actionMatchesCategory(action, category), true, action)
+  const categoryFilter = operationLogPresenter.buildOperationLogFilters({ category })
+  assert.match(categoryFilter.clause, /o\.action LIKE \?/, action)
+  assert.equal(operationLogPresenter.actionMatchesFilter(action, categoryFilter), true, action)
+  const matchingRule = operationLogPresenter.ACTION_RULES.find(rule =>
+    rule.patterns.some(pattern => operationLogPresenter.matchesLike(action, pattern)))
+  assert.equal(matchingRule.category, category, action)
+  assert.ok(matchingRule.patterns.some(pattern =>
+    categoryFilter.params.includes(pattern) && operationLogPresenter.matchesLike(action, pattern)), action)
+}
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'reading-room' }).actionLabel, '处理阅览记录')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'reading_room' }).moduleLabel, '阅览室记录')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'credit' }).moduleLabel, '信用管理')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'account-batch' }).moduleLabel, '批量账号导入')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'account_batch' }).moduleLabel, '批量账号导入')
+assert.match(logsSource, /label="业务处理"\s+value="operate"/)
+assert.match(logsSource, /operate:\s*['"]warning['"]/)
 const createFilter = operationLogPresenter.buildOperationLogFilters({ category: 'create', operator: '张' })
 assert.match(createFilter.clause, /o\.action LIKE \?/)
 assert.match(createFilter.clause, /a\.real_name LIKE \?/)
 assert.ok(createFilter.params.includes('create_%'))
-assert.ok(createFilter.params.includes('http.post.%'))
+assert.ok(createFilter.params.includes('http.post.admin.rooms'))
+assert.ok(!createFilter.params.includes('http.post.%'))
 assert.ok(createFilter.params.includes('%张%'))
 assert.match(createFilter.clause, /o\.action NOT LIKE \?/)
-assert.ok(createFilter.params.includes('http.post.%approve%'))
+assert.ok(createFilter.params.includes('%approve%'))
 
 const rawVisibleFallback = /(?:typeMap|typeLabels|statusMap|statusLabels|roleMap|actionMap)\[[^\]]+\]\?*\.?(?:label)?\s*\|\|\s*(?:row|currentFeedback|currentRow)\.(?:status|role|type|action|module)/
 for (const fileUrl of visibleCopyFiles) {
@@ -461,7 +515,7 @@ assert.equal(responseBody.data.list[0].sourceRecorded, true)
 assert.equal(responseBody.data.list[0].targetId, null)
 assert.doesNotMatch(JSON.stringify(responseBody.data.list[0]), /private-hash|target_id|ip_hash/)
 assert.equal(operationLogQueries.length, 2)
-assert.ok(operationLogQueries[0].params.includes('http.post.%'))
+assert.ok(operationLogQueries[0].params.includes('http.post.admin.rooms'))
 assert.ok(operationLogQueries[1].params.includes('%张%'))
 operationLogMode = false
 

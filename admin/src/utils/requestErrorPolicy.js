@@ -9,6 +9,9 @@ const SAFE_CONFLICT_PATTERNS = [
 function safeConflictMessage(value) {
   const message = String(value || '').trim()
   if (!message || message.length > 80) return ''
+  if (/^(?:该|部分)?预约已被(?:其他管理员)?处理[：:]\s*\d+[。！!]?$/.test(message)) {
+    return '预约已被处理，请刷新后重试'
+  }
   return SAFE_CONFLICT_PATTERNS.some(pattern => pattern.test(message)) ? message : ''
 }
 

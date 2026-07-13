@@ -12,6 +12,7 @@
             <el-option label="更新" value="update" />
             <el-option label="删除" value="delete" />
             <el-option label="审核" value="audit" />
+            <el-option label="业务处理" value="operate" />
             <el-option label="导出" value="export" />
           </el-select>
         </el-form-item>
@@ -67,7 +68,7 @@ const loading = ref(false)
 const loadError = ref('')
 const tableData = ref([])
 
-const actionTypeMap = { login: '', create: 'success', update: 'warning', delete: 'danger', audit: '', export: 'success', other: 'info' }
+const actionTypeMap = { login: '', create: 'success', update: 'warning', operate: 'warning', delete: 'danger', audit: '', export: 'success', other: 'info' }
 
 const filters = reactive({ operator: '', action: '', dateRange: null })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
