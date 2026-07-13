@@ -12,6 +12,7 @@
       </div>
 
       <el-menu
+        ref="menuRef"
         :default-active="activeMenu"
         :collapse="isCollapse"
         :collapse-transition="false"
@@ -135,14 +136,16 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search, Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { buildNavigation } from '@/router/adminRoutes'
 import { getPendingCount } from '@/api/reservation'
 import {
+  createNavigationMenuSync,
   ensureActiveGroup,
+  findActiveGroupKey,
   getNavigationStorageKey,
   getWorkspaceLabel,
   loadOpenGroups,
@@ -157,7 +160,10 @@ const quickSearchVisible = ref(false)
 const quickKeyword = ref('')
 const pendingCount = ref(0)
 const openGroups = ref([])
+const menuRef = ref(null)
+const menuSync = createNavigationMenuSync()
 let pendingRequestVersion = 0
+let menuSyncDepth = 0
 
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '工作台')
@@ -204,36 +210,66 @@ watch(() => userStore.token, loadPendingCount, { immediate: true })
 watch(() => route.fullPath, loadPendingCount)
 watch(
   navigationStateKey,
-  () => {
+  async () => {
     openGroups.value = ensureActiveGroup(
       loadOpenGroups(window.localStorage, userStore.userInfo),
       navigation.value,
       route.path
     )
+    saveOpenGroups(window.localStorage, userStore.userInfo, openGroups.value)
+    await syncVisibleMenu({ force: true })
   },
   { immediate: true }
 )
 watch(
   () => route.path,
-  path => {
+  async path => {
     const nextGroups = ensureActiveGroup(openGroups.value, navigation.value, path)
     if (nextGroups.length !== openGroups.value.length) {
       openGroups.value = nextGroups
       saveOpenGroups(window.localStorage, userStore.userInfo, nextGroups)
     }
+    await syncVisibleMenu()
+  }
+)
+watch(
+  () => isCollapse.value,
+  async collapsed => {
+    if (!collapsed) await syncVisibleMenu({ force: true })
   }
 )
 onBeforeUnmount(() => { pendingRequestVersion += 1 })
 
 function handleGroupOpen(groupKey) {
+  if (menuSyncDepth > 0) return
+  menuSync.markOpen(groupKey)
   if (openGroups.value.includes(groupKey)) return
   openGroups.value = [...openGroups.value, groupKey]
   saveOpenGroups(window.localStorage, userStore.userInfo, openGroups.value)
 }
 
 function handleGroupClose(groupKey) {
+  if (menuSyncDepth > 0) return
+  menuSync.markClosed(groupKey)
   openGroups.value = openGroups.value.filter(key => key !== groupKey)
   saveOpenGroups(window.localStorage, userStore.userInfo, openGroups.value)
+}
+
+async function syncVisibleMenu(options = {}) {
+  await nextTick()
+  if (isCollapse.value || !menuRef.value) return
+  menuSyncDepth += 1
+  try {
+    menuSync.sync(
+      menuRef.value,
+      openGroups.value,
+      findActiveGroupKey(navigation.value, route.path),
+      options
+    )
+    await nextTick()
+  } finally {
+    menuSyncDepth -= 1
+  }
 }
 
 function goPending() {

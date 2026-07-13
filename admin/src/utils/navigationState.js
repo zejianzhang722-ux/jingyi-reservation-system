@@ -37,11 +37,41 @@ export function saveOpenGroups(storage, account = {}, groups = []) {
 }
 
 export function ensureActiveGroup(groups = [], navigation = [], routePath = '') {
-  const activeGroup = navigation.find(group => group.children.some(item => item.path === routePath))
-  if (!activeGroup || groups.includes(activeGroup.key)) return [...groups]
-  return [...groups, activeGroup.key]
+  const activeGroupKey = findActiveGroupKey(navigation, routePath)
+  if (!activeGroupKey || groups.includes(activeGroupKey)) return [...groups]
+  return [...groups, activeGroupKey]
 }
 
 export function getWorkspaceLabel(role) {
   return WORKSPACE_LABELS[role] || '管理工作区'
+}
+
+export function findActiveGroupKey(navigation = [], routePath = '') {
+  return navigation.find(group => group.children.some(item => item.path === routePath))?.key || ''
+}
+
+export function createNavigationMenuSync() {
+  let appliedGroups = new Set()
+
+  return {
+    markOpen(groupKey) {
+      if (groupKey) appliedGroups.add(groupKey)
+    },
+    markClosed(groupKey) {
+      appliedGroups.delete(groupKey)
+    },
+    sync(menu, groups = [], activeGroupKey = '', options = {}) {
+      if (!menu?.open || !menu?.close) return
+      const desiredGroups = new Set(groups)
+      if (activeGroupKey) desiredGroups.add(activeGroupKey)
+
+      for (const groupKey of appliedGroups) {
+        if (!desiredGroups.has(groupKey)) menu.close(groupKey)
+      }
+      for (const groupKey of desiredGroups) {
+        if (options.force || !appliedGroups.has(groupKey)) menu.open(groupKey)
+      }
+      appliedGroups = desiredGroups
+    }
+  }
 }

@@ -43,6 +43,8 @@ assert.equal(typeof navigationState.loadOpenGroups, 'function')
 assert.equal(typeof navigationState.saveOpenGroups, 'function')
 assert.equal(typeof navigationState.ensureActiveGroup, 'function')
 assert.equal(typeof navigationState.getWorkspaceLabel, 'function')
+assert.equal(typeof navigationState.createNavigationMenuSync, 'function')
+assert.equal(typeof navigationState.findActiveGroupKey, 'function')
 
 const memory = new Map()
 const storage = {
@@ -65,14 +67,45 @@ assert.equal(navigationState.getWorkspaceLabel('admin'), '导生工作区')
 assert.equal(navigationState.getWorkspaceLabel('counselor'), '辅导员工作区')
 assert.equal(navigationState.getWorkspaceLabel('super_admin'), '超级管理工作区')
 
+const menuCalls = []
+const menu = {
+  open: key => menuCalls.push(['open', key]),
+  close: key => menuCalls.push(['close', key])
+}
+const menuSync = navigationState.createNavigationMenuSync()
+assert.equal(typeof menuSync.markClosed, 'function')
+assert.equal(typeof menuSync.markOpen, 'function')
+menuSync.sync(menu, ['today', 'reservation'], 'today')
+assert.deepEqual(menuCalls, [['open', 'today'], ['open', 'reservation']])
+menuCalls.length = 0
+menuSync.sync(menu, ['today'], 'space')
+assert.deepEqual(menuCalls, [['close', 'reservation'], ['open', 'space']])
+menuCalls.length = 0
+menuSync.sync(menu, ['today', 'space'], 'space', { force: true })
+assert.deepEqual(menuCalls, [['open', 'today'], ['open', 'space']])
+menuCalls.length = 0
+menuSync.sync(menu, ['content'], 'content', { force: true })
+assert.deepEqual(menuCalls, [['close', 'today'], ['close', 'space'], ['open', 'content']])
+menuCalls.length = 0
+menuSync.markClosed('content')
+menuSync.sync(menu, ['today'], 'content')
+assert.deepEqual(menuCalls, [['open', 'today'], ['open', 'content']])
+assert.equal(navigationState.findActiveGroupKey(counselorNavigation, '/room/monitor'), 'space')
+assert.equal(navigationState.findActiveGroupKey(counselorNavigation, '/not-found'), '')
+
 const layoutSource = readFileSync(new URL('../admin/src/components/Layout.vue', import.meta.url), 'utf8')
 assert.match(layoutSource, /<el-sub-menu/)
+assert.match(layoutSource, /ref="menuRef"/)
 assert.match(layoutSource, /:default-openeds="openGroups"/)
 assert.match(layoutSource, /@open="handleGroupOpen"/)
 assert.match(layoutSource, /@close="handleGroupClose"/)
 assert.match(layoutSource, /workspaceLabel/)
 assert.match(layoutSource, /ensureActiveGroup/)
 assert.match(layoutSource, /navigationState/)
+assert.match(layoutSource, /createNavigationMenuSync/)
+assert.match(layoutSource, /menuSync\.sync/)
+assert.match(layoutSource, /nextTick/)
+assert.match(layoutSource, /watch\(\s*\(\) => isCollapse\.value/)
 
 const importWorkbook = XLSX.utils.book_new()
 const importSheet = XLSX.utils.aoa_to_sheet([
