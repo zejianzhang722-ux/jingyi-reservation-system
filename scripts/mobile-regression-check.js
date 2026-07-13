@@ -83,7 +83,17 @@ async function main() {
   const adminBlacklist = await api('/credit/blacklist', {
     headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
   })
-  assert(adminBlacklist.json.code === 200, '管理员信用黑名单接口应可用')
+  assert(adminBlacklist.json.code === 403, '导生管理员不应管理信用黑名单')
+  const counselorLogin = await api('/auth/login/admin-miniapp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'counselor', password: 'counselor123' })
+  })
+  assert(counselorLogin.json.code === 200, '辅导员登录应成功')
+  const counselorBlacklist = await api('/credit/blacklist', {
+    headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }
+  })
+  assert(counselorBlacklist.json.code === 200, '辅导员信用黑名单接口应可用')
 
   const expiredAccessToken = jwt.sign({
     id: login.json.data.userInfo.id,

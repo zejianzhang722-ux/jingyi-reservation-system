@@ -17,11 +17,12 @@ const loadCurrentPrincipal = async function(decoded) {
     });
   }
 
-  const [rows] = await db.query('SELECT id, role, status, building_id, username FROM admins WHERE id = ?', [Number(decoded.id)]);
+  const [rows] = await db.query('SELECT id, role, status, building_id, scope_type, username FROM admins WHERE id = ?', [Number(decoded.id)]);
   if (!rows.length || rows[0].status !== 'active') return null;
   return Object.assign({}, decoded, {
     role: rows[0].role === 'superadmin' ? 'super_admin' : rows[0].role,
     buildingId: rows[0].building_id,
+    scopeType: rows[0].scope_type,
     openid: rows[0].username || decoded.openid || null
   });
 };

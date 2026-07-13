@@ -7,7 +7,7 @@ const realtimeEventService = require('../services/realtimeEventService');
 
 const allowedStatusesForRole = function(role) {
   if (role === 'super_admin') return ['pending', 'counselor_pending'];
-  if (role === 'counselor') return ['counselor_pending'];
+  if (role === 'counselor') return ['pending', 'counselor_pending'];
   if (role === 'admin') return ['pending'];
   return [];
 };

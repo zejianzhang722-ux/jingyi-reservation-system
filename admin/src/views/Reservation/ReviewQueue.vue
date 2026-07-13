@@ -135,7 +135,7 @@ async function loadData() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await getPending({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+    const res = await getPending({ ...filters, type: 'admin', page: pagination.page, pageSize: pagination.pageSize })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {

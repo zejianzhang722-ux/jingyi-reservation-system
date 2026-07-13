@@ -174,7 +174,9 @@ async function loadPendingCount() {
     return
   }
   try {
-    const count = await getPendingCount()
+    const role = userStore.userInfo.role
+    const type = role === 'counselor' ? 'counselor' : (role === 'admin' ? 'admin' : undefined)
+    const count = await getPendingCount(type ? { type } : undefined)
     if (requestVersion === pendingRequestVersion) pendingCount.value = count
   } catch {
     if (requestVersion === pendingRequestVersion) pendingCount.value = 0

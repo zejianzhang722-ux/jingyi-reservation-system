@@ -9,9 +9,19 @@ const STUDENT_ROLE = 'student';
 
 const allowedRolesByOperator = {
   super_admin: ['super_admin', 'admin', 'counselor', 'student'],
-  counselor: ['admin', 'student'],
-  admin: ['student']
+  counselor: [],
+  admin: []
 };
+
+function normalizeAdminScope(role, scopeType, buildingId) {
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole === 'super_admin' || normalizedRole === 'counselor') return { scopeType: 'global', buildingId: null };
+  if (normalizedRole !== 'admin') return { scopeType: null, buildingId: buildingId || null };
+  if (scopeType === 'global') return { scopeType: 'global', buildingId: null };
+  const id = Number(buildingId);
+  if (scopeType === 'building' && Number.isInteger(id) && id > 0) return { scopeType: 'building', buildingId: id };
+  return null;
+}
 
 function normalizeRole(role) {
   return role === 'superadmin' ? 'super_admin' : role;
@@ -83,7 +93,7 @@ function paginateRows(rows, page, pageSize) {
 }
 
 async function getAdminRows() {
-  const [admins] = await db.query('SELECT id, username, real_name, role, building_id, phone, status, last_login_at, created_at FROM admins ORDER BY id ASC');
+  const [admins] = await db.query('SELECT id, username, real_name, role, building_id, scope_type, phone, status, last_login_at, created_at FROM admins ORDER BY id ASC');
   return admins.map(function(row) {
     const role = normalizeRole(row.role);
     return {
@@ -95,6 +105,8 @@ async function getAdminRows() {
       name: row.real_name || row.username || '',
       role: role,
       buildingId: row.building_id,
+      scopeType: row.scope_type,
+      scopeLabel: row.scope_type === 'global' ? '全院' : (row.building_id ? '楼栋 ' + row.building_id : '待设置'),
       phone: row.phone || '',
       email: '',
       status: row.status || 'active',
@@ -133,6 +145,7 @@ const getAccounts = async function(req, res) {
   try {
     const { page = 1, pageSize = 20, role, status, keyword } = req.query;
     const operatorRole = normalizeRole(req.user && req.user.role);
+    if (operatorRole !== 'super_admin') return response.error(res, '仅超级管理员可管理账号', 403);
     const allowedRoles = allowedRolesFor(operatorRole);
     const requestedRole = role ? normalizeRole(role) : null;
 
@@ -201,11 +214,12 @@ const createAccount = async function(req, res) {
 
     const [existingAdmins] = await db.query('SELECT id FROM admins WHERE username = ?', [username]);
     if (existingAdmins.length > 0) return response.error(res, '用户名已存在', 400);
-    const buildingId = req.adminScope && !req.adminScope.isGlobal ? req.adminScope.buildingId : (req.body.buildingId || null);
+    const scope = normalizeAdminScope(role, req.body.scopeType, req.body.buildingId);
+    if (!scope) return response.error(res, '导生管理员必须选择全院或一个具体楼栋', 400);
     const hashedPassword = await bcrypt.hash(password, 10);
     const [result] = await db.query(
-      'INSERT INTO admins (username, password, real_name, role, building_id, phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
-      [username, hashedPassword, realName, role, buildingId, req.body.phone || '', 'active']
+      'INSERT INTO admins (username, password, real_name, role, building_id, scope_type, phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+      [username, hashedPassword, realName, role, scope.buildingId, scope.scopeType, req.body.phone || '', 'active']
     );
     await logOperation(req.user.id, 'create_admin_account', 'admins', result.insertId, '创建管理员账号: ' + username);
     return response.success(res, { id: accountId('admin', result.insertId), accountType: 'admin' }, '创建成功');
@@ -247,10 +261,13 @@ const updateAccount = async function(req, res) {
       return response.success(res, null, '更新成功');
     }
 
-    const [admins] = await db.query('SELECT id, role, building_id FROM admins WHERE id = ?', [account.id]);
+    if (normalizeRole(req.user.role) !== 'super_admin') return response.error(res, '仅超级管理员可修改管理账号', 403);
+    const [admins] = await db.query('SELECT id, role, building_id, scope_type FROM admins WHERE id = ?', [account.id]);
     if (!admins.length) return response.error(res, '管理员账号不存在', 404);
     const currentRole = normalizeRole(admins[0].role);
     const nextRole = req.body.role ? normalizeRole(req.body.role) : currentRole;
+    const scope = normalizeAdminScope(nextRole, req.body.scopeType !== undefined ? req.body.scopeType : admins[0].scope_type, req.body.buildingId !== undefined ? req.body.buildingId : admins[0].building_id);
+    if (!scope) return response.error(res, '导生管理员必须选择全院或一个具体楼栋', 400);
     if (!canManageRole(req.user.role, currentRole) || !canManageRole(req.user.role, nextRole)) return response.error(res, '权限不足', 403);
     if (req.adminScope && !req.adminScope.isGlobal && Number(admins[0].building_id || 0) !== Number(req.adminScope.buildingId)) {
       return response.error(res, '无权操作其他楼栋管理员账号', 403);
@@ -262,7 +279,8 @@ const updateAccount = async function(req, res) {
     if (realName !== undefined) { updates.push('real_name = ?'); params.push(realName); }
     if (req.body.role !== undefined) { updates.push('role = ?'); params.push(nextRole); }
     if (req.body.status !== undefined) { updates.push('status = ?'); params.push(normalizeAdminStatus(req.body.status)); }
-    if (req.body.buildingId !== undefined) { updates.push('building_id = ?'); params.push(req.body.buildingId || null); }
+    updates.push('building_id = ?'); params.push(scope.buildingId);
+    updates.push('scope_type = ?'); params.push(scope.scopeType);
     if (req.body.phone !== undefined) { updates.push('phone = ?'); params.push(req.body.phone || ''); }
     if (req.body.password) {
       const hashedPassword = await bcrypt.hash(req.body.password, 10);

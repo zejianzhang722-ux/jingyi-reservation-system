@@ -6,7 +6,7 @@ export const ROLE_LABELS = {
 
 export const ROLE_NAV_PRIORITY = {
   super_admin: ['Dashboard', 'ReservationPending', 'CounselorPending', 'RoomMonitor', 'RoomManage', 'SystemLogs', 'SystemBackup'],
-  admin: ['Dashboard', 'ReservationPending', 'CounselorPending', 'CheckinManage', 'RoomMonitor', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig'],
+  admin: ['Dashboard', 'ReservationPending', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs', 'RoomMonitor'],
   counselor: ['Dashboard', 'CounselorPending', 'ReservationPending', 'CheckinManage', 'ReservationAll']
 }
 
@@ -38,7 +38,7 @@ export const ROLE_SHORTCUTS = {
   admin: [
     { name: 'ReservationPending', title: '预约审核', destination: '/reservation/pending' },
     { name: 'CheckinManage', title: '签到核销', destination: '/checkin/manage' },
-    { name: 'RoomManage', title: '功能房管理', destination: '/room/manage' }
+    { name: 'RoomMonitor', title: '空间监控', destination: '/room/monitor' }
   ],
   counselor: [
     { name: 'CounselorPending', title: '辅导员审核', destination: '/reservation/counselor' },
