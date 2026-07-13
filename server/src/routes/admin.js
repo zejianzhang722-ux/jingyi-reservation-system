@@ -7,6 +7,13 @@ const secureUploadService = require('../services/secureUploadService');
 const adminScope = require('../middleware/adminScope');
 const { auth, requireAdmin, requireRole } = require('../middleware/auth');
 
+function useLegacyManagerType(req, res, next) {
+  const body = Object.assign({}, req.body, { accountType: 'manager' });
+  if (body.scopeType === undefined) body.scopeType = body.buildingId ? 'building' : 'global';
+  req.body = body;
+  next();
+}
+
 router.get('/accounts', auth, requireRole('super_admin'), accountController.getAccounts);
 router.post('/accounts', auth, requireRole('super_admin'), accountController.createAccount);
 router.put('/accounts/:id', auth, requireRole('super_admin'), accountController.updateAccount);
@@ -32,7 +39,7 @@ router.put('/buildings/:id', auth, requireRole('super_admin'), adminController.u
 router.delete('/buildings/:id', auth, requireRole('super_admin'), adminController.deleteBuilding);
 
 router.get('/managers', auth, requireRole('super_admin'), accountController.getManagers);
-router.post('/managers', auth, requireRole('super_admin'), accountController.createAccount);
+router.post('/managers', auth, requireRole('super_admin'), useLegacyManagerType, accountController.createAccount);
 router.put('/managers/:id', auth, requireRole('super_admin'), accountController.updateAccount);
 router.delete('/managers/:id', auth, requireRole('super_admin'), accountController.deleteAccount);
 

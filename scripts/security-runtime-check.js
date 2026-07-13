@@ -134,18 +134,54 @@ async function main() {
     expectStatus(await api('/admin/accounts', {
       method: 'POST',
       headers: jsonAuthHeaders(superAdmin.token),
-      body: JSON.stringify({ username: 'scope_missing', password: 'test1234', realName: '范围未设置', role: 'admin' })
+      body: JSON.stringify({ accountType: 'manager', username: 'scope_missing', password: 'test1234', realName: '范围未设置', role: 'admin' })
     }), 400, 'guide creation requires explicit scope')
     expectStatus(await api('/admin/accounts', {
       method: 'POST',
       headers: jsonAuthHeaders(superAdmin.token),
-      body: JSON.stringify({ username: 'scope_global', password: 'test1234', realName: '全院导生', role: 'admin', scopeType: 'global' })
-    }), 200, 'super administrator creates global guide')
+      body: JSON.stringify({ username: 'missing_account_type', password: 'test1234', realName: '缺少类型', role: 'admin', scopeType: 'global' })
+    }), 400, 'unified account creation requires account type')
     expectStatus(await api('/admin/accounts', {
       method: 'POST',
       headers: jsonAuthHeaders(superAdmin.token),
-      body: JSON.stringify({ username: 'scope_building', password: 'test1234', realName: '楼栋导生', role: 'admin', scopeType: 'building', buildingId: 2 })
-    }), 200, 'super administrator creates building guide')
+      body: JSON.stringify({ accountType: 'unknown', username: 'invalid_account_type', password: 'test1234', realName: '类型错误', role: 'admin', scopeType: 'global' })
+    }), 400, 'unknown account type is rejected')
+    expectStatus(await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ accountType: 'student', username: 'mismatched_student', password: 'test1234', realName: '类型错配', role: 'admin', buildingId: 1 })
+    }), 400, 'student account type rejects manager role')
+    expectStatus(await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ accountType: 'manager', username: 'mismatched_manager', password: 'test1234', realName: '类型错配', role: 'student' })
+    }), 400, 'manager account type rejects student role')
+    const createdStudentAccount = await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ accountType: 'student', username: '2024999001', password: '299001', realName: '测试宿生', role: 'student', buildingId: 1 })
+    })
+    expectStatus(createdStudentAccount, 200, 'student account type creates student')
+    assert(createdStudentAccount.json.data.accountType === 'student', 'student create response should keep student account type')
+    expectStatus(await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ accountType: 'manager', username: 'scope_global', password: 'test1234', realName: '全院导生', role: 'admin', scopeType: 'global' })
+    }), 200, 'super administrator creates global guide')
+    const createdManagerAccount = await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ accountType: 'manager', username: 'scope_building', password: 'test1234', realName: '楼栋导生', role: 'admin', scopeType: 'building', buildingId: 2 })
+    })
+    expectStatus(createdManagerAccount, 200, 'super administrator creates building guide')
+    assert(createdManagerAccount.json.data.accountType === 'manager', 'manager create response should use manager account type')
+    const legacyManagerAccount = await api('/admin/managers', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ username: 'legacy_manager', password: 'test1234', realName: '兼容入口', role: 'admin' })
+    })
+    expectStatus(legacyManagerAccount, 200, 'legacy manager creation remains compatible without account type')
+    assert(legacyManagerAccount.json.data.accountType === 'manager', 'legacy manager response should use manager account type')
     const managerList = await api('/admin/accounts?accountType=manager&pageSize=100', { headers: authHeaders(superAdmin.token) })
     expectStatus(managerList, 200, 'manager account list')
     assert(managerList.json.data.list.length > 0, 'manager account list should not be empty')

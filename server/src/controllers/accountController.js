@@ -193,7 +193,14 @@ const getAccounts = async function(req, res) {
 
 const createAccount = async function(req, res) {
   try {
-    const role = normalizeRole(req.body.role || 'admin');
+    const accountType = req.body.accountType;
+    if (accountType !== 'student' && accountType !== 'manager') {
+      return response.error(res, '请选择正确的账号类型', 400);
+    }
+    const role = normalizeRole(req.body.role || (accountType === 'student' ? 'student' : 'admin'));
+    if ((accountType === 'student' && role !== 'student') || (accountType === 'manager' && role === 'student')) {
+      return response.error(res, '账号类型与角色不匹配', 400);
+    }
     const username = String(req.body.username || '').trim();
     const password = String(req.body.password || '').trim();
     const realName = String(req.body.realName || req.body.name || '').trim();
@@ -230,7 +237,7 @@ const createAccount = async function(req, res) {
       [username, hashedPassword, realName, role, scope.buildingId, scope.scopeType, req.body.phone || '', 'active']
     );
     await logOperation(req.user.id, 'create_admin_account', 'admins', result.insertId, '创建管理员账号: ' + username);
-    return response.success(res, { id: accountId('admin', result.insertId), accountType: 'admin' }, '创建成功');
+    return response.success(res, { id: accountId('admin', result.insertId), accountType: 'manager' }, '创建成功');
   } catch (err) {
     logger.error('创建统一账号异常:', err);
     return response.error(res, err.message);
