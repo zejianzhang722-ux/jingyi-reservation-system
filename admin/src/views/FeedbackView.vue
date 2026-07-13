@@ -23,13 +23,16 @@
       </el-select>
     </FilterBar>
 
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" class="load-alert"><template #default><el-button link type="primary" @click="loadFeedbacks">重试</el-button></template></el-alert>
+
     <el-card shadow="never">
-      <el-table :data="feedbacks" stripe>
+      <el-empty v-if="!loading && !loadError && !feedbacks.length" description="暂无用户反馈" />
+      <el-table v-else-if="feedbacks.length || loading" :data="feedbacks" v-loading="loading" stripe>
         <el-table-column prop="userName" label="用户" width="110" />
         <el-table-column prop="type" label="类型" width="110">
           <template #default="{ row }">
             <el-tag :type="row.type === 'bug' ? 'danger' : row.type === 'feature' ? 'success' : 'info'" size="small">
-              {{ typeMap[row.type] || row.type }}
+              {{ typeMap[row.type] || '类型待确认' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -50,7 +53,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination-wrap">
+      <div v-if="feedbacks.length" class="pagination-wrap">
         <el-pagination
           v-model:current-page="page"
           v-model:page-size="pageSize"
@@ -66,7 +69,7 @@
     <el-dialog v-model="resolveDialogVisible" title="回复反馈" width="520px">
       <el-descriptions v-if="currentFeedback" :column="1" border class="feedback-detail">
         <el-descriptions-item label="用户">{{ currentFeedback.userName }}</el-descriptions-item>
-        <el-descriptions-item label="类型">{{ typeMap[currentFeedback.type] || currentFeedback.type }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ typeMap[currentFeedback.type] || '类型待确认' }}</el-descriptions-item>
         <el-descriptions-item label="内容">{{ currentFeedback.content }}</el-descriptions-item>
         <el-descriptions-item label="联系方式">{{ currentFeedback.contact || '未填写' }}</el-descriptions-item>
       </el-descriptions>
@@ -88,6 +91,8 @@ import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
 
 const feedbacks = ref([])
+const loading = ref(false)
+const loadError = ref('')
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
@@ -101,6 +106,8 @@ const pendingCount = computed(() => feedbacks.value.filter(item => item.status !
 const resolvedCount = computed(() => feedbacks.value.filter(item => item.status === 'resolved').length)
 
 async function loadFeedbacks() {
+  loading.value = true
+  loadError.value = ''
   try {
     const res = await request.get('/feedback', {
       params: { page: page.value, pageSize: pageSize.value, status: statusFilter.value }
@@ -108,8 +115,11 @@ async function loadFeedbacks() {
     feedbacks.value = res.data?.list || []
     total.value = res.data?.total || 0
   } catch (e) {
-    feedbacks.value = []
-    total.value = 0
+    loadError.value = feedbacks.value.length
+      ? '反馈列表加载失败，已保留上次结果，请重试'
+      : '反馈列表加载失败，请重试'
+  } finally {
+    loading.value = false
   }
 }
 
@@ -148,6 +158,10 @@ onMounted(() => { loadFeedbacks() })
 }
 
 .feedback-detail {
+  margin-bottom: 16px;
+}
+
+.load-alert {
   margin-bottom: 16px;
 }
 </style>

@@ -25,8 +25,11 @@
       </el-form>
     </el-card>
 
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false"><template #default><el-button link type="primary" @click="loadData">重试</el-button></template></el-alert>
+
     <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-empty v-if="!loading && !loadError && !tableData.length" description="暂无操作记录" />
+      <el-table v-else-if="tableData.length || loading" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="operatorName" label="操作人" width="100" />
         <el-table-column prop="action" label="操作类型" width="90">
           <template #default="{ row }">
@@ -42,7 +45,7 @@
         <el-table-column prop="createdAt" label="操作时间" width="170" />
       </el-table>
 
-      <div class="pagination-wrap">
+      <div v-if="tableData.length" class="pagination-wrap">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
@@ -62,6 +65,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { getLogs } from '@/api/admin'
 
 const loading = ref(false)
+const loadError = ref('')
 const tableData = ref([])
 
 const actionMap = {
@@ -91,6 +95,7 @@ const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
     const params = {
       operator: filters.operator,
@@ -104,7 +109,9 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    // handled
+    loadError.value = tableData.value.length
+      ? '操作记录加载失败，已保留上次结果，请重试'
+      : '操作记录加载失败，请重试'
   } finally {
     loading.value = false
   }

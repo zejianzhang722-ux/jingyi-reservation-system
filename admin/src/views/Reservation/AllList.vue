@@ -33,8 +33,11 @@
       </el-form>
     </el-card>
 
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false"><template #default><el-button link type="primary" @click="loadData">重试</el-button></template></el-alert>
+
     <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-empty v-if="!loading && !loadError && !tableData.length" description="暂无符合条件的预约" />
+      <el-table v-else-if="tableData.length || loading" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="userName" label="预约人" width="100" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="roomName" label="功能房" width="130" />
@@ -54,7 +57,7 @@
         </el-table-column>
       </el-table>
 
-      <div class="pagination-wrap">
+      <div v-if="tableData.length" class="pagination-wrap">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
@@ -75,7 +78,7 @@
         <el-descriptions-item label="预约日期">{{ currentRow.date }}</el-descriptions-item>
         <el-descriptions-item label="时间段">{{ currentRow.timeSlot }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="statusMap[currentRow.status]?.type" size="small">{{ statusMap[currentRow.status]?.label || currentRow.status }}</el-tag>
+          <el-tag :type="statusMap[currentRow.status]?.type || 'info'" size="small">{{ statusMap[currentRow.status]?.label || '状态待确认' }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="用途" :span="2">{{ currentRow.purpose }}</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ currentRow.createdAt }}</el-descriptions-item>
@@ -94,6 +97,7 @@ import { getList as getRoomList } from '@/api/room'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
+const loadError = ref('')
 const tableData = ref([])
 const roomOptions = ref([])
 const detailDialogVisible = ref(false)
@@ -115,6 +119,7 @@ const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
     const params = {
       status: filters.status,
@@ -129,7 +134,9 @@ async function loadData() {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    // handled
+    loadError.value = tableData.value.length
+      ? '预约列表加载失败，已保留上次结果，请重试'
+      : '预约列表加载失败，请重试'
   } finally {
     loading.value = false
   }
@@ -175,13 +182,12 @@ async function handleExport() {
     const XLSX = await import('xlsx')
     const statusLabels = { pending: '待审核', counselor_pending: '辅导员审核', approved: '已通过', rejected: '已驳回', checked_in: '使用中', completed: '已完成', noshow: '已爽约', cancelled: '已取消' }
     const exportData = list.map(row => ({
-      '预约ID': row.id,
       '预约人': row.userName,
       '学号': row.studentId,
       '功能房': row.roomName,
       '预约日期': row.date,
       '时间段': row.timeSlot,
-      '状态': statusLabels[row.status] || row.status,
+      '状态': statusLabels[row.status] || '状态待确认',
       '用途': row.purpose || '',
       '创建时间': row.createdAt
     }))

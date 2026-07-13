@@ -21,7 +21,7 @@ function collectVueFiles(directoryUrl) {
 }
 
 function visibleCopyFromVue(source) {
-  const template = source.match(/<template>[\s\S]*?<\/template>/)?.[0] || ''
+  const template = source.split('<script setup>')[0] || ''
   const feedbackCalls = [...source.matchAll(/(?:ElMessage(?:\.\w+)?|ElMessageBox\.confirm)\(\s*(['"`])([\s\S]*?)\1/g)]
     .map(match => match[2])
     .join('\n')
@@ -42,6 +42,43 @@ for (const fileUrl of visibleCopyFiles) {
 
 const logsSource = readFileSync(new URL('../admin/src/views/System/Logs.vue', import.meta.url), 'utf8')
 assert.match(logsSource, /moduleMap\[row\.module\s*\|\|/)
+
+const requestSource = readFileSync(new URL('../admin/src/utils/request.js', import.meta.url), 'utf8')
+for (const message of [
+  '登录已失效，请重新登录',
+  '当前账号没有权限执行此操作',
+  '所需内容暂时无法找到，可能已调整',
+  '服务暂时不可用，请稍后重试；持续出现请联系系统管理员',
+  '网络连接失败，请检查网络后重试'
+]) assert.match(requestSource, new RegExp(message))
+assert.match(requestSource, /case 400:[\s\S]{0,160}response\.data\?*\.message/)
+assert.doesNotMatch(requestSource, /参数校验|接口地址|服务器内部错误|请求的资源不存在/)
+
+const rawVisibleFallback = /(?:typeMap|typeLabels|statusMap|statusLabels|roleMap|actionMap)\[[^\]]+\]\?*\.?(?:label)?\s*\|\|\s*(?:row|currentFeedback|currentRow)\.(?:status|role|type|action|module)/
+for (const fileUrl of visibleCopyFiles) {
+  const source = readFileSync(fileUrl, 'utf8')
+  assert.doesNotMatch(visibleCopyFromVue(source), rawVisibleFallback, `${fileUrl.pathname} can expose an internal value through a map fallback`)
+  assert.doesNotMatch(source, /['"]\u9884\u7ea6ID['"]\s*:/, `${fileUrl.pathname} exports an internal identifier under a user-facing heading`)
+}
+
+const legacyAdminsSource = readFileSync(new URL('../admin/src/views/System/Admins.vue', import.meta.url), 'utf8')
+assert.doesNotMatch(legacyAdminsSource, /label:\s*['"]\u7ba1\u7406\u5458['"]|<el-option label="\u7ba1\u7406\u5458"/)
+assert.match(legacyAdminsSource, /\u5bfc\u751f\u7ba1\u7406\u5458/)
+
+const loadStatePages = [
+  ['FeedbackView.vue', 'feedbacks', 'loadFeedbacks'],
+  ['System/Logs.vue', 'tableData', 'loadData'],
+  ['Room/Manage.vue', 'tableData', 'loadData'],
+  ['Reservation/AllList.vue', 'tableData', 'loadData']
+]
+for (const [relativePath, listName, retryName] of loadStatePages) {
+  const source = readFileSync(new URL(`../admin/src/views/${relativePath}`, import.meta.url), 'utf8')
+  const template = source.split('<script setup>')[0] || ''
+  assert.match(source, /const loadError = ref\(''\)/, `${relativePath} needs explicit list load error state`)
+  assert.match(template, new RegExp(`v-if="loadError"[\\s\\S]{0,240}@click="${retryName}"`), `${relativePath} needs a retryable error notice`)
+  assert.match(template, new RegExp(`!loading && !loadError && !${listName}\\.length`), `${relativePath} needs an empty state distinct from load failure`)
+  assert.match(source, /catch\s*\([^)]*\)\s*\{[\s\S]{0,120}loadError\.value\s*=/, `${relativePath} must set load error without replacing its last result`)
+}
 
 const expectedNavigationGroups = {
   admin: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表'],

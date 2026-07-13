@@ -75,7 +75,7 @@
       </template>
       <el-table :data="exportHistory" stripe>
         <el-table-column prop="type" label="报表类型" width="150">
-          <template #default="{ row }">{{ typeLabels[row.type] || row.type }}</template>
+          <template #default="{ row }">{{ typeLabels[row.type] || '其他报表' }}</template>
         </el-table-column>
         <el-table-column prop="dateRange" label="时间范围" width="220" />
         <el-table-column prop="format" label="格式" width="90" />
