@@ -35,7 +35,6 @@
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="userName" label="预约人" width="100" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="roomName" label="功能房" width="130" />
@@ -43,7 +42,7 @@
         <el-table-column prop="timeSlot" label="时间段" width="150" />
         <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="purpose" label="用途" min-width="140" show-overflow-tooltip />

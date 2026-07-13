@@ -2,7 +2,7 @@
   <PageShell
     title="功能房管理"
     eyebrow="空间管理"
-    description="统一维护功能房信息、开放状态和座位数据；座位编辑支持保存与撤销，避免只在前端临时修改。"
+    description="统一维护功能房信息、开放状态和座位；座位调整可在确认无误后一次保存。"
   >
     <template #actions>
       <el-button type="primary" @click="handleAdd">
@@ -39,7 +39,6 @@
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="name" label="名称" min-width="150" />
         <el-table-column prop="type" label="类型" width="130">
           <template #default="{ row }">
@@ -51,7 +50,7 @@
         <el-table-column prop="capacity" label="容量" width="90" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />

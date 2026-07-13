@@ -35,7 +35,6 @@
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" stripe>
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="userName" label="预约人" width="110" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="roomName" label="功能房" min-width="150" />

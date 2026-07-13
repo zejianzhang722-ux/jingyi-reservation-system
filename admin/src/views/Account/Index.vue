@@ -2,7 +2,7 @@
   <PageShell
     title="账号管理"
     eyebrow="账号与权限"
-    description="宿生账号和管理账号分开维护，避免账号类型混淆，并按当前角色限制可操作范围。"
+    description="分别维护宿生和管理账号，查看状态、所属楼栋或管理范围。"
   >
     <template #actions>
       <el-button type="success" @click="handleImport">
@@ -24,7 +24,7 @@
         <el-select v-if="activeTab === 'manager'" v-model="filters.role" placeholder="角色筛选" clearable style="width: 180px">
           <el-option label="超级管理员" value="super_admin" />
           <el-option label="导生管理员" value="admin" />
-          <el-option label="书院辅导员" value="counselor" />
+          <el-option label="辅导员" value="counselor" />
         </el-select>
         <el-select v-model="filters.status" placeholder="状态筛选" clearable style="width: 150px">
           <el-option label="正常" value="active" />
@@ -38,7 +38,7 @@
         <el-table-column prop="realName" label="姓名" width="140" />
         <el-table-column v-if="activeTab === 'manager'" prop="role" label="角色" width="150">
           <template #default="{ row }">
-            <el-tag :type="roleMap[row.role]?.type" size="small">{{ roleMap[row.role]?.label || row.role }}</el-tag>
+            <el-tag :type="roleMap[row.role]?.type || 'info'" size="small">{{ roleMap[row.role]?.label || '角色待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column v-if="activeTab === 'manager'" prop="phone" label="联系电话" width="140">
@@ -51,7 +51,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="activeTab === 'student' ? '所属楼栋' : '管理范围'" width="140">
@@ -116,7 +116,7 @@
           </el-select>
         </el-form-item>
         <template v-if="activeTab === 'manager'">
-          <el-form-item label="数据范围" prop="scopeType">
+          <el-form-item label="管理范围" prop="scopeType">
             <el-select v-model="form.scopeType" style="width: 100%" :disabled="form.role !== 'admin'" @change="handleScopeChange">
               <el-option label="全院" value="global" />
               <el-option v-if="form.role === 'admin'" label="指定楼栋" value="building" />
@@ -245,7 +245,7 @@ const rules = computed(() => ({
   realName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
   password: [{ required: !isEdit.value, message: activeTab.value === 'student' ? '请输入一卡通卡号' : '请输入密码', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-  scopeType: [{ required: activeTab.value === 'manager', message: '请选择数据范围', trigger: 'change' }],
+  scopeType: [{ required: activeTab.value === 'manager', message: '请选择管理范围', trigger: 'change' }],
   buildingId: [{ required: activeTab.value === 'student' || (form.role === 'admin' && form.scopeType === 'building'), message: '请选择楼栋', trigger: 'change' }]
 }))
 

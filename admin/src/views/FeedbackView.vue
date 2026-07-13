@@ -25,7 +25,6 @@
 
     <el-card shadow="never">
       <el-table :data="feedbacks" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="userName" label="用户" width="110" />
         <el-table-column prop="type" label="类型" width="110">
           <template #default="{ row }">
@@ -96,7 +95,7 @@ const statusFilter = ref('')
 const resolveDialogVisible = ref(false)
 const currentFeedback = ref(null)
 const replyContent = ref('')
-const typeMap = { suggestion: '建议', bug: '问题', feature: '功能请求', other: '其他' }
+const typeMap = { suggestion: '建议', bug: '问题', feature: '功能建议', other: '其他' }
 
 const pendingCount = computed(() => feedbacks.value.filter(item => item.status !== 'resolved').length)
 const resolvedCount = computed(() => feedbacks.value.filter(item => item.status === 'resolved').length)

@@ -2,7 +2,7 @@
   <PageShell
     title="导出报表"
     eyebrow="报表导出"
-    description="按报表类型、时间范围、功能房和字段导出运营数据；本页历史记录仅保留当前浏览器会话内的导出结果。"
+    description="按报表类型、时间范围、功能房和所需内容导出运营数据；关闭页面后，本页记录将不再保留。"
   >
     <template #actions>
       <el-button type="primary" :loading="exporting" :disabled="exporting" @click="handleExport">
@@ -15,10 +15,10 @@
         <MetricCard label="报表类型" :value="typeLabels[form.type]" caption="当前选择" icon="Document" tone="primary" />
       </el-col>
       <el-col :xs="24" :sm="8">
-        <MetricCard label="导出字段" :value="form.columns.length" caption="已选择字段数量" icon="Tickets" tone="success" />
+        <MetricCard label="导出内容" :value="form.columns.length" caption="已选项目数量" icon="Tickets" tone="success" />
       </el-col>
       <el-col :xs="24" :sm="8">
-        <MetricCard label="会话记录" :value="exportHistory.length" caption="本次打开页面后的导出" icon="Clock" tone="warning" />
+        <MetricCard label="本页记录" :value="exportHistory.length" caption="本次打开页面后的导出" icon="Clock" tone="warning" />
       </el-col>
     </el-row>
 
@@ -45,9 +45,8 @@
             <el-option v-for="r in roomOptions" :key="r.id" :label="r.name" :value="r.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="导出数据列">
+        <el-form-item label="选择导出内容">
           <el-checkbox-group v-model="form.columns" class="column-grid">
-            <el-checkbox label="id" value="id">预约ID</el-checkbox>
             <el-checkbox label="userName" value="userName">预约人</el-checkbox>
             <el-checkbox label="studentId" value="studentId">学号</el-checkbox>
             <el-checkbox label="roomName" value="roomName">功能房</el-checkbox>
@@ -71,11 +70,10 @@
       <template #header>
         <div class="history-header">
           <span class="card-title">历史导出记录</span>
-          <el-tag size="small" type="info">会话临时记录</el-tag>
+          <el-tag size="small" type="info">关闭页面后不保留</el-tag>
         </div>
       </template>
       <el-table :data="exportHistory" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="type" label="报表类型" width="150">
           <template #default="{ row }">{{ typeLabels[row.type] || row.type }}</template>
         </el-table-column>
@@ -89,7 +87,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!exportHistory.length" description="本次会话暂无导出记录" :image-size="90" />
+      <el-empty v-if="!exportHistory.length" description="本页暂无导出记录" :image-size="90" />
     </el-card>
   </PageShell>
 </template>
@@ -120,7 +118,7 @@ const form = reactive({
   type: 'reservations',
   dateRange: null,
   roomIds: [],
-  columns: ['id', 'userName', 'studentId', 'roomName', 'date', 'timeSlot', 'status', 'purpose', 'createdAt'],
+  columns: ['userName', 'studentId', 'roomName', 'date', 'timeSlot', 'status', 'purpose', 'createdAt'],
   format: 'xlsx'
 })
 const currentRangeLabel = computed(() => form.dateRange?.length ? `${form.dateRange[0]} 至 ${form.dateRange[1]}` : '尚未选择')
@@ -141,7 +139,7 @@ async function handleExport() {
     return
   }
   if (!form.columns.length) {
-    ElMessage.warning('请至少选择一个导出字段')
+    ElMessage.warning('请至少选择一项导出内容')
     return
   }
 
@@ -181,8 +179,8 @@ async function handleExport() {
       fileName
     })
   } catch (e) {
-    exportResult.value = '导出失败，请稍后重试'
-    ElMessage.error('导出失败')
+    exportResult.value = '导出未完成，请检查网络后重试；当前选择已保留'
+    ElMessage.error('导出未完成，请重试')
   } finally {
     if (objectUrl) window.URL.revokeObjectURL(objectUrl)
     exporting.value = false

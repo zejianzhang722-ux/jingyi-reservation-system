@@ -25,7 +25,6 @@
 
       <el-table :data="seatList" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="seat_number" label="座位号" width="120" />
         <el-table-column prop="row_num" label="行" width="80" />
         <el-table-column prop="col_num" label="列" width="80" />

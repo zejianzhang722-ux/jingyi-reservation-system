@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 
 import { buildTimelineView, createLatestRequestGate, createTimelineRequestCoordinator } from '../admin/src/utils/roomTimeline.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
@@ -12,6 +13,35 @@ const adminRequire = createRequire(new URL('../admin/package.json', import.meta.
 const XLSX = adminRequire('xlsx')
 const { adminChildren, buildNavigation, getNavigationSectionForRoute } = adminRoutes
 assert.equal(typeof getNavigationSectionForRoute, 'function')
+
+function collectVueFiles(directoryUrl) {
+  return readdirSync(directoryUrl, { recursive: true, withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.vue'))
+    .map(entry => pathToFileURL(`${entry.parentPath}/${entry.name}`))
+}
+
+function visibleCopyFromVue(source) {
+  const template = source.match(/<template>[\s\S]*?<\/template>/)?.[0] || ''
+  const feedbackCalls = [...source.matchAll(/(?:ElMessage(?:\.\w+)?|ElMessageBox\.confirm)\(\s*(['"`])([\s\S]*?)\1/g)]
+    .map(match => match[2])
+    .join('\n')
+  return `${template}\n${feedbackCalls}`
+}
+
+const visibleCopyFiles = collectVueFiles(new URL('../admin/src/', import.meta.url))
+const prohibitedChineseCopy = /\u6570\u636e\u8868|\u63a5\u53e3|\u5b57\u6bb5|\u5185\u90e8ID|\u5185\u90e8\u7f16\u53f7|\u8d26\u53f7ID|\u89d2\u8272\u88c1\u526a|\u83dc\u5355\u88c1\u526a|\u89d2\u8272\u8fc7\u6ee4|\u83dc\u5355\u8fc7\u6ee4|\u6a21\u62df\u6570\u636e|\u6a21\u62df\u5185\u5bb9|\u7f13\u5b58|\u524d\u7aef|\u540e\u7aef|\u73af\u5883\u53d8\u91cf|\u672c\u5730\u914d\u7f6e|\u8bf7\u6c42\u63d0\u4ea4|\u6d4f\u89c8\u5668\u4f1a\u8bdd|\u4f1a\u8bdd\u4e34\u65f6|\u5f53\u524d\u8fd4\u56de/
+const prohibitedEnglishCopy = /\b(?:WebSocket|Token|API|mock)\b/i
+for (const fileUrl of visibleCopyFiles) {
+  const source = readFileSync(fileUrl, 'utf8')
+  const visibleCopy = visibleCopyFromVue(source)
+  assert.doesNotMatch(visibleCopy, prohibitedChineseCopy, `${fileUrl.pathname} contains developer-facing Chinese copy`)
+  assert.doesNotMatch(visibleCopy, prohibitedEnglishCopy, `${fileUrl.pathname} contains developer-facing English copy`)
+  assert.doesNotMatch(visibleCopy, /label="ID"|>\u9884\u7ea6ID</, `${fileUrl.pathname} exposes an internal identifier as user-facing copy`)
+  assert.doesNotMatch(visibleCopy, /\?\.label\s*\|\|\s*row\.(?:status|role|type|action|module)/, `${fileUrl.pathname} can expose an internal code as a label`)
+}
+
+const logsSource = readFileSync(new URL('../admin/src/views/System/Logs.vue', import.meta.url), 'utf8')
+assert.match(logsSource, /moduleMap\[row\.module\s*\|\|/)
 
 const expectedNavigationGroups = {
   admin: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表'],

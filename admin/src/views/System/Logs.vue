@@ -27,14 +27,15 @@
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="operatorName" label="操作人" width="100" />
         <el-table-column prop="action" label="操作类型" width="90">
           <template #default="{ row }">
-            <el-tag :type="actionMap[row.action]?.type || 'info'" size="small">{{ actionMap[row.action]?.label || row.action }}</el-tag>
+            <el-tag :type="actionMap[row.action]?.type || 'info'" size="small">{{ actionMap[row.action]?.label || '其他操作' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="module" label="模块" width="100" />
+        <el-table-column label="业务范围" width="120">
+          <template #default="{ row }">{{ moduleMap[row.module || row.targetTable || row.target_table] || '其他业务' }}</template>
+        </el-table-column>
         <el-table-column prop="target" label="操作对象" min-width="180" show-overflow-tooltip />
         <el-table-column prop="detail" label="操作详情" min-width="200" show-overflow-tooltip />
         <el-table-column prop="ip" label="IP地址" width="130" />
@@ -70,6 +71,19 @@ const actionMap = {
   delete: { label: '删除', type: 'danger' },
   audit: { label: '审核', type: '' },
   export: { label: '导出', type: 'success' }
+}
+
+const moduleMap = {
+  accounts: '账号管理',
+  admins: '管理账号',
+  users: '宿生账号',
+  reservations: '预约管理',
+  rooms: '功能房管理',
+  buildings: '楼栋管理',
+  posters: '海报审核',
+  violations: '违规记录',
+  announcements: '公告管理',
+  backups: '数据备份'
 }
 
 const filters = reactive({ operator: '', action: '', dateRange: null })

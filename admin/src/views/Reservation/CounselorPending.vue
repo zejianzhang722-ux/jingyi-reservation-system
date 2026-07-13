@@ -28,7 +28,6 @@
       </div>
 
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="userName" label="学生姓名" width="100" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="roomName" label="功能房" width="130" />

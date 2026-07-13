@@ -23,7 +23,7 @@ export const adminChildren = [
   { path: 'room/seats', name: 'SeatManage', component: () => import('@/views/Room/SeatManage.vue'), meta: { title: '座位', icon: 'Grid', roles: roleGroups.superOnly, description: '批量维护自习室座位' } },
   { path: 'room/rules', name: 'RulesConfig', component: () => import('@/views/Room/RulesConfig.vue'), meta: { title: '开放规则', icon: 'Setting', roles: roleGroups.superOnly, description: '配置开放时间、预约规则和审批策略' } },
 
-  { path: 'account', name: 'AccountManage', component: () => import('@/views/Account/Index.vue'), meta: { title: '账号管理', icon: 'User', roles: roleGroups.superOnly, description: '管理宿生、管理员与辅导员账号' } },
+  { path: 'account', name: 'AccountManage', component: () => import('@/views/Account/Index.vue'), meta: { title: '账号管理', icon: 'User', roles: roleGroups.superOnly, description: '管理宿生、导生管理员、辅导员和超级管理员账号' } },
   { path: 'credit/violations', name: 'CreditViolations', component: () => import('@/views/Credit/Violations.vue'), meta: { title: '违规记录', icon: 'WarningFilled', roles: roleGroups.allAdmins, description: '记录和追踪违规行为' } },
   { path: 'credit/blacklist', name: 'CreditBlacklist', component: () => import('@/views/Credit/Blacklist.vue'), meta: { title: '黑名单', icon: 'CircleCloseFilled', roles: roleGroups.counselorPlus, description: '处理受限和封禁宿生' } },
   { path: 'credit/config', name: 'CreditConfig', component: () => import('@/views/Credit/ScoreConfig.vue'), meta: { title: '信用配置', icon: 'SetUp', roles: roleGroups.superOnly, description: '配置信用分规则和阈值' } },

@@ -24,16 +24,15 @@
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
         <el-table-column prop="type" label="类型" width="110">
           <template #default="{ row }">
-            <el-tag :type="typeMap[row.type]?.tagType || ''" size="small">{{ typeMap[row.type]?.label || row.type }}</el-tag>
+            <el-tag :type="typeMap[row.type]?.tagType || ''" size="small">{{ typeMap[row.type]?.label || '其他通知' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="creator_name" label="发布人" width="110" />

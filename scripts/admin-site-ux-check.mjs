@@ -420,7 +420,7 @@ assert.match(reviewQueue, /selectedIds\.value\s*=\s*\[\][\s\S]*await\s+loadData|
 assert.doesNotMatch(layout, /\.notify-btn::after/, 'notification button must not show an unconditional red dot')
 assert.match(layout, /v-if="pendingCount > 0"[^>]*class="pending-badge"[^>]*role="status"[^>]*aria-label=/)
 assert.match(layout, /\{\{\s*pendingCount\s*\}\}/, 'notification badge must show the actionable count')
-assert.match(reservationApi, /request\.get\(['"]\/reservation\/pending-count['"]\)/, 'reminders must use the role-scoped pending count endpoint')
+assert.match(reservationApi, /request\.get\(['"]\/reservation\/pending-count['"]\s*,\s*\{\s*params\s*\}\s*\)/, 'reminders must use the role-scoped pending count endpoint with the current role scope')
 assert.doesNotMatch(layout, /getPendingReminderCount|@\/api\/stats/, 'layout must not load the full dashboard for one reminder')
 assert.match(layout, /getPendingCount/, 'layout must use the reservation count API')
 assert.match(layout, /userStore\.token[\s\S]*loadPendingCount/, 'reminders must load after authentication')
