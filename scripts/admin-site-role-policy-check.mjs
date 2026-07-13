@@ -37,7 +37,10 @@ const navigationNamesFor = role => navigationFor(role).flatMap(section => sectio
 
 for (const role of roles) {
   const navigation = navigationFor(role)
-  assert.deepEqual(navigation.map(section => section.title), ['总览', '预约运营', '空间管理', '用户与信用', '数据统计', '内容与系统'])
+  const expectedSections = role === 'admin'
+    ? ['总览', '预约运营', '空间管理', '用户与信用', '数据统计']
+    : ['总览', '预约运营', '空间管理', '用户与信用', '数据统计', '内容与系统']
+  assert.deepEqual(navigation.map(section => section.title), expectedSections)
   assert.ok(navigation.every(section => section.children.length), `${role} should not receive empty navigation sections`)
   for (const name of navigationNamesFor(role)) {
     assert.ok(hasRouteRole(routeByName.get(name), role), `${role} navigation should only contain allowed route ${name}`)
@@ -52,9 +55,7 @@ assert.ok(
 )
 
 const adminNavigationNames = navigationNamesFor('admin')
-assert.deepEqual(adminNavigationNames.slice(0, 5), ['Dashboard', 'ReservationPending', 'CounselorPending', 'CheckinManage', 'ReservationAll'])
-assert.ok(adminNavigationNames.indexOf('ReservationPending') < adminNavigationNames.indexOf('PosterPosition'))
-assert.ok(adminNavigationNames.indexOf('RoomManage') < adminNavigationNames.indexOf('SystemAnnouncements'))
+assert.deepEqual(adminNavigationNames.slice(0, 5), ['Dashboard', 'ReservationPending', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs'])
 
 const superNavigationNames = navigationNamesFor('super_admin')
 assert.deepEqual(superNavigationNames.slice(0, 4), ['Dashboard', 'ReservationPending', 'CounselorPending', 'ReservationAll'])
@@ -73,16 +74,21 @@ assert.ok(superNames.includes('SystemLogs'))
 assert.ok(superNames.includes('SystemBackup'))
 
 const counselorNames = new Set(sortedNamesFor('counselor'))
-for (const forbidden of ['RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig', 'StatsExport', 'CreditConfig', 'ReadingRoomLogs', 'SystemLogs', 'SystemBackup']) {
+for (const inherited of ['ReservationPending', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs', 'CreditViolations', 'StatsOverview']) {
+  assert.ok(counselorNames.has(inherited), `counselor should inherit ${inherited}`)
+}
+for (const forbidden of ['RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig', 'CreditConfig', 'SystemLogs', 'SystemBackup']) {
   assert.ok(!counselorNames.has(forbidden), `counselor must not receive ${forbidden}`)
   assert.ok(!counselorNavigationNames.includes(forbidden), `counselor navigation must not contain ${forbidden}`)
 }
 
-const adminNames = sortedNamesFor('admin')
-for (const frequent of ['ReservationPending', 'RoomManage']) {
-  for (const infrequent of ['PosterPosition', 'SystemAnnouncements']) {
-    assert.ok(adminNames.indexOf(frequent) < adminNames.indexOf(infrequent), `${frequent} should precede ${infrequent}`)
-  }
+const adminNames = new Set(sortedNamesFor('admin'))
+for (const allowed of ['ReservationPending', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs', 'RoomMonitor', 'CreditViolations', 'StatsOverview']) {
+  assert.ok(adminNames.has(allowed), `admin should receive ${allowed}`)
+}
+for (const forbidden of ['CounselorPending', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig', 'AccountManage', 'CreditBlacklist', 'StatsExport', 'PosterPending', 'PosterPosition', 'Feedback', 'SystemAnnouncements', 'CreditConfig', 'SystemLogs', 'SystemBackup']) {
+  assert.ok(!adminNames.has(forbidden), `admin must not receive ${forbidden}`)
+  assert.ok(!adminNavigationNames.includes(forbidden), `admin navigation must not contain ${forbidden}`)
 }
 
 for (const role of roles) {

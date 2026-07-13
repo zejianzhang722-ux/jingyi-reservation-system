@@ -116,14 +116,42 @@ async function main() {
     const admin = await loginAdmin('admin', 'admin123')
     const counselor = await loginAdmin('counselor', 'counselor123')
     const superAdmin = await loginAdmin('superadmin', 'super123')
+    const buildingAdmin = await loginAdmin('building_admin', 'admin123')
 
-    assert(Number.isInteger(Number(admin.userInfo.buildingId)) && Number(admin.userInfo.buildingId) > 0, 'admin fixture must have a building scope')
-    assert(Number.isInteger(Number(counselor.userInfo.buildingId)) && Number(counselor.userInfo.buildingId) > 0, 'counselor fixture must have a building scope')
-    assert(!superAdmin.userInfo.buildingId, 'super administrator fixture must remain global')
+    assert(admin.userInfo.scopeType === 'global' && !admin.userInfo.buildingId, 'guide administrator fixture must support global scope')
+    assert(counselor.userInfo.scopeType === 'global' && !counselor.userInfo.buildingId, 'counselor fixture must be global')
+    assert(superAdmin.userInfo.scopeType === 'global' && !superAdmin.userInfo.buildingId, 'super administrator fixture must remain global')
+    assert(buildingAdmin.userInfo.scopeType === 'building' && Number(buildingAdmin.userInfo.buildingId) === 1, 'building guide fixture must be scoped to one building')
 
     expectStatus(await api('/stats/dashboard', { headers: authHeaders(admin.token) }), 200, 'admin dashboard scope')
     expectStatus(await api('/stats/dashboard', { headers: authHeaders(counselor.token) }), 200, 'counselor dashboard scope')
     expectStatus(await api('/stats/dashboard', { headers: authHeaders(superAdmin.token) }), 200, 'super administrator dashboard scope')
+    expectStatus(await api('/stats/dashboard', { headers: authHeaders(buildingAdmin.token) }), 200, 'building guide dashboard scope')
+
+    expectStatus(await api('/admin/accounts', { headers: authHeaders(admin.token) }), 403, 'guide cannot manage accounts')
+    expectStatus(await api('/admin/accounts', { headers: authHeaders(counselor.token) }), 403, 'counselor cannot manage accounts')
+    expectStatus(await api('/admin/accounts', { headers: authHeaders(superAdmin.token) }), 200, 'super administrator can manage accounts')
+    expectStatus(await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ username: 'scope_missing', password: 'test1234', realName: '范围未设置', role: 'admin' })
+    }), 400, 'guide creation requires explicit scope')
+    expectStatus(await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ username: 'scope_global', password: 'test1234', realName: '全院导生', role: 'admin', scopeType: 'global' })
+    }), 200, 'super administrator creates global guide')
+    expectStatus(await api('/admin/accounts', {
+      method: 'POST',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ username: 'scope_building', password: 'test1234', realName: '楼栋导生', role: 'admin', scopeType: 'building', buildingId: 2 })
+    }), 200, 'super administrator creates building guide')
+    const accountList = await api('/admin/accounts?role=admin&pageSize=100', { headers: authHeaders(superAdmin.token) })
+    expectStatus(accountList, 200, 'super administrator reads guide scopes')
+    const createdGlobal = accountList.json.data.list.find(function(item) { return item.username === 'scope_global' })
+    const createdBuilding = accountList.json.data.list.find(function(item) { return item.username === 'scope_building' })
+    assert(createdGlobal && createdGlobal.scopeType === 'global' && !createdGlobal.buildingId, 'global guide scope must persist')
+    assert(createdBuilding && createdBuilding.scopeType === 'building' && Number(createdBuilding.buildingId) === 2, 'building guide scope must persist')
 
     for (let i = 0; i < 12; i++) {
       const repeatedStudentLogin = await api('/auth/login/student', {
@@ -172,7 +200,7 @@ async function main() {
 
     expectStatus(await api('/reservation/pending', { headers: authHeaders(admin.token) }), 200, 'admin pending list')
     expectStatus(await api('/reservation/5/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 403, 'admin cannot approve counselor pending')
-    expectStatus(await api('/reservation/7/approve', { method: 'PUT', headers: authHeaders(counselor.token) }), 403, 'counselor cannot approve normal pending')
+    expectStatus(await api('/reservation/7/approve', { method: 'PUT', headers: authHeaders(counselor.token) }), 200, 'counselor inherits ordinary approval')
 
     expectStatus(await api('/reservation/10/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 200, 'admin approves pending in own building')
     expectStatus(await api('/reservation/10/approve', { method: 'PUT', headers: authHeaders(admin.token) }), 409, 'duplicate approval conflict')

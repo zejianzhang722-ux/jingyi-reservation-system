@@ -4,8 +4,8 @@ export function getPending(params) {
   return request.get('/audit/pending', { params })
 }
 
-export async function getPendingCount() {
-  const response = await request.get('/reservation/pending-count')
+export async function getPendingCount(params) {
+  const response = await request.get('/reservation/pending-count', { params })
   const count = Number(response?.data?.count)
   return Number.isFinite(count) && count > 0 ? count : 0
 }

@@ -20,7 +20,8 @@ const list = async function(req, res) {
 
     if (db.isMock()) {
       const rows = reservationPresenter.getMockReservationRows({
-        adminScope: req.adminScope || { isGlobal: false, buildingId: null },
+        adminScope: req.adminScope || { isGlobal: true, buildingId: null },
+        userId: isAdmin ? null : req.user.id,
         status: status,
         date: date,
         roomId: roomId,

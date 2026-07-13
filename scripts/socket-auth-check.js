@@ -39,7 +39,7 @@ function dependencies(overrides) {
     dbClient: {
       query: async function(sql, params) {
         if (sql.includes('FROM admins')) {
-          return [[{ id: params[0], username: 'admin-test', real_name: '测试管理员', role: settings.databaseRole || 'admin', building_id: settings.buildingId === undefined ? 2 : settings.buildingId, status: settings.status || 'active' }]]
+          return [[{ id: params[0], username: 'admin-test', real_name: '测试管理员', role: settings.databaseRole || 'admin', building_id: settings.buildingId === undefined ? 2 : settings.buildingId, scope_type: settings.scopeType || 'building', status: settings.status || 'active' }]]
         }
         if (sql.includes('FROM users')) {
           return [[{ id: params[0], nickname: 'student-test', real_name: '测试学生', role: settings.studentDatabaseRole || 'student', building_id: 2, status: settings.studentStatus || 'active' }]]
@@ -67,6 +67,8 @@ async function main() {
   assert.strictEqual(principal.id, 7)
   assert.strictEqual(principal.kind, 'admin')
   assert.strictEqual(principal.buildingId, 2)
+  assert.strictEqual(principal.scopeType, 'building')
+  assert.strictEqual(principal.isGlobal, false)
   await socketAuthService.validateLiveSession(authenticatedSocket, dependencies())
 
   await expectSocketError(function() { return socketAuthService.authenticateSocket(fakeSocket(''), dependencies()) }, 'SOCKET_TOKEN_REQUIRED', 'missing token must be rejected')
@@ -89,7 +91,7 @@ async function main() {
   await expectSocketError(function() { return socketAuthService.validateLiveSession(expiredLiveSocket, dependencies()) }, 'SOCKET_TOKEN_EXPIRED', 'expired session must be rejected')
 
   const adminSocket = fakeSocket('access-token')
-  adminSocket.data.user = { id: 7, kind: 'admin', role: 'admin', buildingId: 2 }
+  adminSocket.data.user = { id: 7, kind: 'admin', role: 'admin', buildingId: 2, scopeType: 'building', isGlobal: false }
   assert.strictEqual(await socketAuthService.authorizeRoom(adminSocket, 'building:2', dependencies()), 'building:2')
   assert.strictEqual(await socketAuthService.authorizeRoom(adminSocket, 'room:8', dependencies({ roomBuildingId: 2 })), 'room:8')
   await expectSocketError(function() { return socketAuthService.authorizeRoom(adminSocket, 'user:7', dependencies()) }, 'SOCKET_ROOM_FORBIDDEN', 'administrator must not impersonate a student notification room')
@@ -97,13 +99,18 @@ async function main() {
   await expectSocketError(function() { return socketAuthService.authorizeRoom(adminSocket, 'building:3', dependencies()) }, 'SOCKET_ROOM_FORBIDDEN', 'admin must not join another building')
 
   const unscoped = fakeSocket('access-token')
-  unscoped.data.user = { id: 8, kind: 'admin', role: 'admin', buildingId: null }
+  unscoped.data.user = { id: 8, kind: 'admin', role: 'admin', buildingId: null, scopeType: null, isGlobal: false }
   await expectSocketError(function() { return socketAuthService.authorizeRoom(unscoped, 'room:8', dependencies()) }, 'SOCKET_BUILDING_SCOPE_REQUIRED', 'unscoped admin must not subscribe to rooms')
 
   const superSocket = fakeSocket('access-token')
-  superSocket.data.user = { id: 1, kind: 'admin', role: 'super_admin', buildingId: null }
+  superSocket.data.user = { id: 1, kind: 'admin', role: 'super_admin', buildingId: null, scopeType: 'global', isGlobal: true }
   assert.strictEqual(await socketAuthService.authorizeRoom(superSocket, 'monitor:all', dependencies()), 'monitor:all')
   assert.strictEqual(await socketAuthService.authorizeRoom(superSocket, 'building:2', dependencies()), 'building:2')
+
+  const globalGuideSocket = fakeSocket('access-token')
+  globalGuideSocket.data.user = { id: 9, kind: 'admin', role: 'admin', buildingId: null, scopeType: 'global', isGlobal: true }
+  assert.strictEqual(await socketAuthService.authorizeRoom(globalGuideSocket, 'monitor:all', dependencies()), 'monitor:all')
+  assert.strictEqual(await socketAuthService.authorizeRoom(globalGuideSocket, 'building:3', dependencies()), 'building:3')
 
   const quotaSocket = fakeSocket('access-token')
   quotaSocket.data.roomEventTimestamps = []

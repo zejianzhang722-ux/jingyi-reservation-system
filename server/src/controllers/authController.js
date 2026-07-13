@@ -216,7 +216,8 @@ const adminLogin = async function(req, res) {
         name: admin.real_name || admin.username || '',
         realName: admin.real_name || '',
         role: admin.role,
-        buildingId: admin.building_id
+        buildingId: admin.building_id,
+        scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type
       }
     });
   } catch (err) {
@@ -277,7 +278,8 @@ const adminMiniappLogin = async function(req, res) {
         name: admin.real_name || admin.username || '',
         realName: admin.real_name || '',
         role: admin.role,
-        buildingId: admin.building_id
+        buildingId: admin.building_id,
+        scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type
       }
     });
   } catch (err) {

@@ -37,6 +37,7 @@ const getMockReservationRows = function(options) {
   const statuses = Array.isArray(settings.statuses) && settings.statuses.length ? settings.statuses : null;
   const status = settings.status ? String(settings.status) : '';
   const roomId = settings.roomId ? Number(settings.roomId) : null;
+  const userId = settings.userId ? Number(settings.userId) : null;
   const buildingId = settings.buildingId ? Number(settings.buildingId) : null;
   const date = settings.date ? String(settings.date) : '';
   const startDate = settings.startDate ? String(settings.startDate) : '';
@@ -52,6 +53,7 @@ const getMockReservationRows = function(options) {
     if (statuses && !statuses.includes(row.status)) return false;
     if (status && row.status !== status) return false;
     if (roomId && Number(row.room_id) !== roomId) return false;
+    if (userId && Number(row.user_id) !== userId) return false;
     if (date && row.date !== date) return false;
     if (startDate && row.date < startDate) return false;
     if (endDate && row.date > endDate) return false;

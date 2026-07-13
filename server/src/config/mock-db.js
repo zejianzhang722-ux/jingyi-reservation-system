@@ -134,9 +134,10 @@ tables.users = [
 ];
 
 tables.admins = [
-  { id: 1, username: 'admin', password: bcrypt.hashSync('admin123', 10), real_name: '系统管理员', role: 'admin', building_id: 1, phone: '13800000001', status: 'active', last_login_at: null, created_at: now, updated_at: now },
-  { id: 2, username: 'superadmin', password: bcrypt.hashSync('super123', 10), real_name: '超级管理员', role: 'super_admin', building_id: null, phone: '13800000002', status: 'active', last_login_at: null, created_at: now, updated_at: now },
-  { id: 3, username: 'counselor', password: bcrypt.hashSync('counselor123', 10), real_name: '辅导员', role: 'counselor', building_id: 2, phone: '13800000003', status: 'active', last_login_at: null, created_at: now, updated_at: now }
+  { id: 1, username: 'admin', password: bcrypt.hashSync('admin123', 10), real_name: '系统管理员', role: 'admin', building_id: null, scope_type: 'global', phone: '13800000001', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 2, username: 'superadmin', password: bcrypt.hashSync('super123', 10), real_name: '超级管理员', role: 'super_admin', building_id: null, scope_type: 'global', phone: '13800000002', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 3, username: 'counselor', password: bcrypt.hashSync('counselor123', 10), real_name: '辅导员', role: 'counselor', building_id: null, scope_type: 'global', phone: '13800000003', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 4, username: 'building_admin', password: bcrypt.hashSync('admin123', 10), real_name: 'B座导生管理员', role: 'admin', building_id: 1, scope_type: 'building', phone: '13800000004', status: 'active', last_login_at: null, created_at: now, updated_at: now }
 ];
 
 tables.reservations = [

@@ -64,8 +64,8 @@
             <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="buildingId" label="楼栋范围" width="110">
-          <template #default="{ row }">{{ row.buildingId || '全局/未分配' }}</template>
+        <el-table-column prop="scopeLabel" label="数据范围" width="140">
+          <template #default="{ row }">{{ row.accountType === 'student' ? (row.buildingId || '未分配') : (row.scopeLabel || '待设置') }}</template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip />
         <el-table-column label="操作" width="190" fixed="right">
@@ -111,10 +111,23 @@
           <el-input v-model="form.realName" placeholder="请输入真实姓名" />
         </el-form-item>
         <el-form-item label="角色" prop="role">
-          <el-select v-model="form.role" style="width: 100%" :disabled="activeTab === 'student'">
+          <el-select v-model="form.role" style="width: 100%" :disabled="activeTab === 'student'" @change="handleRoleChange">
             <el-option v-for="opt in roleOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
+        <template v-if="activeTab === 'manager'">
+          <el-form-item label="数据范围" prop="scopeType">
+            <el-select v-model="form.scopeType" style="width: 100%" :disabled="form.role !== 'admin'" @change="handleScopeChange">
+              <el-option label="全院" value="global" />
+              <el-option v-if="form.role === 'admin'" label="指定楼栋" value="building" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="form.role === 'admin' && form.scopeType === 'building'" label="指定楼栋" prop="buildingId">
+            <el-select v-model="form.buildingId" style="width: 100%" placeholder="请选择楼栋">
+              <el-option v-for="item in buildingOptions" :key="item.id" :label="item.name" :value="item.id" />
+            </el-select>
+          </el-form-item>
+        </template>
         <el-form-item :label="activeTab === 'student' ? '一卡通号' : '密码'" :prop="isEdit ? '' : 'password'">
           <el-input v-model="form.password" type="password" :placeholder="isEdit ? '留空则不修改' : (activeTab === 'student' ? '请输入一卡通卡号' : '请输入初始密码')" show-password />
         </el-form-item>
@@ -147,6 +160,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { getList, create, update, remove, saveRows } from '@/api/account'
+import { getBuildings } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import PageShell from '@/components/admin/PageShell.vue'
@@ -167,11 +181,12 @@ const importDialogVisible = ref(false)
 const importLoading = ref(false)
 const actionSubmitting = ref(false)
 const actionLock = createActionLock()
+const buildingOptions = ref([])
 let importFile = null
 
 const filters = reactive({ keyword: '', role: '', status: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
-const form = reactive({ id: null, username: '', realName: '', password: '', role: 'student' })
+const form = reactive({ id: null, username: '', realName: '', password: '', role: 'student', scopeType: 'global', buildingId: null })
 
 const roleMap = {
   super_admin: { label: '超级管理员', type: 'danger' },
@@ -206,7 +221,9 @@ const rules = computed(() => ({
   username: [{ required: true, message: activeTab.value === 'student' ? '请输入学号' : '请输入账号', trigger: 'blur' }],
   realName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
   password: [{ required: !isEdit.value, message: activeTab.value === 'student' ? '请输入一卡通卡号' : '请输入密码', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }]
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  scopeType: [{ required: activeTab.value === 'manager', message: '请选择数据范围', trigger: 'change' }],
+  buildingId: [{ required: form.role === 'admin' && form.scopeType === 'building', message: '请选择楼栋', trigger: 'change' }]
 }))
 
 async function loadData() {
@@ -256,7 +273,7 @@ function handleAdd() {
 
 function handleEdit(row) {
   isEdit.value = true
-  Object.assign(form, { id: row.id, username: row.username, realName: row.realName, password: '', role: row.role })
+  Object.assign(form, { id: row.id, username: row.username, realName: row.realName, password: '', role: row.role, scopeType: row.scopeType || 'global', buildingId: row.buildingId || null })
   dialogVisible.value = true
 }
 
@@ -273,7 +290,15 @@ async function handleDelete(row) {
 }
 
 function resetForm() {
-  Object.assign(form, { id: null, username: '', realName: '', password: '', role: defaultRole() })
+  Object.assign(form, { id: null, username: '', realName: '', password: '', role: defaultRole(), scopeType: 'global', buildingId: null })
+}
+
+function handleRoleChange(role) {
+  if (role !== 'admin') Object.assign(form, { scopeType: 'global', buildingId: null })
+}
+
+function handleScopeChange(scopeType) {
+  if (scopeType === 'global') form.buildingId = null
 }
 
 async function handleSubmit() {
@@ -285,12 +310,12 @@ async function handleSubmit() {
     if (!valid) return
     submitLoading.value = true
     if (isEdit.value) {
-      const data = { realName: form.realName, role: form.role }
+      const data = { realName: form.realName, role: form.role, scopeType: form.scopeType, buildingId: form.buildingId }
       if (form.password) data.password = form.password
       await update(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await create({ username: form.username, realName: form.realName, password: form.password, role: form.role })
+      await create({ username: form.username, realName: form.realName, password: form.password, role: form.role, scopeType: form.scopeType, buildingId: form.buildingId })
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -353,6 +378,7 @@ async function doImport() {
 
 onMounted(() => {
   loadData()
+  getBuildings({ pageSize: 100 }).then(res => { buildingOptions.value = res.data?.list || res.data || [] }).catch(() => {})
 })
 </script>
 

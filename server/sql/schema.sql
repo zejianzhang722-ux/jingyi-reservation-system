@@ -304,6 +304,7 @@ CREATE TABLE admins (
   real_name VARCHAR(50) DEFAULT '',
   role ENUM('admin', 'super_admin', 'counselor') DEFAULT 'admin',
   building_id INT DEFAULT NULL,
+  scope_type ENUM('global', 'building') DEFAULT NULL,
   phone VARCHAR(20) DEFAULT '',
   status ENUM('active', 'disabled') DEFAULT 'active',
   last_login_at DATETIME DEFAULT NULL,
