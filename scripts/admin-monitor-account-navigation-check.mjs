@@ -5,10 +5,74 @@ import { createRequire } from 'node:module'
 import { buildTimelineView, createLatestRequestGate, createTimelineRequestCoordinator } from '../admin/src/utils/roomTimeline.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
 import { normalizeAccountImportRows, readAccountImportWorkbook } from '../admin/src/utils/accountImport.js'
+import { buildNavigation } from '../admin/src/router/adminRoutes.js'
 
 const require = createRequire(import.meta.url)
 const adminRequire = createRequire(new URL('../admin/package.json', import.meta.url))
 const XLSX = adminRequire('xlsx')
+
+const expectedNavigationGroups = {
+  admin: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表'],
+  counselor: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表', '内容审核'],
+  super_admin: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表', '内容审核', '系统管理']
+}
+
+for (const [role, expectedGroups] of Object.entries(expectedNavigationGroups)) {
+  const navigation = buildNavigation(role)
+  assert.deepEqual(navigation.map(group => group.title), expectedGroups)
+  assert.ok(navigation.every(group => group.key && group.icon && group.children.length), `${role} should not receive an empty group`)
+  assert.equal(new Set(navigation.flatMap(group => group.children.map(item => item.name))).size, navigation.flatMap(group => group.children).length)
+}
+
+const adminNavigation = buildNavigation('admin')
+assert.ok(!adminNavigation.some(group => group.title === '系统管理'))
+assert.ok(!adminNavigation.flatMap(group => group.children).some(item => item.name === 'AccountManage'))
+const counselorNavigation = buildNavigation('counselor')
+const counselorReservationNames = counselorNavigation.find(group => group.title === '预约与使用').children.map(item => item.name)
+assert.ok(counselorReservationNames.indexOf('CounselorPending') < counselorReservationNames.indexOf('ReservationPending'))
+assert.equal(counselorNavigation.find(group => group.title === '内容审核').children[0].name, 'PosterPending')
+const superNavigation = buildNavigation('super_admin')
+assert.ok(superNavigation.find(group => group.title === '系统管理').children.some(item => item.name === 'AccountManage'))
+const superSystemNames = superNavigation.find(group => group.title === '系统管理').children.map(item => item.name)
+assert.ok(superSystemNames.indexOf('AccountManage') < superSystemNames.indexOf('SystemLogs'))
+assert.ok(superSystemNames.indexOf('RulesConfig') < superSystemNames.indexOf('SystemBackup'))
+
+const navigationState = await import('../admin/src/utils/navigationState.js').catch(() => ({}))
+assert.equal(typeof navigationState.getNavigationStorageKey, 'function')
+assert.equal(typeof navigationState.loadOpenGroups, 'function')
+assert.equal(typeof navigationState.saveOpenGroups, 'function')
+assert.equal(typeof navigationState.ensureActiveGroup, 'function')
+assert.equal(typeof navigationState.getWorkspaceLabel, 'function')
+
+const memory = new Map()
+const storage = {
+  getItem: key => memory.get(key) ?? null,
+  setItem: (key, value) => memory.set(key, value)
+}
+const firstAdmin = { id: 11, username: 'guide-a', role: 'admin' }
+const secondAdmin = { id: 12, username: 'guide-b', role: 'admin' }
+assert.notEqual(navigationState.getNavigationStorageKey(firstAdmin), navigationState.getNavigationStorageKey(secondAdmin))
+navigationState.saveOpenGroups(storage, firstAdmin, ['today', 'reservation'])
+navigationState.saveOpenGroups(storage, secondAdmin, ['space'])
+assert.deepEqual(navigationState.loadOpenGroups(storage, firstAdmin), ['today', 'reservation'])
+assert.deepEqual(navigationState.loadOpenGroups(storage, secondAdmin), ['space'])
+assert.ok(navigationState.loadOpenGroups(storage, { id: 13, role: 'counselor' }).includes('reservation'))
+assert.deepEqual(
+  navigationState.ensureActiveGroup(['today'], counselorNavigation, '/poster/pending'),
+  ['today', 'content']
+)
+assert.equal(navigationState.getWorkspaceLabel('admin'), '导生工作区')
+assert.equal(navigationState.getWorkspaceLabel('counselor'), '辅导员工作区')
+assert.equal(navigationState.getWorkspaceLabel('super_admin'), '超级管理工作区')
+
+const layoutSource = readFileSync(new URL('../admin/src/components/Layout.vue', import.meta.url), 'utf8')
+assert.match(layoutSource, /<el-sub-menu/)
+assert.match(layoutSource, /:default-openeds="openGroups"/)
+assert.match(layoutSource, /@open="handleGroupOpen"/)
+assert.match(layoutSource, /@close="handleGroupClose"/)
+assert.match(layoutSource, /workspaceLabel/)
+assert.match(layoutSource, /ensureActiveGroup/)
+assert.match(layoutSource, /navigationState/)
 
 const importWorkbook = XLSX.utils.book_new()
 const importSheet = XLSX.utils.aoa_to_sheet([

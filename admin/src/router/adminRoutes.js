@@ -40,12 +40,18 @@ export const adminChildren = [
 ]
 
 export const navSections = [
-  { title: '总览', children: ['Dashboard'] },
-  { title: '预约运营', children: ['ReservationPending', 'ReservationAll', 'CounselorPending', 'CheckinManage', 'ReadingRoomLogs'] },
-  { title: '空间管理', children: ['RoomMonitor', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig'] },
-  { title: '用户与信用', children: ['AccountManage', 'CreditViolations', 'CreditBlacklist', 'CreditConfig'] },
-  { title: '数据统计', children: ['StatsOverview', 'StatsExport'] },
-  { title: '内容与系统', children: ['PosterPending', 'PosterPosition', 'Feedback', 'SystemAnnouncements', 'SystemLogs', 'SystemBackup'] }
+  { key: 'today', title: '今日工作', icon: 'DataBoard', children: ['Dashboard'] },
+  { key: 'reservation', title: '预约与使用', icon: 'Calendar', children: ['CounselorPending', 'ReservationPending', 'ReservationAll', 'CheckinManage', 'ReadingRoomLogs'] },
+  { key: 'space', title: '空间运行', icon: 'Monitor', children: ['RoomMonitor'] },
+  { key: 'governance', title: '书院治理', icon: 'UserFilled', children: ['CreditViolations', 'CreditBlacklist', 'Feedback'] },
+  { key: 'statistics', title: '数据与报表', icon: 'TrendCharts', children: ['StatsOverview', 'StatsExport'] },
+  { key: 'content', title: '内容审核', icon: 'PictureFilled', children: ['PosterPending'] },
+  {
+    key: 'system',
+    title: '系统管理',
+    icon: 'Setting',
+    children: ['RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig', 'AccountManage', 'CreditConfig', 'PosterPosition', 'SystemAnnouncements', 'SystemLogs', 'SystemBackup']
+  }
 ]
 
 export function hasRouteRole(route, role) {

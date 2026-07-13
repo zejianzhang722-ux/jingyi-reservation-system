@@ -6,7 +6,7 @@
         <transition name="fade">
           <div v-show="!isCollapse" class="logo-copy">
             <span class="logo-text">敬一书院</span>
-            <span class="logo-subtitle">预约管理平台</span>
+            <span class="logo-subtitle">{{ workspaceLabel }}</span>
           </div>
         </transition>
       </div>
@@ -15,14 +15,21 @@
         :default-active="activeMenu"
         :collapse="isCollapse"
         :collapse-transition="false"
+        :default-openeds="openGroups"
+        :key="navigationStateKey"
         router
         background-color="transparent"
         text-color="rgba(255,255,255,0.72)"
         active-text-color="#FFFFFF"
         class="aside-menu"
+        @open="handleGroupOpen"
+        @close="handleGroupClose"
       >
-        <template v-for="section in navigation" :key="section.title">
-          <div v-if="!isCollapse" class="menu-section-title">{{ section.title }}</div>
+        <el-sub-menu v-for="section in navigation" :key="section.key" :index="section.key">
+          <template #title>
+            <el-icon><component :is="section.icon" /></el-icon>
+            <span>{{ section.title }}</span>
+          </template>
           <el-menu-item
             v-for="item in section.children"
             :key="item.path"
@@ -33,7 +40,7 @@
               <span>{{ item.title }}</span>
             </template>
           </el-menu-item>
-        </template>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
 
@@ -134,6 +141,13 @@ import { Search, Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { buildNavigation } from '@/router/adminRoutes'
 import { getPendingCount } from '@/api/reservation'
+import {
+  ensureActiveGroup,
+  getNavigationStorageKey,
+  getWorkspaceLabel,
+  loadOpenGroups,
+  saveOpenGroups
+} from '@/utils/navigationState'
 
 const route = useRoute()
 const router = useRouter()
@@ -142,12 +156,15 @@ const isCollapse = ref(false)
 const quickSearchVisible = ref(false)
 const quickKeyword = ref('')
 const pendingCount = ref(0)
+const openGroups = ref([])
 let pendingRequestVersion = 0
 
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '工作台')
 const currentDescription = computed(() => route.meta.description || '功能房预约管理后台')
 const navigation = computed(() => buildNavigation(userStore.userInfo.role || 'admin'))
+const workspaceLabel = computed(() => getWorkspaceLabel(userStore.userInfo.role))
+const navigationStateKey = computed(() => getNavigationStorageKey(userStore.userInfo))
 const quickEntries = computed(() => navigation.value.flatMap(section => section.children))
 const filteredQuickEntries = computed(() => {
   const keyword = quickKeyword.value.trim().toLowerCase()
@@ -161,7 +178,7 @@ const avatarText = computed(() => {
 
 const roleMap = {
   super_admin: '超级管理员',
-  admin: '管理员',
+  admin: '导生管理员',
   counselor: '辅导员'
 }
 
@@ -185,7 +202,39 @@ async function loadPendingCount() {
 
 watch(() => userStore.token, loadPendingCount, { immediate: true })
 watch(() => route.fullPath, loadPendingCount)
+watch(
+  navigationStateKey,
+  () => {
+    openGroups.value = ensureActiveGroup(
+      loadOpenGroups(window.localStorage, userStore.userInfo),
+      navigation.value,
+      route.path
+    )
+  },
+  { immediate: true }
+)
+watch(
+  () => route.path,
+  path => {
+    const nextGroups = ensureActiveGroup(openGroups.value, navigation.value, path)
+    if (nextGroups.length !== openGroups.value.length) {
+      openGroups.value = nextGroups
+      saveOpenGroups(window.localStorage, userStore.userInfo, nextGroups)
+    }
+  }
+)
 onBeforeUnmount(() => { pendingRequestVersion += 1 })
+
+function handleGroupOpen(groupKey) {
+  if (openGroups.value.includes(groupKey)) return
+  openGroups.value = [...openGroups.value, groupKey]
+  saveOpenGroups(window.localStorage, userStore.userInfo, openGroups.value)
+}
+
+function handleGroupClose(groupKey) {
+  openGroups.value = openGroups.value.filter(key => key !== groupKey)
+  saveOpenGroups(window.localStorage, userStore.userInfo, openGroups.value)
+}
 
 function goPending() {
   const target = userStore.userInfo.role === 'counselor'
@@ -301,14 +350,7 @@ function handleCommand(command) {
   width: 0;
 }
 
-.menu-section-title {
-  padding: 14px 18px 6px;
-  color: rgba(255, 255, 255, 0.38);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
+.aside-menu :deep(.el-sub-menu__title),
 .aside-menu :deep(.el-menu-item) {
   height: 42px;
   line-height: 42px;
@@ -317,9 +359,27 @@ function handleCommand(command) {
   transition: background-color var(--jy-motion-fast, 160ms) ease, transform var(--jy-motion-fast, 160ms) ease, color var(--jy-motion-fast, 160ms) ease;
 }
 
+.aside-menu :deep(.el-sub-menu__title) {
+  color: rgba(255, 255, 255, 0.82) !important;
+  font-weight: 700;
+}
+
+.aside-menu :deep(.el-sub-menu__title:hover),
 .aside-menu :deep(.el-menu-item:hover) {
   background-color: rgba(255, 255, 255, 0.08) !important;
   transform: translateX(3px);
+}
+
+.aside-menu :deep(.el-sub-menu .el-menu-item) {
+  min-width: 0;
+  margin-left: 18px;
+  padding-left: 18px !important;
+  background: transparent;
+}
+
+.aside-menu.el-menu--collapse :deep(.el-sub-menu__title) {
+  margin-left: 7px;
+  margin-right: 7px;
 }
 
 .aside-menu :deep(.el-menu-item.is-active) {
