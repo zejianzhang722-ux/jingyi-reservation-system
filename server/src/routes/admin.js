@@ -34,7 +34,7 @@ router.delete('/buildings/:id', auth, requireRole('super_admin'), adminControlle
 router.get('/managers', auth, requireRole('super_admin'), accountController.getManagers);
 router.post('/managers', auth, requireRole('super_admin'), accountController.createAccount);
 router.put('/managers/:id', auth, requireRole('super_admin'), accountController.updateAccount);
-router.delete('/managers/:id', auth, requireRole('super_admin'), adminController.deleteManager);
+router.delete('/managers/:id', auth, requireRole('super_admin'), accountController.deleteAccount);
 
 router.get('/operation-logs', auth, requireRole('super_admin'), adminController.operationLogs);
 

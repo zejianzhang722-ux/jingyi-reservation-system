@@ -146,12 +146,37 @@ async function main() {
       headers: jsonAuthHeaders(superAdmin.token),
       body: JSON.stringify({ username: 'scope_building', password: 'test1234', realName: '楼栋导生', role: 'admin', scopeType: 'building', buildingId: 2 })
     }), 200, 'super administrator creates building guide')
-    const accountList = await api('/admin/accounts?role=admin&pageSize=100', { headers: authHeaders(superAdmin.token) })
+    const managerList = await api('/admin/accounts?accountType=manager&pageSize=100', { headers: authHeaders(superAdmin.token) })
+    expectStatus(managerList, 200, 'manager account list')
+    assert(managerList.json.data.list.length > 0, 'manager account list should not be empty')
+    assert(managerList.json.data.list.every(function(item) { return item.accountType === 'manager' && item.role !== 'student' }), 'manager account list must contain managers only')
+    const studentList = await api('/admin/accounts?accountType=student&pageSize=100', { headers: authHeaders(superAdmin.token) })
+    expectStatus(studentList, 200, 'student account list')
+    assert(studentList.json.data.list.length > 0, 'student account list should not be empty')
+    assert(studentList.json.data.list.every(function(item) { return item.accountType === 'student' && item.role === 'student' }), 'student account list must contain students only')
+
+    const accountList = await api('/admin/accounts?accountType=manager&role=admin&pageSize=100', { headers: authHeaders(superAdmin.token) })
     expectStatus(accountList, 200, 'super administrator reads guide scopes')
     const createdGlobal = accountList.json.data.list.find(function(item) { return item.username === 'scope_global' })
     const createdBuilding = accountList.json.data.list.find(function(item) { return item.username === 'scope_building' })
     assert(createdGlobal && createdGlobal.scopeType === 'global' && !createdGlobal.buildingId, 'global guide scope must persist')
     assert(createdBuilding && createdBuilding.scopeType === 'building' && Number(createdBuilding.buildingId) === 2, 'building guide scope must persist')
+    assert(createdGlobal.scopeLabel === '\u5168\u9662', 'global guide should display full-college scope')
+    assert(createdBuilding.buildingName === 'C\u5ea7' && createdBuilding.scopeLabel === 'C\u5ea7', 'building guide should display the real building name')
+
+    expectStatus(await api('/admin/accounts/admin-' + superAdmin.userInfo.id, {
+      method: 'PUT',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ status: 'disabled' })
+    }), 409, 'current super administrator cannot disable self')
+    expectStatus(await api('/admin/accounts/admin-' + superAdmin.userInfo.id, {
+      method: 'DELETE',
+      headers: authHeaders(superAdmin.token)
+    }), 409, 'current super administrator cannot delete self')
+    expectStatus(await api('/admin/managers/' + superAdmin.userInfo.id, {
+      method: 'DELETE',
+      headers: authHeaders(superAdmin.token)
+    }), 409, 'legacy manager endpoint cannot bypass self protection')
 
     for (let i = 0; i < 12; i++) {
       const repeatedStudentLogin = await api('/auth/login/student', {

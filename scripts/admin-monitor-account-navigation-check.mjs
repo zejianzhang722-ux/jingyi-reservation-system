@@ -50,6 +50,19 @@ assert.match(monitorSource, /timelineRequestCoordinator\.run/)
 assert.match(monitorSource, /timelineRequestCoordinator\.invalidate/)
 assert.doesNotMatch(monitorTemplate, /WebSocket|Token|\u4ee4\u724c/i)
 
+const accountSource = readFileSync(new URL('../admin/src/views/Account/Index.vue', import.meta.url), 'utf8')
+const accountTemplate = accountSource.split('<script setup>')[0] || ''
+assert.match(accountSource, /accountType:\s*activeTab\.value === 'manager' \? 'manager' : 'student'/)
+assert.doesNotMatch(accountTemplate, /label="\u8d26\u53f7ID"|prop="id"/)
+assert.doesNotMatch(accountTemplate, /\u4e0d\u540c\u8d26\u53f7\u5199\u5165\u4e0d\u540c\u6570\u636e\u8868|users \u8868|admins \u8868|\u83dc\u5355\u548c\u64cd\u4f5c\u5df2\u6309\u89d2\u8272\u88c1\u526a/)
+assert.match(accountTemplate, /\u6700\u8fd1\u767b\u5f55/)
+assert.match(accountSource, /isCurrentAccount/)
+assert.match(accountSource, /row\.scopeLabel/)
+assert.match(accountTemplate, /activeTab === 'student'[\s\S]{0,300}v-model="form\.buildingId"/)
+
+const adminRoutesSource = readFileSync(new URL('../server/src/routes/admin.js', import.meta.url), 'utf8')
+assert.match(adminRoutesSource, /router\.delete\('\/managers\/:id',[\s\S]*accountController\.deleteAccount/)
+
 const controllerSource = readFileSync(new URL('../server/src/controllers/roomController.js', import.meta.url), 'utf8')
 for (const field of ['reservationId', 'userName', 'purpose']) assert.match(controllerSource, new RegExp(field))
 

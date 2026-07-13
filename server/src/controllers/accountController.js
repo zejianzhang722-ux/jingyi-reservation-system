@@ -93,20 +93,24 @@ function paginateRows(rows, page, pageSize) {
 }
 
 async function getAdminRows() {
-  const [admins] = await db.query('SELECT id, username, real_name, role, building_id, scope_type, phone, status, last_login_at, created_at FROM admins ORDER BY id ASC');
+  const [admins] = await db.query(
+    'SELECT a.id, a.username, a.real_name, a.role, a.building_id, a.scope_type, a.phone, a.status, a.last_login_at, a.created_at, b.name AS building_name FROM admins a LEFT JOIN buildings b ON a.building_id = b.id ORDER BY a.id ASC'
+  );
   return admins.map(function(row) {
     const role = normalizeRole(row.role);
+    const isGlobal = role === 'super_admin' || role === 'counselor' || row.scope_type === 'global';
     return {
       id: accountId('admin', row.id),
       rawId: row.id,
-      accountType: 'admin',
+      accountType: 'manager',
       username: row.username,
       realName: row.real_name || row.username || '',
       name: row.real_name || row.username || '',
       role: role,
       buildingId: row.building_id,
+      buildingName: row.building_name || '',
       scopeType: row.scope_type,
-      scopeLabel: row.scope_type === 'global' ? '全院' : (row.building_id ? '楼栋 ' + row.building_id : '待设置'),
+      scopeLabel: isGlobal ? '全院' : (row.building_name || '待设置'),
       phone: row.phone || '',
       email: '',
       status: row.status || 'active',
@@ -118,7 +122,7 @@ async function getAdminRows() {
 
 async function getStudentRows() {
   const [students] = await db.query(
-    'SELECT id, student_id, student_no, card_no, name, real_name, building_id, phone, status, credit_score, created_at FROM users ORDER BY created_at DESC'
+    'SELECT u.id, u.student_id, u.student_no, u.card_no, u.name, u.real_name, u.building_id, u.phone, u.status, u.credit_score, u.created_at, b.name AS building_name FROM users u LEFT JOIN buildings b ON u.building_id = b.id ORDER BY u.created_at DESC'
   );
   return students.map(function(row) {
     const studentNo = row.student_no || row.student_id || '';
@@ -133,6 +137,7 @@ async function getStudentRows() {
       name: row.real_name || row.name || '',
       role: 'student',
       buildingId: row.building_id,
+      buildingName: row.building_name || '',
       phone: row.phone || '',
       status: row.status || 'active',
       creditScore: row.credit_score,
@@ -144,22 +149,25 @@ async function getStudentRows() {
 const getAccounts = async function(req, res) {
   try {
     const { page = 1, pageSize = 20, role, status, keyword } = req.query;
+    const requestedAccountType = req.query.accountType || 'manager';
     const operatorRole = normalizeRole(req.user && req.user.role);
     if (operatorRole !== 'super_admin') return response.error(res, '仅超级管理员可管理账号', 403);
     const allowedRoles = allowedRolesFor(operatorRole);
     const requestedRole = role ? normalizeRole(role) : null;
+
+    if (requestedAccountType !== 'manager' && requestedAccountType !== 'student') {
+      return response.error(res, '账号类型无效', 400);
+    }
 
     if (requestedRole && allowedRoles.indexOf(requestedRole) === -1) {
       return response.paginate(res, [], 0, page, pageSize);
     }
 
     let rows = [];
-    const shouldLoadAdmins = !requestedRole
+    const shouldLoadAdmins = requestedAccountType === 'manager' && (!requestedRole
       ? allowedRoles.some(function(r) { return ADMIN_ROLES.indexOf(r) !== -1; })
-      : ADMIN_ROLES.indexOf(requestedRole) !== -1;
-    const shouldLoadStudents = !requestedRole
-      ? allowedRoles.indexOf(STUDENT_ROLE) !== -1
-      : requestedRole === STUDENT_ROLE;
+      : ADMIN_ROLES.indexOf(requestedRole) !== -1);
+    const shouldLoadStudents = requestedAccountType === 'student' && (!requestedRole || requestedRole === STUDENT_ROLE) && allowedRoles.indexOf(STUDENT_ROLE) !== -1;
 
     if (shouldLoadAdmins) rows = rows.concat(await getAdminRows());
     if (shouldLoadStudents) rows = rows.concat(await getStudentRows());
@@ -264,6 +272,9 @@ const updateAccount = async function(req, res) {
     if (normalizeRole(req.user.role) !== 'super_admin') return response.error(res, '仅超级管理员可修改管理账号', 403);
     const [admins] = await db.query('SELECT id, role, building_id, scope_type FROM admins WHERE id = ?', [account.id]);
     if (!admins.length) return response.error(res, '管理员账号不存在', 404);
+    const isCurrentAdmin = Number(req.user.id) === Number(account.id);
+    const disablingSelf = isCurrentAdmin && req.body.status !== undefined && normalizeAdminStatus(req.body.status) !== 'active';
+    if (disablingSelf) return response.error(res, '不能停用当前登录账号', 409);
     const currentRole = normalizeRole(admins[0].role);
     const nextRole = req.body.role ? normalizeRole(req.body.role) : currentRole;
     const scope = normalizeAdminScope(nextRole, req.body.scopeType !== undefined ? req.body.scopeType : admins[0].scope_type, req.body.buildingId !== undefined ? req.body.buildingId : admins[0].building_id);
@@ -317,6 +328,7 @@ const deleteAccount = async function(req, res) {
 
     const [admins] = await db.query('SELECT role, building_id FROM admins WHERE id = ?', [account.id]);
     if (!admins.length) return response.error(res, '管理员账号不存在', 404);
+    if (Number(req.user.id) === Number(account.id)) return response.error(res, '不能停用当前登录账号', 409);
     const targetRole = normalizeRole(admins[0].role);
     if (targetRole === 'super_admin') return response.error(res, '不能删除超级管理员账号', 403);
     if (!canManageRole(req.user.role, targetRole)) return response.error(res, '权限不足', 403);

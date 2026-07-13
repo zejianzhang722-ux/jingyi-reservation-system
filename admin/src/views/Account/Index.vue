@@ -13,18 +13,6 @@
       </el-button>
     </template>
 
-    <el-row :gutter="16">
-      <el-col :xs="24" :sm="8">
-        <MetricCard label="当前角色" :value="roleLabel" caption="菜单和操作已按角色裁剪" icon="UserFilled" tone="primary" />
-      </el-col>
-      <el-col :xs="24" :sm="8">
-        <MetricCard label="当前页签" :value="activeTab === 'student' ? '宿生账号' : '管理账号'" caption="不同账号写入不同数据表" icon="Tickets" tone="success" />
-      </el-col>
-      <el-col :xs="24" :sm="8">
-        <MetricCard label="列表总数" :value="pagination.total" caption="按筛选条件实时统计" icon="DataAnalysis" tone="warning" />
-      </el-col>
-    </el-row>
-
     <el-card shadow="never" class="account-card">
       <el-tabs v-model="activeTab" @tab-change="handleTabChange">
         <el-tab-pane label="宿生账号" name="student" />
@@ -46,13 +34,15 @@
       </FilterBar>
 
       <el-table :data="tableData" v-loading="loading" stripe class="account-table">
-        <el-table-column prop="id" label="账号ID" width="110" />
         <el-table-column prop="username" :label="activeTab === 'student' ? '学号' : '账号'" width="150" />
         <el-table-column prop="realName" label="姓名" width="140" />
-        <el-table-column prop="role" label="角色" width="150">
+        <el-table-column v-if="activeTab === 'manager'" prop="role" label="角色" width="150">
           <template #default="{ row }">
             <el-tag :type="roleMap[row.role]?.type" size="small">{{ roleMap[row.role]?.label || row.role }}</el-tag>
           </template>
+        </el-table-column>
+        <el-table-column v-if="activeTab === 'manager'" prop="phone" label="联系电话" width="140">
+          <template #default="{ row }">{{ row.phone || '-' }}</template>
         </el-table-column>
         <el-table-column v-if="activeTab === 'student'" prop="creditScore" label="信用分" width="100">
           <template #default="{ row }">
@@ -64,14 +54,19 @@
             <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="scopeLabel" label="数据范围" width="140">
-          <template #default="{ row }">{{ row.accountType === 'student' ? (row.buildingId || '未分配') : (row.scopeLabel || '待设置') }}</template>
+        <el-table-column :label="activeTab === 'student' ? '所属楼栋' : '管理范围'" width="140">
+          <template #default="{ row }">{{ activeTab === 'student' ? (row.buildingName || '未分配') : (row.scopeLabel || '待设置') }}</template>
+        </el-table-column>
+        <el-table-column v-if="activeTab === 'manager'" prop="lastLoginAt" label="最近登录" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.lastLoginAt || '暂无记录' }}</template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip />
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="handleEdit(row)">编辑</el-button>
+            <el-tag v-if="isCurrentAccount(row)" type="info" size="small">当前账号</el-tag>
             <el-button
+              v-else
               type="danger"
               size="small"
               link
@@ -97,7 +92,7 @@
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑账号' : '新增账号'" width="520px" @close="resetForm">
       <el-alert
-        :title="activeTab === 'student' ? '宿生账号将写入 users 表，密码字段对应一卡通卡号。' : '管理账号将写入 admins 表，请按职责选择角色和楼栋范围。'"
+        :title="activeTab === 'student' ? '请使用宿生学号和一卡通号创建账号，并确认所属楼栋。' : '请根据实际职责选择管理角色和管理范围。'"
         type="info"
         show-icon
         :closable="false"
@@ -113,6 +108,11 @@
         <el-form-item label="角色" prop="role">
           <el-select v-model="form.role" style="width: 100%" :disabled="activeTab === 'student'" @change="handleRoleChange">
             <el-option v-for="opt in roleOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="activeTab === 'student'" label="所属楼栋" prop="buildingId">
+          <el-select v-model="form.buildingId" style="width: 100%" placeholder="请选择宿生所属楼栋">
+            <el-option v-for="item in buildingOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
         <template v-if="activeTab === 'manager'">
@@ -165,7 +165,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
-import MetricCard from '@/components/admin/MetricCard.vue'
 import { createActionLock, runLockedConfirmedAction } from '@/utils/approvalState'
 
 const userStore = useUserStore()
@@ -203,8 +202,6 @@ const statusMap = {
   restricted: { label: '受限', type: 'warning' }
 }
 
-const roleLabel = computed(() => roleMap[currentRole.value]?.label || '管理员')
-
 const roleOptions = computed(() => {
   if (activeTab.value === 'student') return [{ label: '宿生', value: 'student' }]
   const all = [
@@ -223,7 +220,7 @@ const rules = computed(() => ({
   password: [{ required: !isEdit.value, message: activeTab.value === 'student' ? '请输入一卡通卡号' : '请输入密码', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
   scopeType: [{ required: activeTab.value === 'manager', message: '请选择数据范围', trigger: 'change' }],
-  buildingId: [{ required: form.role === 'admin' && form.scopeType === 'building', message: '请选择楼栋', trigger: 'change' }]
+  buildingId: [{ required: activeTab.value === 'student' || (form.role === 'admin' && form.scopeType === 'building'), message: '请选择楼栋', trigger: 'change' }]
 }))
 
 async function loadData() {
@@ -232,6 +229,7 @@ async function loadData() {
     const params = {
       page: pagination.page,
       pageSize: pagination.pageSize,
+      accountType: activeTab.value === 'manager' ? 'manager' : 'student',
       role: activeTab.value === 'student' ? 'student' : (filters.role || undefined),
       status: filters.status || undefined,
       keyword: filters.keyword || undefined
@@ -278,8 +276,11 @@ function handleEdit(row) {
 }
 
 async function handleDelete(row) {
+  const impact = row.accountType === 'student'
+    ? '停用后，该宿生将无法登录和发起预约，已有记录会保留。'
+    : '停用后，该账号将无法登录后台和处理管理工作，已有记录会保留。'
   await runLockedConfirmedAction(actionLock, {
-    confirm: () => ElMessageBox.confirm(`确认停用账号“${row.username}”？`, '提示', { type: 'warning' }),
+    confirm: () => ElMessageBox.confirm(`确认停用账号“${row.username}”？${impact}`, '停用账号', { type: 'warning', confirmButtonText: '确认停用' }),
     action: () => remove(row.id),
     onSuccess: () => {
       ElMessage.success('已停用')
@@ -287,6 +288,10 @@ async function handleDelete(row) {
     },
     onStateChange: value => { actionSubmitting.value = value }
   })
+}
+
+function isCurrentAccount(row) {
+  return row.accountType === 'manager' && Number(row.rawId) === Number(userStore.userInfo?.id)
 }
 
 function resetForm() {
@@ -315,7 +320,7 @@ async function handleSubmit() {
       await update(form.id, data)
       ElMessage.success('更新成功')
     } else {
-      await create({ username: form.username, realName: form.realName, password: form.password, role: form.role, scopeType: form.scopeType, buildingId: form.buildingId })
+      await create({ accountType: activeTab.value, username: form.username, realName: form.realName, password: form.password, role: form.role, scopeType: form.scopeType, buildingId: form.buildingId })
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
