@@ -66,6 +66,7 @@ assert.match(accountSource, /accountRequest\.invalidate/)
 assert.match(accountSource, /onBeforeUnmount/)
 assert.match(accountSource, /isEditingCurrentAccount/)
 assert.match(accountSource, /row\['\u7ba1\u7406\u8303\u56f4'\]\s*\|\|\s*row\['\u6570\u636e\u8303\u56f4'\]/)
+assert.doesNotMatch(accountSource, /scopeLabel\s*\|\|\s*\(buildingName\s*\?\s*'building'/)
 assert.match(accountSource, /row\['\u697c\u680b'\]/)
 assert.match(accountSource, /buildingName/)
 assert.match(accountSource, /scopeType/)
@@ -77,6 +78,7 @@ assert.match(importControllerSource, /require\('\.\.\/utils\/adminScope'\)/)
 assert.match(accountControllerSource, /require\('\.\.\/utils\/adminScope'\)/)
 assert.match(importControllerSource, /scope_type/)
 assert.match(importControllerSource, /FROM buildings/)
+assert.doesNotMatch(importControllerSource, /req\.adminScope[\s\S]{0,160}createStudent|createStudent[\s\S]{0,500}req\.adminScope/)
 
 const adminRoutesSource = readFileSync(new URL('../server/src/routes/admin.js', import.meta.url), 'utf8')
 assert.match(adminRoutesSource, /router\.delete\('\/managers\/:id',[\s\S]*accountController\.deleteAccount/)
@@ -85,8 +87,19 @@ const controllerSource = readFileSync(new URL('../server/src/controllers/roomCon
 for (const field of ['reservationId', 'userName', 'purpose']) assert.match(controllerSource, new RegExp(field))
 
 let studyMode = false
+let accountImportMode = false
+let importedStudentInsert = null
 const mockDb = {
-  async query(sql) {
+  async query(sql, params) {
+    if (accountImportMode && sql.includes('FROM buildings')) return [[
+      { id: 1, name: 'B\u5ea7', code: 'B' },
+      { id: 2, name: 'C\u5ea7', code: 'C' }
+    ]]
+    if (accountImportMode && sql.includes('SELECT id FROM users')) return [[]]
+    if (accountImportMode && sql.startsWith('INSERT INTO users')) {
+      importedStudentInsert = { sql, params }
+      return [{ insertId: 901 }]
+    }
     if (studyMode && sql.includes('FROM rooms WHERE id')) return [[{ id: 8, name: '自习室', type: 'study_room', capacity: 1, open_start_time: '08:00', open_end_time: '08:30' }]]
     if (studyMode && sql.includes('FROM seats')) return [[{ id: 1, status: 'available', seat_number: 'A1', row_num: 1, col_num: 1 }]]
     if (studyMode && sql.includes('FROM reservations')) return [[{ id: 55, user_id: 5, seat_id: 1, start_time: '08:00', end_time: '08:30', status: 'approved' }]]
@@ -123,6 +136,23 @@ assert.equal(responseBody.data.timeline[0].purpose, '')
 studyMode = true
 await roomController.timeline({ params: { id: '8' }, query: { date: '2026-07-13' }, user: { id: 99, role: 'admin' } }, response)
 assert.deepEqual(responseBody.data.timeline[0].reservationIds, [55])
+
+accountImportMode = true
+const accountImportController = require('../server/src/controllers/accountImportController.js')
+await accountImportController.importAccounts({
+  body: { rows: [{
+    accountType: 'student', username: '2024999099', password: '299099', realName: '\u697c\u680b\u8303\u56f4\u9a8c\u8bc1',
+    role: 'student', scopeType: 'global', buildingName: 'C\u5ea7', phone: '13900009099'
+  }] },
+  user: { id: 2, role: 'super_admin' },
+  adminScope: { isGlobal: false, buildingId: 1 }
+}, response)
+assert.equal(responseBody.code, 200)
+assert.equal(responseBody.data.successCount, 1)
+assert.ok(importedStudentInsert)
+assert.equal(importedStudentInsert.params[6], 2)
+assert.equal(importedStudentInsert.params[7], '13900009099')
+accountImportMode = false
 
 const deduplicatedView = buildTimelineView({
   timeline: [

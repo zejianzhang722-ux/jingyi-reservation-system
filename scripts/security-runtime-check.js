@@ -207,15 +207,17 @@ async function main() {
         { accountType: 'manager', username: 'import_global_guide', password: 'test1234', realName: '\u5168\u9662\u5bfc\u751f', role: 'admin', scopeType: 'global' },
         { accountType: 'manager', username: 'import_building_guide', password: 'test1234', realName: '\u697c\u680b\u5bfc\u751f', role: 'admin', scopeType: 'building', buildingName: 'C\u5ea7' },
         { accountType: 'manager', username: 'import_counselor', password: 'test1234', realName: '\u5bfc\u5165\u8f85\u5bfc\u5458', role: 'counselor', scopeType: 'building', buildingName: 'B\u5ea7' },
-        { accountType: 'student', username: '2024999011', password: '299011', realName: '\u5bfc\u5165\u5bbf\u751f', role: 'student', scopeType: 'global', buildingName: 'B\u5ea7' },
+        { accountType: 'student', username: '2024999011', password: '299011', realName: '\u5bfc\u5165\u5bbf\u751f', role: 'student', scopeType: 'global', buildingName: 'B\u5ea7', phone: '13900009011' },
         { '\u8d26\u53f7\u7c7b\u578b': '\u7ba1\u7406\u8d26\u53f7', '\u8d26\u53f7': 'import_building_id', '\u5bc6\u7801': 'test1234', '\u59d3\u540d': '\u697c\u680b\u7f16\u53f7\u5bfc\u751f', '\u89d2\u8272': '\u5bfc\u751f\u7ba1\u7406\u5458', '\u7ba1\u7406\u8303\u56f4': '\u6307\u5b9a\u697c\u680b', '\u697c\u680bID': 3 },
         { accountType: 'manager', username: 'import_unknown_building', password: 'test1234', realName: '\u672a\u77e5\u697c\u680b', role: 'admin', scopeType: 'building', buildingName: '\u4e0d\u5b58\u5728\u697c\u680b' },
-        { accountType: 'manager', username: 'import_missing_scope', password: 'test1234', realName: '\u7f3a\u5c11\u8303\u56f4', role: 'admin' },
+        { accountType: 'manager', username: 'import_missing_scope', password: 'test1234', realName: '\u7f3a\u5c11\u8303\u56f4', role: 'admin', buildingName: 'B\u5ea7' },
+        { accountType: 'manager', username: 'import_invalid_scope', password: 'test1234', realName: '\u8303\u56f4\u9519\u8bef', role: 'admin', scopeType: 'other', buildingName: 'B\u5ea7' },
+        { accountType: 'student', username: '2024999012', password: '299012', realName: '\u7f3a\u697c\u680b\u5bbf\u751f', role: 'student', scopeType: 'building' },
         { accountType: 'unknown', username: 'import_unknown_type', password: 'test1234', realName: '\u7c7b\u578b\u9519\u8bef', role: 'admin', scopeType: 'global' }
       ] })
     })
     expectStatus(importedAccounts, 200, 'batch account import')
-    assert(importedAccounts.json.data.successCount === 5 && importedAccounts.json.data.failCount === 3, 'batch import should accept valid scope rows and reject invalid rows individually')
+    assert(importedAccounts.json.data.successCount === 5 && importedAccounts.json.data.failCount === 5, 'batch import should accept valid scope rows and reject invalid rows individually')
     const unknownBuildingFailure = importedAccounts.json.data.results.find(function(item) { return item.username === 'import_unknown_building' })
     const missingScopeFailure = importedAccounts.json.data.results.find(function(item) { return item.username === 'import_missing_scope' })
     assert(unknownBuildingFailure && unknownBuildingFailure.status === 'failed' && /\u697c\u680b/.test(unknownBuildingFailure.reason), 'unknown building should report a clear row error')
@@ -231,11 +233,14 @@ async function main() {
     assert(importedBuildingGuide && importedBuildingGuide.scopeType === 'building' && importedBuildingGuide.buildingName === 'C\u5ea7', 'imported building guide should resolve and persist the building name')
     assert(importedBuildingIdGuide && importedBuildingIdGuide.scopeType === 'building' && importedBuildingIdGuide.buildingName === 'D\u5ea7', 'Chinese import columns should resolve and persist a valid building id')
     assert(importedCounselor && importedCounselor.scopeType === 'global' && !importedCounselor.buildingId, 'imported counselor must be forced to full-college scope')
+    assert(!importedManagerList.json.data.list.some(function(item) { return ['import_unknown_building', 'import_missing_scope', 'import_invalid_scope', 'import_unknown_type'].includes(item.username) }), 'failed manager import rows must not create database accounts')
 
     const importedStudentList = await api('/admin/accounts?accountType=student&pageSize=100', { headers: authHeaders(superAdmin.token) })
     expectStatus(importedStudentList, 200, 'read imported student building')
     const importedStudent = importedStudentList.json.data.list.find(function(item) { return item.username === '2024999011' })
     assert(importedStudent && importedStudent.buildingName === 'B\u5ea7', 'student import should keep its own building and ignore manager scope fields')
+    assert(importedStudent.phone === '13900009011', 'student import should persist the phone number')
+    assert(!importedStudentList.json.data.list.some(function(item) { return item.username === '2024999012' }), 'student import without a building must not create an account')
 
     expectStatus(await api('/admin/accounts/admin-' + superAdmin.userInfo.id, {
       method: 'PUT',

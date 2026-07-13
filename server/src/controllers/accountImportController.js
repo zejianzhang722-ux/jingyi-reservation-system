@@ -81,21 +81,19 @@ function resolveBuilding(row, buildingLookup, required) {
   return Number(building.id);
 }
 
-async function createStudent(row, req, buildingLookup) {
+async function createStudent(row, buildingLookup) {
   const [existing] = await db.query('SELECT id FROM users WHERE student_id = ? OR student_no = ?', [row.username, row.username]);
   if (existing.length) throw new Error('学号已存在');
-  const buildingId = req.adminScope && !req.adminScope.isGlobal
-    ? req.adminScope.buildingId
-    : resolveBuilding(row, buildingLookup, false);
+  const buildingId = resolveBuilding(row, buildingLookup, true);
   const initialScore = (config.credit && config.credit.initialScore) || 100;
   const [result] = await db.query(
-    'INSERT INTO users (student_id, student_no, card_no, real_name, name, role, building_id, credit_score, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-    [row.username, row.username, row.password, row.realName, row.realName, 'student', buildingId || null, initialScore, 'active']
+    'INSERT INTO users (student_id, student_no, card_no, real_name, name, role, building_id, phone, credit_score, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+    [row.username, row.username, row.password, row.realName, row.realName, 'student', buildingId, row.phone || '', initialScore, 'active']
   );
   return { id: 'student-' + result.insertId };
 }
 
-async function createAdmin(row, req, buildingLookup) {
+async function createAdmin(row, buildingLookup) {
   const [existing] = await db.query('SELECT id FROM admins WHERE username = ?', [row.username]);
   if (existing.length) throw new Error('用户名已存在');
   let buildingId = null;
@@ -137,8 +135,8 @@ const importAccounts = async function(req, res) {
         }
         if (!canManageRole(operatorRole, row.role)) throw new Error('无权导入该角色');
         const created = row.accountType === 'student'
-          ? await createStudent(row, req, buildingLookup)
-          : await createAdmin(row, req, buildingLookup);
+          ? await createStudent(row, buildingLookup)
+          : await createAdmin(row, buildingLookup);
         successCount++;
         results.push({ rowNumber, status: 'success', id: created.id, username: row.username });
       } catch (err) {

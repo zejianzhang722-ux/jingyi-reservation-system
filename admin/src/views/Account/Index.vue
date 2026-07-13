@@ -373,7 +373,7 @@ async function doImport() {
         realName: row['真实姓名'] || row['姓名'] || '',
         password: row['密码'] || row['一卡通卡号'] || '',
         role: activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin'),
-        scopeType: activeTab.value === 'manager' ? (excelScopeMap[scopeLabel] || scopeLabel || (buildingName ? 'building' : '')) : undefined,
+        scopeType: activeTab.value === 'manager' ? (excelScopeMap[scopeLabel] || scopeLabel || '') : undefined,
         buildingId: row['楼栋ID'] || undefined,
         buildingName,
         phone: row['电话'] || row['手机号'] || ''
