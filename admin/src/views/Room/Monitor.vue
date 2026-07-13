@@ -29,7 +29,7 @@
         <el-form-item>
           <el-tooltip :content="socketStatusMessage" placement="bottom">
             <el-tag :type="socketConnected ? 'success' : 'danger'">
-              {{ socketConnected ? 'WebSocket 已连接' : 'WebSocket 未连接' }}
+              {{ socketConnected ? '实时更新正常' : '实时更新暂不可用' }}
             </el-tag>
           </el-tooltip>
         </el-form-item>
@@ -63,18 +63,51 @@
       </el-card>
     </div>
 
-    <el-dialog v-model="timelineDialogVisible" :title="`${currentRoom?.name || ''} - 时间线详情`" width="760px">
-      <div ref="timelineDetailRef" class="timeline-chart"></div>
+    <el-dialog v-model="timelineDialogVisible" :title="`${currentRoom?.name || ''} - 今日使用安排`" width="860px">
+      <div class="timeline-overview">
+        <div><span>日期</span><strong>{{ timelineDate }}</strong></div>
+        <div><span>开放时间</span><strong>{{ roomOpeningHours }}</strong></div>
+        <div><span>当前状态</span><strong>{{ getRoomStatusLabel(currentRoom?.currentStatus || currentRoom?.status) }}</strong></div>
+        <div><span>预约数量</span><strong>{{ timelineView.summary.reservationCount }}</strong></div>
+      </div>
+
+      <div class="timeline-legend" aria-label="时间格图例">
+        <span v-for="item in timelineLegend" :key="item.status"><i :class="item.status"></i>{{ item.label }}</span>
+      </div>
+
+      <div v-if="timelineLoading" class="timeline-message">正在加载今日安排…</div>
+      <div v-else-if="timelineError" class="timeline-message error-message">
+        <strong>暂时无法加载</strong>
+        <span>请检查网络后重试</span>
+        <el-button type="primary" plain @click="retryTimeline">重试</el-button>
+      </div>
+      <div v-else-if="timelineView.emptyState" class="timeline-message">
+        <strong>{{ timelineView.emptyState.title }}</strong>
+        <span>{{ timelineView.emptyState.description }}</span>
+      </div>
+      <div v-else class="timeline-grid">
+        <div v-for="slot in timelineView.slots" :key="`${slot.time}-${slot.reservationId || slot.status}`" class="timeline-slot" :class="slot.status">
+          <span class="slot-time">{{ slot.time }}</span>
+          <strong>{{ slot.label }}</strong>
+          <template v-if="isStudyRoom">
+            <small v-if="slot.totalCount">剩余 {{ slot.availableCount }}/{{ slot.totalCount }} 座</small>
+          </template>
+          <template v-else-if="slot.status === 'reserved' || slot.status === 'using'">
+            <small v-if="slot.userName">{{ slot.userName }}</small>
+            <small>{{ slot.timeRange }}</small>
+            <small v-if="slot.purpose">{{ slot.purpose }}</small>
+          </template>
+        </div>
+      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
-import * as echarts from 'echarts'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { io } from 'socket.io-client'
 import { getList, getTimeline, getBuildings } from '@/api/room'
-import { normalizeTimelineResponse, buildMiniTimeline, getTimelineSlotState } from '@/utils/roomTimeline'
+import { buildMiniTimeline, buildTimelineView } from '@/utils/roomTimeline'
 
 const filters = reactive({ buildingId: '', type: '' })
 const rooms = ref([])
@@ -83,9 +116,23 @@ const socketConnected = ref(false)
 const socketStatusMessage = ref('实时连接尚未建立')
 const timelineDialogVisible = ref(false)
 const currentRoom = ref(null)
-const timelineDetailRef = ref(null)
-let timelineChart = null
+const timelineLoading = ref(false)
+const timelineError = ref(false)
+const timelineView = ref(buildTimelineView([]))
+const timelineDate = ref('')
 let socket = null
+
+const timelineLegend = [
+  { status: 'available', label: '空闲' }, { status: 'reserved', label: '已预约' },
+  { status: 'using', label: '使用中' }, { status: 'maintenance', label: '维护' }
+]
+const isStudyRoom = computed(() => currentRoom.value?.type === 'study_room')
+const roomOpeningHours = computed(() => {
+  const room = currentRoom.value || {}
+  const start = room.openTime || room.open_time || room.openStartTime
+  const end = room.closeTime || room.close_time || room.openEndTime
+  return start && end ? `${start}-${end}` : '以场地当日安排为准'
+})
 
 const typeLabels = {
   study_room: '自习室', seminar_room: '共享空间', media_room: '影音室',
@@ -138,57 +185,40 @@ async function loadBuildings() {
 async function showTimeline(room) {
   currentRoom.value = room
   timelineDialogVisible.value = true
+  timelineDate.value = formatLocalDate(new Date())
+  await loadTimeline()
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+async function loadTimeline() {
+  if (!currentRoom.value) return
+  timelineLoading.value = true
+  timelineError.value = false
   try {
-    const res = await getTimeline(room.id, { date: new Date().toISOString().slice(0, 10) })
-    renderTimeline(res.data)
+    const res = await getTimeline(currentRoom.value.id, { date: timelineDate.value })
+    timelineView.value = buildTimelineView(res.data)
   } catch (e) {
-    renderTimeline(null)
+    timelineError.value = true
+  } finally {
+    timelineLoading.value = false
   }
 }
 
-function renderTimeline(data) {
-  setTimeout(() => {
-    if (timelineChart) timelineChart.dispose()
-    if (!timelineDetailRef.value) return
-
-    timelineChart = echarts.init(timelineDetailRef.value)
-    const slots = normalizeTimelineResponse(data)
-    const hours = slots.map(slot => slot.time)
-    const empty = !slots.length
-
-    timelineChart.setOption({
-      title: empty ? { text: '暂无时间线数据', left: 'center', top: 'middle', textStyle: { color: '#8C8C9A', fontSize: 14 } } : undefined,
-      tooltip: {
-        formatter: (p) => {
-          const slot = slots[p.dataIndex]
-          return slot ? getTimelineSlotState(slot).detail : '暂无时间线数据'
-        }
-      },
-      grid: { left: 24, right: 24, bottom: 32, top: 36, containLabel: true },
-      xAxis: { type: 'category', data: hours, axisLabel: { interval: 1 } },
-      yAxis: { type: 'category', data: ['状态'], axisLabel: { show: false } },
-      series: [{
-        type: 'heatmap',
-        data: slots.map((slot, i) => [i, 0, getTimelineSlotState(slot).occupied ? 1 : 0]),
-        label: {
-          show: true,
-          formatter: (p) => slots[p.dataIndex] ? getTimelineSlotState(slots[p.dataIndex]).label : '',
-          color: '#fff'
-        },
-        visualMap: false,
-        itemStyle: {
-          color: (p) => slots[p.dataIndex] && getTimelineSlotState(slots[p.dataIndex]).occupied ? '#FF4D4F' : '#52C41A'
-        }
-      }]
-    })
-  }, 100)
+function retryTimeline() {
+  loadTimeline()
 }
 
 function initSocket() {
   const token = localStorage.getItem('token') || ''
   if (!token) {
     socketConnected.value = false
-    socketStatusMessage.value = '缺少管理员访问令牌，请重新登录'
+    socketStatusMessage.value = '实时更新暂不可用，请重新登录'
     return
   }
 
@@ -201,18 +231,18 @@ function initSocket() {
   })
   socket.on('connect', () => {
     socketConnected.value = true
-    socketStatusMessage.value = '已通过管理员身份认证并连接实时服务'
+    socketStatusMessage.value = '场地状态将自动更新'
   })
   socket.on('disconnect', (reason) => {
     socketConnected.value = false
-    socketStatusMessage.value = `实时连接已断开：${reason}`
+    socketStatusMessage.value = '实时更新已暂停'
   })
   socket.on('connect_error', (error) => {
     socketConnected.value = false
-    socketStatusMessage.value = error?.message || '实时连接认证失败'
+    socketStatusMessage.value = '实时更新暂不可用'
   })
   socket.on('socket-error', (error) => {
-    socketStatusMessage.value = error?.message || '实时通道操作失败'
+    socketStatusMessage.value = '实时更新暂不可用'
   })
   socket.on('room-status-update', (data) => {
     const idx = rooms.value.findIndex(r => r.id === data.roomId)
@@ -228,7 +258,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   socket?.disconnect()
-  timelineChart?.dispose()
 })
 </script>
 
@@ -315,7 +344,111 @@ onBeforeUnmount(() => {
   color: #0066CC;
 }
 
-.timeline-chart {
-  height: 260px;
+.timeline-overview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.timeline-overview > div {
+  padding: 12px;
+  background: #f7f8fa;
+  border-radius: 8px;
+}
+
+.timeline-overview span,
+.timeline-overview strong {
+  display: block;
+}
+
+.timeline-overview span {
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: #8c8c9a;
+}
+
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 14px;
+  color: #606266;
+  font-size: 13px;
+}
+
+.timeline-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timeline-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.timeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+  max-height: 390px;
+  overflow-y: auto;
+}
+
+.timeline-slot {
+  min-height: 92px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f0f9eb;
+}
+
+.timeline-slot > * {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-slot .slot-time {
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.timeline-slot small {
+  margin-top: 4px;
+  color: #606266;
+}
+
+.timeline-slot.reserved { background: #fdf6ec; border-color: #e6a23c; }
+.timeline-slot.using { background: #ecf5ff; border-color: #409eff; }
+.timeline-slot.maintenance { background: #fef0f0; border-color: #f56c6c; }
+.timeline-legend .available { background: #67c23a; }
+.timeline-legend .reserved { background: #e6a23c; }
+.timeline-legend .using { background: #409eff; }
+.timeline-legend .maintenance { background: #f56c6c; }
+
+.timeline-message {
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #8c8c9a;
+}
+
+.timeline-message strong {
+  color: #303133;
+  font-size: 16px;
+}
+
+@media (max-width: 720px) {
+  .timeline-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>
