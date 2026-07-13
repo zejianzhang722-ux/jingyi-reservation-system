@@ -4,6 +4,38 @@ import { createRequire } from 'node:module'
 
 import { buildTimelineView, createLatestRequestGate, createTimelineRequestCoordinator } from '../admin/src/utils/roomTimeline.js'
 import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
+import { normalizeAccountImportRows, readAccountImportWorkbook } from '../admin/src/utils/accountImport.js'
+
+const require = createRequire(import.meta.url)
+const adminRequire = createRequire(new URL('../admin/package.json', import.meta.url))
+const XLSX = adminRequire('xlsx')
+
+const importWorkbook = XLSX.utils.book_new()
+const importSheet = XLSX.utils.aoa_to_sheet([
+  ['\u8d26\u53f7', '\u59d3\u540d', '\u5bc6\u7801', '\u89d2\u8272', '\u7ba1\u7406\u8303\u56f4', '\u697c\u680b', '\u7535\u8bdd'],
+  [123, ' \u5f20\u4e09 ', 45, ' \u5bfc\u751f\u7ba1\u7406\u5458 ', '', ' C\u5ea7 ', 678]
+])
+importSheet.A2.z = '000000'
+importSheet.C2.z = '000000'
+importSheet.G2.z = '00000000000'
+XLSX.utils.book_append_sheet(importWorkbook, importSheet, '\u8d26\u53f7')
+const importBuffer = XLSX.write(importWorkbook, { type: 'buffer', bookType: 'xlsx' })
+const displayedImportRows = readAccountImportWorkbook(XLSX, importBuffer)
+assert.equal(displayedImportRows.length, 1)
+assert.equal(displayedImportRows[0]['\u8d26\u53f7'], '000123')
+assert.equal(displayedImportRows[0]['\u5bc6\u7801'], '000045')
+assert.equal(displayedImportRows[0]['\u7535\u8bdd'], '00000000678')
+const normalizedImportRows = normalizeAccountImportRows(displayedImportRows, 'manager')
+assert.deepEqual(normalizedImportRows[0], {
+  accountType: 'manager', username: '000123', realName: '\u5f20\u4e09', password: '000045', role: 'admin',
+  scopeType: '', buildingId: '', buildingName: 'C\u5ea7', phone: '00000000678'
+})
+assert.deepEqual(normalizeAccountImportRows([{
+  '\u8d26\u53f7': 0, '\u59d3\u540d': ' \u674e\u56db ', '\u5bc6\u7801': 0, '\u697c\u680b': 0, '\u7535\u8bdd': 0
+}], 'student')[0], {
+  accountType: 'student', username: '0', realName: '\u674e\u56db', password: '0', role: 'student',
+  scopeType: '', buildingId: '', buildingName: '0', phone: '0'
+})
 
 const timelineView = buildTimelineView({
   openStartTime: '08:00',
@@ -65,12 +97,19 @@ assert.match(accountSource, /accountRequest\.run/)
 assert.match(accountSource, /accountRequest\.invalidate/)
 assert.match(accountSource, /onBeforeUnmount/)
 assert.match(accountSource, /isEditingCurrentAccount/)
-assert.match(accountSource, /row\['\u7ba1\u7406\u8303\u56f4'\]\s*\|\|\s*row\['\u6570\u636e\u8303\u56f4'\]/)
-assert.doesNotMatch(accountSource, /scopeLabel\s*\|\|\s*\(buildingName\s*\?\s*'building'/)
-assert.match(accountSource, /row\['\u697c\u680b'\]/)
 assert.match(accountSource, /buildingName/)
 assert.match(accountSource, /scopeType/)
 assert.match(accountTemplate, /\u7ba1\u7406\u8d26\u53f7\u6a21\u677f[\s\S]{0,260}\u7ba1\u7406\u8303\u56f4/)
+assert.match(accountSource, /normalizeAccountImportRows/)
+assert.match(accountSource, /readAccountImportWorkbook/)
+assert.match(accountSource, /importResult/)
+assert.match(accountTemplate, /\u6210\u529f\u9879\u5df2\u4fdd\u5b58\uff0c\u65e0\u9700\u91cd\u590d\u5bfc\u5165/)
+assert.match(accountTemplate, /failure\.rowNumber/)
+assert.match(accountTemplate, /failure\.username/)
+assert.match(accountTemplate, /failure\.reason/)
+assert.match(accountSource, /if\s*\(failures\.length\s*===\s*0\)[\s\S]{0,100}importDialogVisible\.value\s*=\s*false/)
+assert.match(accountSource, /clearImportSelection/)
+assert.match(accountTemplate, /:disabled="actionSubmitting\s*\|\|\s*!!importResult"/)
 
 const importControllerSource = readFileSync(new URL('../server/src/controllers/accountImportController.js', import.meta.url), 'utf8')
 const accountControllerSource = readFileSync(new URL('../server/src/controllers/accountController.js', import.meta.url), 'utf8')
@@ -78,6 +117,7 @@ assert.match(importControllerSource, /require\('\.\.\/utils\/adminScope'\)/)
 assert.match(accountControllerSource, /require\('\.\.\/utils\/adminScope'\)/)
 assert.match(importControllerSource, /scope_type/)
 assert.match(importControllerSource, /FROM buildings/)
+assert.doesNotMatch(importControllerSource, /SELECT id, name, code FROM buildings|building\.code/)
 assert.doesNotMatch(importControllerSource, /req\.adminScope[\s\S]{0,160}createStudent|createStudent[\s\S]{0,500}req\.adminScope/)
 
 const adminRoutesSource = readFileSync(new URL('../server/src/routes/admin.js', import.meta.url), 'utf8')
@@ -92,8 +132,8 @@ let importedStudentInsert = null
 const mockDb = {
   async query(sql, params) {
     if (accountImportMode && sql.includes('FROM buildings')) return [[
-      { id: 1, name: 'B\u5ea7', code: 'B' },
-      { id: 2, name: 'C\u5ea7', code: 'C' }
+      { id: 1, name: 'B\u5ea7' },
+      { id: 2, name: 'C\u5ea7' }
     ]]
     if (accountImportMode && sql.includes('SELECT id FROM users')) return [[]]
     if (accountImportMode && sql.startsWith('INSERT INTO users')) {
@@ -117,7 +157,6 @@ const mockDb = {
     throw new Error(`unexpected query: ${sql}`)
   }
 }
-const require = createRequire(import.meta.url)
 const databasePath = require.resolve('../server/src/config/database.js')
 require.cache[databasePath] = { id: databasePath, filename: databasePath, loaded: true, exports: mockDb, children: [], paths: [] }
 const roomController = require('../server/src/controllers/roomController.js')

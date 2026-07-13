@@ -65,7 +65,6 @@ function createBuildingLookup(buildings) {
   buildings.forEach(function(building) {
     lookup.set(String(building.id), building);
     if (building.name) lookup.set(String(building.name).trim().toLowerCase(), building);
-    if (building.code) lookup.set(String(building.code).trim().toLowerCase(), building);
   });
   return lookup;
 }
@@ -116,7 +115,7 @@ const importAccounts = async function(req, res) {
     if (!rows.length) return response.error(res, '导入数据不能为空', 400);
 
     const operatorRole = normalizeRole(req.user && req.user.role);
-    const [buildings] = await db.query('SELECT id, name, code FROM buildings');
+    const [buildings] = await db.query('SELECT id, name FROM buildings');
     const buildingLookup = createBuildingLookup(buildings);
     const results = [];
     let successCount = 0;

@@ -138,8 +138,8 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importDialogVisible" :title="activeTab === 'student' ? '导入宿生账号' : '导入管理账号'" width="520px">
-      <el-upload ref="uploadRef" action="" :auto-upload="false" :on-change="handleFileChange" accept=".xlsx,.xls" :limit="1">
+    <el-dialog v-model="importDialogVisible" :title="activeTab === 'student' ? '导入宿生账号' : '导入管理账号'" width="620px">
+      <el-upload ref="uploadRef" action="" :auto-upload="false" :on-change="handleFileChange" :on-remove="handleFileRemove" accept=".xlsx,.xls" :limit="1">
         <el-button type="primary">选择Excel文件</el-button>
         <template #tip>
           <div class="upload-tip">
@@ -149,9 +149,28 @@
           </div>
         </template>
       </el-upload>
+      <div v-if="importResult" class="import-result">
+        <el-alert
+          :title="`导入完成：成功 ${importResult.successCount} 个，失败 ${importResult.failCount} 个`"
+          :type="importFailures.length ? 'warning' : 'success'"
+          :closable="false"
+          show-icon
+        >
+          <template #default>成功项已保存，无需重复导入。</template>
+        </el-alert>
+        <div v-if="importFailures.length" class="import-failures">
+          <div class="failure-heading">以下账号需要修改后重新导入</div>
+          <div v-for="failure in importFailures" :key="`${failure.rowNumber}-${failure.username}`" class="failure-row">
+            <span>第 {{ failure.rowNumber }} 行</span>
+            <span>{{ failure.username || '未填写账号' }}</span>
+            <span>{{ failure.reason }}</span>
+          </div>
+          <el-button class="reselect-button" @click="clearImportSelection">清空并重新选择</el-button>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importLoading" :disabled="actionSubmitting" @click="doImport">确认导入</el-button>
+        <el-button type="primary" :loading="importLoading" :disabled="actionSubmitting || !!importResult" @click="doImport">确认导入</el-button>
       </template>
     </el-dialog>
   </PageShell>
@@ -167,6 +186,7 @@ import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import { createActionLock, runLockedConfirmedAction } from '@/utils/approvalState'
 import { createLatestRequest } from '@/utils/latestRequest'
+import { normalizeAccountImportRows, readAccountImportWorkbook } from '@/utils/accountImport'
 
 const userStore = useUserStore()
 const currentRole = computed(() => userStore.userInfo?.role || 'admin')
@@ -179,11 +199,14 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const importDialogVisible = ref(false)
 const importLoading = ref(false)
+const uploadRef = ref(null)
+const importResult = ref(null)
 const actionSubmitting = ref(false)
 const actionLock = createActionLock()
 const accountRequest = createLatestRequest()
 const buildingOptions = ref([])
 let importFile = null
+const importFailures = computed(() => (importResult.value?.results || []).filter(item => item.status === 'failed'))
 
 const filters = reactive({ keyword: '', role: '', status: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
@@ -338,11 +361,23 @@ async function handleSubmit() {
 
 function handleImport() {
   importDialogVisible.value = true
-  importFile = null
+  clearImportSelection()
 }
 
 function handleFileChange(file) {
   importFile = file.raw
+  importResult.value = null
+}
+
+function handleFileRemove() {
+  importFile = null
+  importResult.value = null
+}
+
+function clearImportSelection() {
+  importFile = null
+  importResult.value = null
+  uploadRef.value?.clearFiles()
 }
 
 async function doImport() {
@@ -359,36 +394,22 @@ async function doImport() {
   try {
     const XLSX = await import('xlsx')
     const dataBuffer = await importFile.arrayBuffer()
-    const wb = XLSX.read(dataBuffer, { type: 'array' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(ws)
-    const excelRoleMap = { '超级管理员': 'super_admin', '导生管理员': 'admin', '书院辅导员': 'counselor', '宿生': 'student' }
-    const excelScopeMap = { '全院': 'global', '全书院': 'global', '指定楼栋': 'building', '具体楼栋': 'building', '楼栋': 'building' }
-    const normalizedRows = rows.map(row => {
-      const buildingName = row['楼栋'] || row['楼栋名称'] || ''
-      const scopeLabel = row['管理范围'] || row['数据范围'] || ''
-      return {
-        accountType: activeTab.value,
-        username: row['账号'] || row['学号'] || '',
-        realName: row['真实姓名'] || row['姓名'] || '',
-        password: row['密码'] || row['一卡通卡号'] || '',
-        role: activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin'),
-        scopeType: activeTab.value === 'manager' ? (excelScopeMap[scopeLabel] || scopeLabel || '') : undefined,
-        buildingId: row['楼栋ID'] || undefined,
-        buildingName,
-        phone: row['电话'] || row['手机号'] || ''
-      }
-    })
+    const rows = readAccountImportWorkbook(XLSX, dataBuffer)
+    const normalizedRows = normalizeAccountImportRows(rows, activeTab.value)
     const res = await saveRows(normalizedRows)
     const data = res.data || {}
     const failures = (data.results || []).filter(item => item.status === 'failed')
-    if (failures.length) {
-      const first = failures[0]
-      ElMessage.warning(`导入完成：成功 ${data.successCount || 0} 个，失败 ${data.failCount || 0} 个。第 ${first.rowNumber} 行：${first.reason}`)
-    } else {
-      ElMessage.success(`导入完成：成功 ${data.successCount || 0} 个`)
+    importResult.value = {
+      successCount: data.successCount || 0,
+      failCount: data.failCount || 0,
+      results: data.results || []
     }
-    importDialogVisible.value = false
+    if (failures.length === 0) {
+      importDialogVisible.value = false
+      ElMessage.success(`导入完成：成功 ${data.successCount || 0} 个`)
+    } else {
+      ElMessage.warning('部分账号未导入，请查看并修改失败项')
+    }
     loadData()
   } catch (e) {
     ElMessage.error('导入失败')
@@ -433,6 +454,41 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--jy-text-secondary, #8C8C9A);
   line-height: 1.6;
+}
+
+.import-result {
+  margin-top: 16px;
+}
+
+.import-failures {
+  margin-top: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--jy-border, #E8E8EF);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.failure-heading {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.failure-row {
+  display: grid;
+  grid-template-columns: 76px 140px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--jy-border-light, #F0F0F5);
+  font-size: 13px;
+}
+
+.failure-row:last-of-type {
+  border-bottom: 0;
+}
+
+.reselect-button {
+  margin-top: 12px;
 }
 
 .credit-score {
