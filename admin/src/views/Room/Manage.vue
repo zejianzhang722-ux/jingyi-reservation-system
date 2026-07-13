@@ -167,13 +167,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getList, create, update, deleteRoom, getBuildings, updateSeat, deleteSeat, createSeats } from '@/api/room'
 import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 
 const loading = ref(false)
 const loadError = ref('')
@@ -230,20 +231,23 @@ const removedSeatIds = ref([])
 const seatDirty = ref(false)
 const seatSaving = ref(false)
 
-async function loadData() {
-  loading.value = true
-  loadError.value = ''
-  try {
-    const res = await getList({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+const roomListRequest = createLatestRequestCoordinator({
+  load: params => getList(params, { silentError: true }),
+  onStart: () => { loading.value = true; loadError.value = '' },
+  onSuccess: res => {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
-  } catch (e) {
+  },
+  onError: () => {
     loadError.value = tableData.value.length
       ? '功能房列表加载失败，已保留上次结果，请重试'
       : '功能房列表加载失败，请重试'
-  } finally {
-    loading.value = false
-  }
+  },
+  onFinish: () => { loading.value = false }
+})
+
+async function loadData() {
+  return roomListRequest.run({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
 }
 
 function resetFilters() {
@@ -404,6 +408,7 @@ onMounted(() => {
   loadData()
   loadBuildings()
 })
+onBeforeUnmount(() => { roomListRequest.invalidate() })
 </script>
 
 <style scoped>

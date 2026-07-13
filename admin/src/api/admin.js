@@ -16,8 +16,8 @@ export function deleteAdmin(id) {
   return request.delete(`/admin/managers/${id}`)
 }
 
-export function getLogs(params) {
-  return request.get('/admin/operation-logs', { params })
+export function getLogs(params, options = {}) {
+  return request.get('/admin/operation-logs', { ...options, params })
 }
 
 export function getAnnouncements(params) {

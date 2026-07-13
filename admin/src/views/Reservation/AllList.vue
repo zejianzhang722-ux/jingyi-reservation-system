@@ -91,10 +91,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { getAll } from '@/api/reservation'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage } from 'element-plus'
+import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 
 const loading = ref(false)
 const loadError = ref('')
@@ -117,29 +118,31 @@ const statusMap = {
 const filters = reactive({ status: '', roomId: '', keyword: '', dateRange: null })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
-async function loadData() {
-  loading.value = true
-  loadError.value = ''
-  try {
-    const params = {
-      status: filters.status,
-      roomId: filters.roomId,
-      keyword: filters.keyword,
-      startDate: filters.dateRange?.[0] || '',
-      endDate: filters.dateRange?.[1] || '',
-      page: pagination.page,
-      pageSize: pagination.pageSize
-    }
-    const res = await getAll(params)
+const listRequest = createLatestRequestCoordinator({
+  load: params => getAll(params, { silentError: true }),
+  onStart: () => { loading.value = true; loadError.value = '' },
+  onSuccess: res => {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
-  } catch (e) {
+  },
+  onError: () => {
     loadError.value = tableData.value.length
       ? '预约列表加载失败，已保留上次结果，请重试'
       : '预约列表加载失败，请重试'
-  } finally {
-    loading.value = false
-  }
+  },
+  onFinish: () => { loading.value = false }
+})
+
+async function loadData() {
+  return listRequest.run({
+    status: filters.status,
+    roomId: filters.roomId,
+    keyword: filters.keyword,
+    startDate: filters.dateRange?.[0] || '',
+    endDate: filters.dateRange?.[1] || '',
+    page: pagination.page,
+    pageSize: pagination.pageSize
+  })
 }
 
 async function loadRooms() {
@@ -205,6 +208,7 @@ onMounted(() => {
   loadData()
   loadRooms()
 })
+onBeforeUnmount(() => { listRequest.invalidate() })
 </script>
 
 <style scoped>

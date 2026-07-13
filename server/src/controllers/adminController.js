@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const bcrypt = require('bcryptjs');
 const dayjs = require('dayjs');
 const helpers = require('../utils/helpers');
+const operationLogPresenter = require('../utils/operationLogPresenter');
 
 const getAccounts = async function(req, res) {
   try {
@@ -583,23 +584,25 @@ const deleteManager = async function(req, res) {
 
 const operationLogs = async function(req, res) {
   try {
-    const { page = 1, pageSize = 20, operatorId, action } = req.query;
-    const offset = (page - 1) * pageSize;
-
-    let sql = 'SELECT o.*, a.username, a.real_name FROM operation_logs o LEFT JOIN admins a ON o.operator_id = a.id WHERE 1=1';
-    const params = [];
-
-    if (operatorId) { sql += ' AND o.operator_id = ?'; params.push(operatorId); }
-    if (action) { sql += ' AND o.action = ?'; params.push(action); }
-
-    sql += ' ORDER BY o.created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(pageSize), parseInt(offset));
-
-    const [logs] = await db.query(sql, params);
-
-    const [countResult] = await db.query('SELECT COUNT(*) as total FROM operation_logs WHERE 1=1');
-
-    return response.paginate(res, logs, countResult[0].total, page, pageSize);
+    const { page = 1, pageSize = 20 } = req.query;
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safePageSize = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20));
+    const offset = (safePage - 1) * safePageSize;
+    const filters = operationLogPresenter.buildOperationLogFilters({
+      operatorId: req.query.operatorId,
+      operator: req.query.operator,
+      category: req.query.category || req.query.action,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate
+    });
+    const fromSql = ' FROM operation_logs o LEFT JOIN admins a ON o.operator_id = a.id WHERE 1=1' + filters.clause;
+    const [logs] = await db.query(
+      'SELECT o.*, a.username, a.real_name' + fromSql + ' ORDER BY o.created_at DESC LIMIT ? OFFSET ?',
+      filters.params.concat([safePageSize, offset])
+    );
+    const [countResult] = await db.query('SELECT COUNT(*) as total' + fromSql, filters.params);
+    const visibleLogs = logs.map(operationLogPresenter.presentOperationLog);
+    return response.paginate(res, visibleLogs, countResult[0].total, safePage, safePageSize);
   } catch (err) {
     logger.error('获取操作日志异常:', err);
     return response.error(res, err.message);

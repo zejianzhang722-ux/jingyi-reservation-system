@@ -83,12 +83,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 
 const feedbacks = ref([])
 const loading = ref(false)
@@ -105,22 +106,23 @@ const typeMap = { suggestion: '建议', bug: '问题', feature: '功能建议', 
 const pendingCount = computed(() => feedbacks.value.filter(item => item.status !== 'resolved').length)
 const resolvedCount = computed(() => feedbacks.value.filter(item => item.status === 'resolved').length)
 
-async function loadFeedbacks() {
-  loading.value = true
-  loadError.value = ''
-  try {
-    const res = await request.get('/feedback', {
-      params: { page: page.value, pageSize: pageSize.value, status: statusFilter.value }
-    })
+const feedbackRequest = createLatestRequestCoordinator({
+  load: params => request.get('/feedback', { params, silentError: true }),
+  onStart: () => { loading.value = true; loadError.value = '' },
+  onSuccess: res => {
     feedbacks.value = res.data?.list || []
     total.value = res.data?.total || 0
-  } catch (e) {
+  },
+  onError: () => {
     loadError.value = feedbacks.value.length
       ? '反馈列表加载失败，已保留上次结果，请重试'
       : '反馈列表加载失败，请重试'
-  } finally {
-    loading.value = false
-  }
+  },
+  onFinish: () => { loading.value = false }
+})
+
+async function loadFeedbacks() {
+  return feedbackRequest.run({ page: page.value, pageSize: pageSize.value, status: statusFilter.value })
 }
 
 function resetFilters() {
@@ -148,6 +150,7 @@ async function submitResolve() {
 }
 
 onMounted(() => { loadFeedbacks() })
+onBeforeUnmount(() => { feedbackRequest.invalidate() })
 </script>
 
 <style scoped>

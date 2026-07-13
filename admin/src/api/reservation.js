@@ -22,8 +22,8 @@ export function batchAudit(data) {
   return request.post('/audit/batch', data)
 }
 
-export function getAll(params) {
-  return request.get('/reservation', { params })
+export function getAll(params, options = {}) {
+  return request.get('/reservation', { ...options, params })
 }
 
 export function getDetail(id) {

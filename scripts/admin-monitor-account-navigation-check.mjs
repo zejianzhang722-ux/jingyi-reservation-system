@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
 import { buildTimelineView, createLatestRequestGate, createTimelineRequestCoordinator } from '../admin/src/utils/roomTimeline.js'
-import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
+import { createLatestRequest, createLatestRequestCoordinator } from '../admin/src/utils/latestRequest.js'
 import { normalizeAccountImportRows, readAccountImportWorkbook } from '../admin/src/utils/accountImport.js'
 import * as adminRoutes from '../admin/src/router/adminRoutes.js'
 
@@ -13,6 +13,7 @@ const adminRequire = createRequire(new URL('../admin/package.json', import.meta.
 const XLSX = adminRequire('xlsx')
 const { adminChildren, buildNavigation, getNavigationSectionForRoute } = adminRoutes
 assert.equal(typeof getNavigationSectionForRoute, 'function')
+assert.equal(typeof createLatestRequestCoordinator, 'function')
 
 function collectVueFiles(directoryUrl) {
   return readdirSync(directoryUrl, { recursive: true, withFileTypes: true })
@@ -41,18 +42,80 @@ for (const fileUrl of visibleCopyFiles) {
 }
 
 const logsSource = readFileSync(new URL('../admin/src/views/System/Logs.vue', import.meta.url), 'utf8')
-assert.match(logsSource, /moduleMap\[row\.module\s*\|\|/)
+assert.match(logsSource, /prop="moduleLabel"/)
+assert.match(logsSource, /row\.actionLabel/)
+assert.match(logsSource, /row\.sourceRecorded/)
+assert.match(logsSource, /category:\s*filters\.action/)
 
 const requestSource = readFileSync(new URL('../admin/src/utils/request.js', import.meta.url), 'utf8')
+const requestPolicySource = readFileSync(new URL('../admin/src/utils/requestErrorPolicy.js', import.meta.url), 'utf8')
+const requestVisibleSource = `${requestSource}\n${requestPolicySource}`
 for (const message of [
   '登录已失效，请重新登录',
   '当前账号没有权限执行此操作',
   '所需内容暂时无法找到，可能已调整',
   '服务暂时不可用，请稍后重试；持续出现请联系系统管理员',
   '网络连接失败，请检查网络后重试'
-]) assert.match(requestSource, new RegExp(message))
-assert.match(requestSource, /case 400:[\s\S]{0,160}response\.data\?*\.message/)
-assert.doesNotMatch(requestSource, /参数校验|接口地址|服务器内部错误|请求的资源不存在/)
+]) assert.match(requestVisibleSource, new RegExp(message))
+assert.match(requestSource, /getErrorPresentation\(error\)/)
+assert.match(requestSource, /presentation\.shouldNotify/)
+assert.doesNotMatch(requestVisibleSource, /参数校验|接口地址|服务器内部错误|请求的资源不存在/)
+
+const errorPolicy = await import('../admin/src/utils/requestErrorPolicy.js').catch(() => ({}))
+assert.equal(typeof errorPolicy.getErrorPresentation, 'function')
+assert.deepEqual(errorPolicy.getErrorPresentation({ response: { status: 422, data: { message: 'SQL column invalid' } }, config: {} }), {
+  message: '提交内容不完整，请检查后重试', shouldNotify: true, clearSession: false, redirectTo: ''
+})
+assert.equal(errorPolicy.getErrorPresentation({ response: { status: 409, data: { message: '当前账号不能停用' } }, config: {} }).message, '当前账号不能停用')
+assert.equal(errorPolicy.getErrorPresentation({ response: { status: 409, data: { message: '不能停用当前登录账号' } }, config: {} }).message, '不能停用当前登录账号')
+assert.equal(errorPolicy.getErrorPresentation({ response: { status: 409, data: { message: '该预约已被其他管理员处理，请刷新后重试' } }, config: {} }).message, '该预约已被其他管理员处理，请刷新后重试')
+assert.equal(errorPolicy.getErrorPresentation({ response: { status: 409, data: { message: 'duplicate key admins.id=7' } }, config: {} }).message, '数据已发生变化，请刷新后重试')
+assert.equal(errorPolicy.getErrorPresentation({ response: { status: 429, data: { message: 'redis limit key=admin:7' } }, config: {} }).message, '操作过快，请稍后再试')
+assert.equal(errorPolicy.getErrorPresentation({ response: { status: 500 }, config: { silentError: true } }).shouldNotify, false)
+assert.equal(errorPolicy.getErrorPresentation({ config: { silentError: true } }).message, '网络连接失败，请检查网络后重试')
+assert.equal(errorPolicy.getErrorPresentation({ config: { silentError: true } }).shouldNotify, false)
+
+assert.equal(
+  errorPolicy.getErrorPresentation({ response: { status: 400, data: { message: 'SELECT * FROM admins failed' } }, config: {} }).message,
+  errorPolicy.getErrorPresentation({ response: { status: 422 }, config: {} }).message
+)
+
+let operationLogPresenter = {}
+try { operationLogPresenter = require('../server/src/utils/operationLogPresenter.js') } catch (error) {}
+assert.equal(typeof operationLogPresenter.presentOperationLog, 'function')
+assert.equal(typeof operationLogPresenter.buildOperationLogFilters, 'function')
+const presentedLegacyLog = operationLogPresenter.presentOperationLog({
+  id: 91,
+  username: 'guide_a',
+  real_name: '张老师',
+  action: 'create_room',
+  target_table: 'rooms',
+  target_id: 17,
+  description: '创建功能房: 舞蹈室',
+  ip_hash: 'do-not-expose-this-hash',
+  created_at: '2026-07-13 17:00:00'
+})
+assert.deepEqual(presentedLegacyLog, {
+  operatorName: '张老师', action: 'create_room', actionCategory: 'create', actionLabel: '新增功能房',
+  moduleLabel: '功能房管理', targetDescription: '功能房管理中的指定记录', targetId: null,
+  detail: '创建功能房: 舞蹈室', sourceRecorded: true, createdAt: '2026-07-13 17:00:00'
+})
+const presentedHttpLog = operationLogPresenter.presentOperationLog({
+  username: 'superadmin', action: 'http.post.admin.rooms', target_table: 'rooms', description: 'POST /api/v1/admin/rooms', created_at: '2026-07-13 17:01:00'
+})
+assert.equal(presentedHttpLog.actionLabel, '新增功能房')
+assert.equal(presentedHttpLog.detail, '新增功能房')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'sync_roster', target_table: 'users' }).actionLabel, '宿生账号相关操作')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'http.post.reservation.cancel', target_table: 'reservation' }).moduleLabel, '预约管理')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'http.post.poster.approve', target_table: 'poster' }).moduleLabel, '海报审核')
+const createFilter = operationLogPresenter.buildOperationLogFilters({ category: 'create', operator: '张' })
+assert.match(createFilter.clause, /o\.action LIKE \?/)
+assert.match(createFilter.clause, /a\.real_name LIKE \?/)
+assert.ok(createFilter.params.includes('create_%'))
+assert.ok(createFilter.params.includes('http.post.%'))
+assert.ok(createFilter.params.includes('%张%'))
+assert.match(createFilter.clause, /o\.action NOT LIKE \?/)
+assert.ok(createFilter.params.includes('http.post.%approve%'))
 
 const rawVisibleFallback = /(?:typeMap|typeLabels|statusMap|statusLabels|roleMap|actionMap)\[[^\]]+\]\?*\.?(?:label)?\s*\|\|\s*(?:row|currentFeedback|currentRow)\.(?:status|role|type|action|module)/
 for (const fileUrl of visibleCopyFiles) {
@@ -77,7 +140,11 @@ for (const [relativePath, listName, retryName] of loadStatePages) {
   assert.match(source, /const loadError = ref\(''\)/, `${relativePath} needs explicit list load error state`)
   assert.match(template, new RegExp(`v-if="loadError"[\\s\\S]{0,240}@click="${retryName}"`), `${relativePath} needs a retryable error notice`)
   assert.match(template, new RegExp(`!loading && !loadError && !${listName}\\.length`), `${relativePath} needs an empty state distinct from load failure`)
-  assert.match(source, /catch\s*\([^)]*\)\s*\{[\s\S]{0,120}loadError\.value\s*=/, `${relativePath} must set load error without replacing its last result`)
+  assert.match(source, /createLatestRequestCoordinator/, `${relativePath} must coordinate list requests`)
+  assert.match(source, /\.run\(/, `${relativePath} must run list loads through the coordinator`)
+  assert.match(source, /\.invalidate\(\)/, `${relativePath} must invalidate list loads when unmounted`)
+  assert.match(source, /onBeforeUnmount/, `${relativePath} must invalidate on unmount`)
+  assert.match(source, /silentError/, `${relativePath} must suppress the duplicate global toast while its error bar is active`)
 }
 
 const expectedNavigationGroups = {
@@ -305,9 +372,22 @@ for (const field of ['reservationId', 'userName', 'purpose']) assert.match(contr
 
 let studyMode = false
 let accountImportMode = false
+let operationLogMode = false
+const operationLogQueries = []
 let importedStudentInsert = null
 const mockDb = {
   async query(sql, params) {
+    if (operationLogMode && sql.startsWith('SELECT o.*')) {
+      operationLogQueries.push({ sql, params })
+      return [[{
+        id: 202, username: 'guide_a', real_name: '张老师', action: 'http.post.admin.rooms', target_table: 'rooms', target_id: 17,
+        description: 'POST /api/v1/admin/rooms', ip_hash: 'private-hash', created_at: '2026-07-13 17:05:00'
+      }]]
+    }
+    if (operationLogMode && sql.startsWith('SELECT COUNT(*) as total FROM operation_logs')) {
+      operationLogQueries.push({ sql, params })
+      return [[{ total: 1 }]]
+    }
     if (accountImportMode && sql.includes('FROM buildings')) return [[
       { id: 1, name: 'B\u5ea7' },
       { id: 2, name: 'C\u5ea7' }
@@ -370,6 +450,21 @@ assert.equal(importedStudentInsert.params[6], 2)
 assert.equal(importedStudentInsert.params[7], '13900009099')
 accountImportMode = false
 
+operationLogMode = true
+const adminController = require('../server/src/controllers/adminController.js')
+await adminController.operationLogs({ query: { page: 1, pageSize: 20, operator: '张', category: 'create' } }, response)
+assert.equal(responseBody.code, 200)
+assert.equal(responseBody.data.list[0].operatorName, '张老师')
+assert.equal(responseBody.data.list[0].actionLabel, '新增功能房')
+assert.equal(responseBody.data.list[0].moduleLabel, '功能房管理')
+assert.equal(responseBody.data.list[0].sourceRecorded, true)
+assert.equal(responseBody.data.list[0].targetId, null)
+assert.doesNotMatch(JSON.stringify(responseBody.data.list[0]), /private-hash|target_id|ip_hash/)
+assert.equal(operationLogQueries.length, 2)
+assert.ok(operationLogQueries[0].params.includes('http.post.%'))
+assert.ok(operationLogQueries[1].params.includes('%张%'))
+operationLogMode = false
+
 const deduplicatedView = buildTimelineView({
   timeline: [
     { time: '13:00', status: 'occupied', reservationId: 77 },
@@ -417,6 +512,55 @@ function deferred() {
     reject = rejectPromise
   })
   return { promise, resolve, reject }
+}
+
+function latestCoordinatorHarness() {
+  const requests = new Map()
+  const state = { loading: false, value: '', error: '', writes: 0 }
+  const coordinator = createLatestRequestCoordinator({
+    load: key => requests.get(key).promise,
+    onStart: () => { state.loading = true; state.error = ''; state.writes += 1 },
+    onSuccess: value => { state.value = value; state.writes += 1 },
+    onError: error => { state.error = error.message; state.writes += 1 },
+    onFinish: () => { state.loading = false; state.writes += 1 }
+  })
+  return { requests, state, coordinator }
+}
+
+const latestSuccess = latestCoordinatorHarness()
+latestSuccess.requests.set('old', deferred())
+latestSuccess.requests.set('new', deferred())
+const oldSuccess = latestSuccess.coordinator.run('old')
+const newSuccess = latestSuccess.coordinator.run('new')
+latestSuccess.requests.get('old').resolve('old value')
+await oldSuccess
+assert.deepEqual(latestSuccess.state, { loading: true, value: '', error: '', writes: 2 })
+latestSuccess.requests.get('new').resolve('new value')
+await newSuccess
+assert.deepEqual(latestSuccess.state, { loading: false, value: 'new value', error: '', writes: 4 })
+
+const latestFailure = latestCoordinatorHarness()
+latestFailure.requests.set('old', deferred())
+latestFailure.requests.set('new', deferred())
+const oldFailure = latestFailure.coordinator.run('old')
+const newAfterFailure = latestFailure.coordinator.run('new')
+latestFailure.requests.get('old').reject(new Error('obsolete error'))
+await oldFailure
+assert.deepEqual(latestFailure.state, { loading: true, value: '', error: '', writes: 2 })
+latestFailure.requests.get('new').resolve('new value')
+await newAfterFailure
+assert.deepEqual(latestFailure.state, { loading: false, value: 'new value', error: '', writes: 4 })
+
+for (const outcome of ['success', 'failure']) {
+  const invalidatedLatest = latestCoordinatorHarness()
+  invalidatedLatest.requests.set('request', deferred())
+  const pending = invalidatedLatest.coordinator.run('request')
+  invalidatedLatest.coordinator.invalidate()
+  const writesBeforeSettlement = invalidatedLatest.state.writes
+  if (outcome === 'success') invalidatedLatest.requests.get('request').resolve('ignored')
+  else invalidatedLatest.requests.get('request').reject(new Error('ignored'))
+  await pending
+  assert.equal(invalidatedLatest.state.writes, writesBeforeSettlement)
 }
 
 function coordinatorHarness() {
