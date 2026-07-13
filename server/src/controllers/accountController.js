@@ -283,6 +283,9 @@ const updateAccount = async function(req, res) {
     const disablingSelf = isCurrentAdmin && req.body.status !== undefined && normalizeAdminStatus(req.body.status) !== 'active';
     if (disablingSelf) return response.error(res, '不能停用当前登录账号', 409);
     const currentRole = normalizeRole(admins[0].role);
+    if (isCurrentAdmin && req.body.role !== undefined && normalizeRole(req.body.role) !== currentRole) {
+      return response.error(res, '不能修改当前登录账号的角色', 409);
+    }
     const nextRole = req.body.role ? normalizeRole(req.body.role) : currentRole;
     const scope = normalizeAdminScope(nextRole, req.body.scopeType !== undefined ? req.body.scopeType : admins[0].scope_type, req.body.buildingId !== undefined ? req.body.buildingId : admins[0].building_id);
     if (!scope) return response.error(res, '导生管理员必须选择全院或一个具体楼栋', 400);

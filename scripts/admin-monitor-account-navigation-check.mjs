@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 import { buildTimelineView, createLatestRequestGate, createTimelineRequestCoordinator } from '../admin/src/utils/roomTimeline.js'
+import { createLatestRequest } from '../admin/src/utils/latestRequest.js'
 
 const timelineView = buildTimelineView({
   openStartTime: '08:00',
@@ -59,6 +60,11 @@ assert.match(accountTemplate, /\u6700\u8fd1\u767b\u5f55/)
 assert.match(accountSource, /isCurrentAccount/)
 assert.match(accountSource, /row\.scopeLabel/)
 assert.match(accountTemplate, /activeTab === 'student'[\s\S]{0,300}v-model="form\.buildingId"/)
+assert.match(accountSource, /createLatestRequest/)
+assert.match(accountSource, /accountRequest\.run/)
+assert.match(accountSource, /accountRequest\.invalidate/)
+assert.match(accountSource, /onBeforeUnmount/)
+assert.match(accountSource, /isEditingCurrentAccount/)
 
 const adminRoutesSource = readFileSync(new URL('../server/src/routes/admin.js', import.meta.url), 'utf8')
 assert.match(adminRoutesSource, /router\.delete\('\/managers\/:id',[\s\S]*accountController\.deleteAccount/)
@@ -167,6 +173,59 @@ function coordinatorHarness() {
   })
   return { requests, state, coordinator }
 }
+
+function accountCoordinatorHarness() {
+  const requests = new Map()
+  const notices = []
+  const state = { loading: false, tab: '', rows: [], total: 0 }
+  const accountRequest = createLatestRequest()
+  function load(tab) {
+    state.loading = true
+    return accountRequest.run(requests.get(tab).promise, result => {
+      state.tab = result.tab
+      state.rows = result.rows
+      state.total = result.total
+      state.loading = false
+    }, error => {
+      notices.push(error.message)
+      state.loading = false
+    })
+  }
+  return { requests, notices, state, load, invalidate: () => accountRequest.invalidate() }
+}
+
+const accountOrdering = accountCoordinatorHarness()
+accountOrdering.requests.set('student', deferred())
+accountOrdering.requests.set('manager', deferred())
+const oldStudentList = accountOrdering.load('student')
+const newManagerList = accountOrdering.load('manager')
+accountOrdering.requests.get('student').resolve({ tab: 'student', rows: ['old'], total: 1 })
+await oldStudentList
+assert.deepEqual(accountOrdering.state, { loading: true, tab: '', rows: [], total: 0 })
+accountOrdering.requests.get('manager').resolve({ tab: 'manager', rows: ['new'], total: 1 })
+await newManagerList
+assert.deepEqual(accountOrdering.state, { loading: false, tab: 'manager', rows: ['new'], total: 1 })
+
+const accountFailure = accountCoordinatorHarness()
+accountFailure.requests.set('student', deferred())
+accountFailure.requests.set('manager', deferred())
+const obsoleteFailure = accountFailure.load('student')
+const currentManager = accountFailure.load('manager')
+accountFailure.requests.get('student').reject(new Error('obsolete failure'))
+await obsoleteFailure
+assert.deepEqual(accountFailure.notices, [])
+assert.equal(accountFailure.state.loading, true)
+accountFailure.requests.get('manager').resolve({ tab: 'manager', rows: ['manager'], total: 1 })
+await currentManager
+assert.deepEqual(accountFailure.state, { loading: false, tab: 'manager', rows: ['manager'], total: 1 })
+
+const accountUnmounted = accountCoordinatorHarness()
+accountUnmounted.requests.set('student', deferred())
+const unmountedRequest = accountUnmounted.load('student')
+accountUnmounted.invalidate()
+accountUnmounted.requests.get('student').resolve({ tab: 'student', rows: ['stale'], total: 1 })
+await unmountedRequest
+assert.deepEqual(accountUnmounted.state, { loading: true, tab: '', rows: [], total: 0 })
 
 const successOrder = coordinatorHarness()
 successOrder.requests.set('A', deferred())

@@ -203,6 +203,30 @@ async function main() {
     expectStatus(await api('/admin/accounts/admin-' + superAdmin.userInfo.id, {
       method: 'PUT',
       headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ role: 'admin' })
+    }), 409, 'current super administrator cannot downgrade own role')
+    const currentRoleList = await api('/admin/accounts?accountType=manager&pageSize=100', { headers: authHeaders(superAdmin.token) })
+    expectStatus(currentRoleList, 200, 'read current super administrator after rejected downgrade')
+    const currentSuperAdmin = currentRoleList.json.data.list.find(function(item) { return Number(item.rawId) === Number(superAdmin.userInfo.id) })
+    assert(currentSuperAdmin && currentSuperAdmin.role === 'super_admin', 'rejected self downgrade must preserve super administrator role')
+    expectStatus(await api('/admin/accounts/admin-' + superAdmin.userInfo.id, {
+      method: 'PUT',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ realName: '\u8d85\u7ea7\u7ba1\u7406\u5458' })
+    }), 200, 'current super administrator can update non-permission profile fields')
+
+    expectStatus(await api('/admin/accounts/' + createdManagerAccount.json.data.id, {
+      method: 'PUT',
+      headers: jsonAuthHeaders(superAdmin.token),
+      body: JSON.stringify({ role: 'counselor', realName: '\u697c\u680b\u8f85\u5bfc\u5458' })
+    }), 200, 'super administrator can change another manager role')
+    const changedRoleList = await api('/admin/accounts?accountType=manager&role=counselor&pageSize=100', { headers: authHeaders(superAdmin.token) })
+    expectStatus(changedRoleList, 200, 'read changed manager role')
+    assert(changedRoleList.json.data.list.some(function(item) { return item.id === createdManagerAccount.json.data.id && item.role === 'counselor' }), 'other manager role change should persist')
+
+    expectStatus(await api('/admin/accounts/admin-' + superAdmin.userInfo.id, {
+      method: 'PUT',
+      headers: jsonAuthHeaders(superAdmin.token),
       body: JSON.stringify({ status: 'disabled' })
     }), 409, 'current super administrator cannot disable self')
     expectStatus(await api('/admin/accounts/admin-' + superAdmin.userInfo.id, {

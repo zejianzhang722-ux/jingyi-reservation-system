@@ -106,7 +106,7 @@
           <el-input v-model="form.realName" placeholder="请输入真实姓名" />
         </el-form-item>
         <el-form-item label="角色" prop="role">
-          <el-select v-model="form.role" style="width: 100%" :disabled="activeTab === 'student'" @change="handleRoleChange">
+          <el-select v-model="form.role" style="width: 100%" :disabled="activeTab === 'student' || isEditingCurrentAccount" @change="handleRoleChange">
             <el-option v-for="opt in roleOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
@@ -158,7 +158,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
 import { getList, create, update, remove, saveRows } from '@/api/account'
 import { getBuildings } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -166,6 +166,7 @@ import { useUserStore } from '@/store/user'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import { createActionLock, runLockedConfirmedAction } from '@/utils/approvalState'
+import { createLatestRequest } from '@/utils/latestRequest'
 
 const userStore = useUserStore()
 const currentRole = computed(() => userStore.userInfo?.role || 'admin')
@@ -180,12 +181,14 @@ const importDialogVisible = ref(false)
 const importLoading = ref(false)
 const actionSubmitting = ref(false)
 const actionLock = createActionLock()
+const accountRequest = createLatestRequest()
 const buildingOptions = ref([])
 let importFile = null
 
 const filters = reactive({ keyword: '', role: '', status: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const form = reactive({ id: null, username: '', realName: '', password: '', role: 'student', scopeType: 'global', buildingId: null })
+const isEditingCurrentAccount = computed(() => isEdit.value && String(form.id) === `admin-${userStore.userInfo?.id}`)
 
 const roleMap = {
   super_admin: { label: '超级管理员', type: 'danger' },
@@ -225,23 +228,21 @@ const rules = computed(() => ({
 
 async function loadData() {
   loading.value = true
-  try {
-    const params = {
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      accountType: activeTab.value === 'manager' ? 'manager' : 'student',
-      role: activeTab.value === 'student' ? 'student' : (filters.role || undefined),
-      status: filters.status || undefined,
-      keyword: filters.keyword || undefined
-    }
-    const res = await getList(params)
+  const params = {
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    accountType: activeTab.value === 'manager' ? 'manager' : 'student',
+    role: activeTab.value === 'student' ? 'student' : (filters.role || undefined),
+    status: filters.status || undefined,
+    keyword: filters.keyword || undefined
+  }
+  return accountRequest.run(getList(params), res => {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
-  } catch (e) {
-    // Keep the last successful total visible during a transient refresh failure.
-  } finally {
     loading.value = false
-  }
+  }, () => {
+    loading.value = false
+  })
 }
 
 function handleTabChange() {
@@ -315,7 +316,8 @@ async function handleSubmit() {
     if (!valid) return
     submitLoading.value = true
     if (isEdit.value) {
-      const data = { realName: form.realName, role: form.role, scopeType: form.scopeType, buildingId: form.buildingId }
+      const data = { realName: form.realName, scopeType: form.scopeType, buildingId: form.buildingId }
+      if (!isEditingCurrentAccount.value) data.role = form.role
       if (form.password) data.password = form.password
       await update(form.id, data)
       ElMessage.success('更新成功')
@@ -384,6 +386,10 @@ async function doImport() {
 onMounted(() => {
   loadData()
   getBuildings({ pageSize: 100 }).then(res => { buildingOptions.value = res.data?.list || res.data || [] }).catch(() => {})
+})
+
+onBeforeUnmount(() => {
+  accountRequest.invalidate()
 })
 </script>
 
