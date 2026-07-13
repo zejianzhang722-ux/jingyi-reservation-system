@@ -98,6 +98,12 @@ const timeline = async function(req, res) {
     const hours = helpers.getHourRange(openStart, openEnd);
     const isStudyRoom = room.type === 'study_room';
     const hasSeats = isStudyRoom && seatList.length > 0;
+    const canViewReservationDetails = function(reservation) {
+      return reservation && req.user && (
+        reservation.user_id === req.user.id ||
+        ['admin', 'super_admin', 'counselor'].includes(req.user.role)
+      );
+    };
 
     const timelineData = hours.map(function(hour) {
       const slotEnd = helpers.addMinutes(hour, 30);
@@ -114,7 +120,9 @@ const timeline = async function(req, res) {
             });
 
             if (conflict) {
-              if (req.user && conflict.user_id === req.user.id) {
+              if (conflict.status === 'checked_in') {
+                status = 'checked_in';
+              } else if (req.user && conflict.user_id === req.user.id) {
                 status = 'myReservation';
               } else {
                 status = 'occupied';
@@ -135,11 +143,16 @@ const timeline = async function(req, res) {
         const totalCount = seatStatuses.length;
         let slotStatus = 'available';
         if (availableCount === 0) {
+          const hasCheckedIn = seatStatuses.some(function(s) { return s.status === 'checked_in'; });
           const hasMyReservation = seatStatuses.some(function(s) { return s.status === 'myReservation'; });
-          slotStatus = hasMyReservation ? 'myReservation' : 'occupied';
+          slotStatus = hasCheckedIn ? 'checked_in' : (hasMyReservation ? 'myReservation' : 'occupied');
         } else if (availableCount < totalCount) {
           slotStatus = 'available';
         }
+
+        const reservationIds = reservations.filter(function(r) {
+          return helpers.checkTimeConflict(r.start_time, r.end_time, hour, slotEnd) && canViewReservationDetails(r);
+        }).map(function(r) { return r.id; });
 
         return {
           time: hour,
@@ -147,7 +160,8 @@ const timeline = async function(req, res) {
           status: slotStatus,
           availableCount: availableCount,
           totalCount: totalCount,
-          seats: seatStatuses
+          seats: seatStatuses,
+          reservationIds: Array.from(new Set(reservationIds))
         };
       } else {
         const conflictReservations = reservations.filter(function(r) {
@@ -170,10 +184,7 @@ const timeline = async function(req, res) {
           }
         }
 
-        const canViewDetails = activeReservation && req.user && (
-          activeReservation.user_id === req.user.id ||
-          ['admin', 'super_admin', 'counselor'].includes(req.user.role)
-        );
+        const canViewDetails = canViewReservationDetails(activeReservation);
 
         return {
           time: hour,

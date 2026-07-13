@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
-import { buildTimelineView } from '../admin/src/utils/roomTimeline.js'
+import { buildTimelineView, createLatestRequestGate } from '../admin/src/utils/roomTimeline.js'
 
 const timelineView = buildTimelineView({
   openStartTime: '08:00',
@@ -17,7 +17,7 @@ const timelineView = buildTimelineView({
   ]
 })
 
-assert.deepEqual(timelineView.summary, { total: 6, reservationCount: 3, isAllAvailable: false })
+assert.deepEqual(timelineView.summary, { total: 6, reservationCount: 3, busySlotCount: 3, reservationCountReliable: true, isAllAvailable: false })
 assert.deepEqual(timelineView.slots.map(slot => slot.label), ['空闲', '已预约', '使用中', '使用中', '维护', '状态未知'])
 assert.equal(timelineView.slots[1].purpose, '课题讨论')
 assert.equal(timelineView.slots[1].userName, '张三')
@@ -50,8 +50,12 @@ assert.doesNotMatch(monitorTemplate, /WebSocket|Token|\u4ee4\u724c/i)
 const controllerSource = readFileSync(new URL('../server/src/controllers/roomController.js', import.meta.url), 'utf8')
 for (const field of ['reservationId', 'userName', 'purpose']) assert.match(controllerSource, new RegExp(field))
 
+let studyMode = false
 const mockDb = {
   async query(sql) {
+    if (studyMode && sql.includes('FROM rooms WHERE id')) return [[{ id: 8, name: '自习室', type: 'study_room', capacity: 1, open_start_time: '08:00', open_end_time: '08:30' }]]
+    if (studyMode && sql.includes('FROM seats')) return [[{ id: 1, status: 'available', seat_number: 'A1', row_num: 1, col_num: 1 }]]
+    if (studyMode && sql.includes('FROM reservations')) return [[{ id: 55, user_id: 5, seat_id: 1, start_time: '08:00', end_time: '08:30', status: 'approved' }]]
     if (sql.includes('FROM rooms WHERE id')) return [[{ id: 7, name: '讨论室', type: 'seminar_room', capacity: 6, open_start_time: '08:00', open_end_time: '09:00' }]]
     if (sql.includes('FROM seats')) return [[]]
     if (sql.includes('FROM reservations')) return [[{
@@ -82,5 +86,47 @@ await roomController.timeline({ params: { id: '7' }, query: { date: '2026-07-13'
 assert.equal(responseBody.data.timeline[0].reservationId, null)
 assert.equal(responseBody.data.timeline[0].userName, '')
 assert.equal(responseBody.data.timeline[0].purpose, '')
+studyMode = true
+await roomController.timeline({ params: { id: '8' }, query: { date: '2026-07-13' }, user: { id: 99, role: 'admin' } }, response)
+assert.deepEqual(responseBody.data.timeline[0].reservationIds, [55])
+
+const deduplicatedView = buildTimelineView({
+  timeline: [
+    { time: '13:00', status: 'occupied', reservationId: 77 },
+    { time: '13:30', status: 'occupied', reservationId: 77 },
+    { time: '14:00', status: 'checked_in', reservationIds: [77, 88] },
+    { time: '14:30', status: 'occupied' }
+  ]
+})
+assert.equal(deduplicatedView.summary.reservationCount, 2)
+assert.equal(deduplicatedView.summary.busySlotCount, 4)
+assert.equal(deduplicatedView.summary.reservationCountReliable, false)
+
+const gate = createLatestRequestGate()
+const firstRequest = gate.begin()
+const secondRequest = gate.begin()
+assert.equal(gate.isLatest(firstRequest), false)
+assert.equal(gate.isLatest(secondRequest), true)
+gate.invalidate()
+assert.equal(gate.isLatest(secondRequest), false)
+
+const orderingGate = createLatestRequestGate()
+let visibleRoom = ''
+let finishFirst
+let finishSecond
+const firstResult = new Promise(resolve => { finishFirst = resolve })
+const secondResult = new Promise(resolve => { finishSecond = resolve })
+async function applyLatest(resultPromise) {
+  const requestId = orderingGate.begin()
+  const roomName = await resultPromise
+  if (orderingGate.isLatest(requestId)) visibleRoom = roomName
+}
+const pendingFirst = applyLatest(firstResult)
+const pendingSecond = applyLatest(secondResult)
+finishSecond('B')
+await pendingSecond
+finishFirst('A')
+await pendingFirst
+assert.equal(visibleRoom, 'B')
 
 console.log('admin monitor timeline checks passed')

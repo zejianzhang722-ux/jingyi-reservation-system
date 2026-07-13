@@ -68,7 +68,10 @@
         <div><span>日期</span><strong>{{ timelineDate }}</strong></div>
         <div><span>开放时间</span><strong>{{ roomOpeningHours }}</strong></div>
         <div><span>当前状态</span><strong>{{ getRoomStatusLabel(currentRoom?.currentStatus || currentRoom?.status) }}</strong></div>
-        <div><span>预约数量</span><strong>{{ timelineView.summary.reservationCount }}</strong></div>
+        <div>
+          <span>{{ timelineView.summary.reservationCountReliable ? '预约数量' : '占用时段' }}</span>
+          <strong>{{ timelineView.summary.reservationCountReliable ? timelineView.summary.reservationCount : `${timelineView.summary.busySlotCount} 个` }}</strong>
+        </div>
       </div>
 
       <div class="timeline-legend" aria-label="时间格图例">
@@ -110,7 +113,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { io } from 'socket.io-client'
 import { getList, getTimeline, getBuildings } from '@/api/room'
-import { buildMiniTimeline, buildTimelineView } from '@/utils/roomTimeline'
+import { buildMiniTimeline, buildTimelineView, createLatestRequestGate } from '@/utils/roomTimeline'
 
 const filters = reactive({ buildingId: '', type: '' })
 const rooms = ref([])
@@ -124,6 +127,7 @@ const timelineError = ref(false)
 const timelineView = ref(buildTimelineView([]))
 const timelineDate = ref('')
 let socket = null
+const timelineRequestGate = createLatestRequestGate()
 
 const timelineLegend = [
   { status: 'available', label: '空闲' }, { status: 'reserved', label: '已预约' },
@@ -201,15 +205,19 @@ function formatLocalDate(date) {
 
 async function loadTimeline() {
   if (!currentRoom.value) return
+  const requestId = timelineRequestGate.begin()
+  const roomId = currentRoom.value.id
   timelineLoading.value = true
   timelineError.value = false
   try {
-    const res = await getTimeline(currentRoom.value.id, { date: timelineDate.value })
+    const res = await getTimeline(roomId, { date: timelineDate.value })
+    if (!timelineRequestGate.isLatest(requestId)) return
     timelineView.value = buildTimelineView(res.data)
   } catch (e) {
+    if (!timelineRequestGate.isLatest(requestId)) return
     timelineError.value = true
   } finally {
-    timelineLoading.value = false
+    if (timelineRequestGate.isLatest(requestId)) timelineLoading.value = false
   }
 }
 
@@ -260,6 +268,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  timelineRequestGate.invalidate()
   socket?.disconnect()
 })
 </script>
