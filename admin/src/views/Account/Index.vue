@@ -144,8 +144,8 @@
         <template #tip>
           <div class="upload-tip">
             {{ activeTab === 'student'
-              ? '宿生模板：真实姓名、账号（学号）、密码（一卡通卡号）。角色可省略，默认宿生。'
-              : '管理账号模板：真实姓名、角色（超级管理员/导生管理员/书院辅导员）、账号、密码。' }}
+              ? '宿生模板：账号（学号）、姓名、密码（一卡通卡号）、楼栋、电话。'
+              : '管理账号模板：账号、姓名、密码、角色、管理范围（全院/指定楼栋）、楼栋、电话。辅导员和超级管理员固定为全院。' }}
           </div>
         </template>
       </el-upload>
@@ -363,15 +363,31 @@ async function doImport() {
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json(ws)
     const excelRoleMap = { '超级管理员': 'super_admin', '导生管理员': 'admin', '书院辅导员': 'counselor', '宿生': 'student' }
-    const normalizedRows = rows.map(row => ({
-      username: row['账号'] || row['学号'] || '',
-      realName: row['真实姓名'] || row['姓名'] || '',
-      password: row['密码'] || row['一卡通卡号'] || '',
-      role: activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin')
-    }))
+    const excelScopeMap = { '全院': 'global', '全书院': 'global', '指定楼栋': 'building', '具体楼栋': 'building', '楼栋': 'building' }
+    const normalizedRows = rows.map(row => {
+      const buildingName = row['楼栋'] || row['楼栋名称'] || ''
+      const scopeLabel = row['管理范围'] || row['数据范围'] || ''
+      return {
+        accountType: activeTab.value,
+        username: row['账号'] || row['学号'] || '',
+        realName: row['真实姓名'] || row['姓名'] || '',
+        password: row['密码'] || row['一卡通卡号'] || '',
+        role: activeTab.value === 'student' ? 'student' : (excelRoleMap[row['角色']] || row['角色'] || 'admin'),
+        scopeType: activeTab.value === 'manager' ? (excelScopeMap[scopeLabel] || scopeLabel || (buildingName ? 'building' : '')) : undefined,
+        buildingId: row['楼栋ID'] || undefined,
+        buildingName,
+        phone: row['电话'] || row['手机号'] || ''
+      }
+    })
     const res = await saveRows(normalizedRows)
     const data = res.data || {}
-    ElMessage.success(`导入完成：成功 ${data.successCount || 0} 个，失败 ${data.failCount || 0} 个`)
+    const failures = (data.results || []).filter(item => item.status === 'failed')
+    if (failures.length) {
+      const first = failures[0]
+      ElMessage.warning(`导入完成：成功 ${data.successCount || 0} 个，失败 ${data.failCount || 0} 个。第 ${first.rowNumber} 行：${first.reason}`)
+    } else {
+      ElMessage.success(`导入完成：成功 ${data.successCount || 0} 个`)
+    }
     importDialogVisible.value = false
     loadData()
   } catch (e) {

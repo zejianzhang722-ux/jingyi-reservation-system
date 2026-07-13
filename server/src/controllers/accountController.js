@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
+const { normalizeAdminScope } = require('../utils/adminScope');
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'counselor'];
 const STUDENT_ROLE = 'student';
@@ -12,16 +13,6 @@ const allowedRolesByOperator = {
   counselor: [],
   admin: []
 };
-
-function normalizeAdminScope(role, scopeType, buildingId) {
-  const normalizedRole = normalizeRole(role);
-  if (normalizedRole === 'super_admin' || normalizedRole === 'counselor') return { scopeType: 'global', buildingId: null };
-  if (normalizedRole !== 'admin') return { scopeType: null, buildingId: buildingId || null };
-  if (scopeType === 'global') return { scopeType: 'global', buildingId: null };
-  const id = Number(buildingId);
-  if (scopeType === 'building' && Number.isInteger(id) && id > 0) return { scopeType: 'building', buildingId: id };
-  return null;
-}
 
 function normalizeRole(role) {
   return role === 'superadmin' ? 'super_admin' : role;
