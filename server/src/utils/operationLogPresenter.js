@@ -12,13 +12,15 @@ const MODULE_DEFINITIONS = [
   { keys: ['violations', 'violation'], label: '违规记录', subject: '违规记录' },
   { keys: ['checkin', 'checkins'], label: '签到核销', subject: '预约' },
   { keys: ['reading-room', 'reading_room', 'readingroom'], label: '阅览室记录', subject: '阅览记录' },
-  { keys: ['credit', 'blacklist'], label: '信用管理', subject: '信用记录' },
+  { keys: ['credit', 'blacklist'], label: '违规与信用治理', subject: '信用记录' },
   { keys: ['student-admin', 'student_admin'], label: '宿生账号', subject: '宿生账号' },
   { keys: ['account-batch', 'account_batch'], label: '批量账号导入', subject: '账号' },
   { keys: ['system', 'system_config', 'config', 'archive'], label: '系统管理', subject: '系统设置' },
   { keys: ['announcements', 'announcement'], label: '公告管理', subject: '公告' },
   { keys: ['backups', 'backup'], label: '数据备份', subject: '数据备份' },
-  { keys: ['notifications', 'notification'], label: '消息管理', subject: '消息' }
+  { keys: ['notifications', 'notification'], label: '消息管理', subject: '消息' },
+  { keys: ['auth'], label: '登录管理', subject: '登录状态' },
+  { keys: ['upload', 'uploads'], label: '文件管理', subject: '管理图片' }
 ]
 
 const MODULES = MODULE_DEFINITIONS.reduce(function(result, definition) {
@@ -30,16 +32,19 @@ const MODULES = MODULE_DEFINITIONS.reduce(function(result, definition) {
 
 // Rules are ordered. Both display classification and SQL filtering use this exact source.
 const ACTION_RULES = [
-  { category: 'login', patterns: ['login%', 'http.post.%login%'] },
+  { category: 'login', patterns: ['login%', 'http.post.%login%', 'http.post.auth.logout', 'http.post.auth.refresh'] },
   { category: 'audit', patterns: [
     '%approve%', '%reject%', '%audit%',
     'http.post.audit%batch%', 'http.put.audit%batch%', 'http.patch.audit%batch%',
     'http.post.poster%clean%', 'http.post.poster%violation%'
   ] },
+  { category: 'create', patterns: ['http.post.credit.violation'] },
   { category: 'operate', patterns: [
+    'http.delete.reservation_id.waitlist', 'http.delete.reservation_id',
     '%checkin%', '%checkout%', '%manual%', '%patrol%', '%rebook%', '%waitlist%',
-    '%resolve%', '%verify%', '%archive%', '%credit%', '%status%',
-    'http.post.reservation%check-conflict%', 'http.post.reading-room%', 'http.post.reading_room%'
+    '%resolve%', '%verify%', '%archive%', '%blacklist%', '%credit%', '%status%',
+    'http.post.reservation%check-conflict%', 'http.post.reading-room%', 'http.post.reading_room%',
+    'http.post.room.compare', 'http.put.notification%read%', 'http.post.admin.upload'
   ] },
   { category: 'delete', patterns: ['delete_%', 'disable_%', 'http.delete.%'] },
   { category: 'export', patterns: ['export%', 'http.get.%export%'] },
@@ -96,6 +101,18 @@ function categoryForAction(action, method) {
 
 function actionLabel(action, method, info) {
   const text = normalizedAction(action, method)
+  if (text === 'http.post.auth.logout') return '退出管理后台'
+  if (text === 'http.post.auth.refresh') return '刷新登录状态'
+  if (text === 'http.post.credit.violation') return '新增违规记录'
+  if (text.includes('credit.blacklist')) return '更新黑名单'
+  if (text === 'http.delete.reservation_id.waitlist') return '退出预约候补'
+  if (text === 'http.delete.reservation_id') return '取消预约'
+  if (text.includes('reading-room.enter') || text.includes('reading_room.enter')) return '登记进入阅览室'
+  if (text.includes('reading-room.leave') || text.includes('reading_room.leave')) return '登记离开阅览室'
+  if (text === 'http.post.room.compare') return '对比功能房'
+  if (text.includes('notification.read-all')) return '标记全部消息已读'
+  if (text.includes('notification') && text.endsWith('.read')) return '标记消息已读'
+  if (text === 'http.post.admin.upload') return '上传管理图片'
   if (text.includes('poster') && text.includes('violation')) return '标记海报违规'
   if (text.includes('poster') && text.includes('clean')) return '清理海报'
   if (text.includes('batch') && (text.includes('audit') || text.includes('approve') || text.includes('reject'))) return '批量审核' + info.subject

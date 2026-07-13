@@ -121,19 +121,35 @@ const realOperationSamples = [
   ['http.post.audit.batch', 'audit', 'audit', '批量审核预约', '预约审核'],
   ['http.post.poster_id.clean', 'poster', 'audit', '清理海报', '海报审核'],
   ['http.post.poster_id.violation', 'poster', 'audit', '标记海报违规', '海报审核'],
+  ['http.post.poster_id.reject', 'poster', 'audit', '驳回海报', '海报审核'],
+  ['http.post.credit.violation', 'credit', 'create', '新增违规记录', '违规与信用治理'],
+  ['http.put.credit.blacklist_userId', 'credit', 'operate', '更新黑名单', '违规与信用治理'],
   ['http.post.checkin', 'checkin', 'operate', '预约签到', '签到核销'],
   ['http.post.checkin.checkout', 'checkin', 'operate', '预约核销', '签到核销'],
   ['http.post.checkin.manual', 'checkin', 'operate', '人工签到', '签到核销'],
   ['http.post.checkin.patrol', 'checkin', 'operate', '巡查预约', '签到核销'],
   ['http.post.reservation_id.rebook', 'reservation', 'operate', '重新预约', '预约管理'],
   ['http.post.reservation.waitlist', 'reservation', 'operate', '加入预约候补', '预约管理'],
+  ['http.delete.reservation_id.waitlist', 'reservation', 'operate', '退出预约候补', '预约管理'],
+  ['http.delete.reservation_id', 'reservation', 'operate', '取消预约', '预约管理'],
   ['http.put.feedback_id.resolve', 'feedback', 'operate', '处理反馈', '反馈管理'],
-  ['http.post.admin.backups_fileName_verify', 'backups', 'operate', '校验数据备份', '数据备份'],
+  ['http.post.admin.backups_fileName.verify', 'backups', 'operate', '校验数据备份', '数据备份'],
   ['http.post.admin.archive', 'archive', 'operate', '学期归档', '系统管理'],
-  ['http.put.student-admin_id_credit', 'student-admin', 'operate', '调整信用分', '宿生账号'],
-  ['http.put.student_admin_id_status', 'student_admin', 'operate', '调整账号状态', '宿生账号'],
+  ['http.put.student-admin_id.credit', 'student-admin', 'operate', '调整信用分', '宿生账号'],
+  ['http.put.student_admin_id.status', 'student_admin', 'operate', '调整账号状态', '宿生账号'],
+  ['http.post.auth.logout', 'auth', 'login', '退出管理后台', '登录管理'],
+  ['http.post.auth.refresh', 'auth', 'login', '刷新登录状态', '登录管理'],
+  ['http.post.reading-room.enter', 'reading-room', 'operate', '登记进入阅览室', '阅览室记录'],
+  ['http.post.reading-room.leave', 'reading-room', 'operate', '登记离开阅览室', '阅览室记录'],
   ['http.post.reservation.check-conflict', 'reservation', 'operate', '处理预约', '预约管理'],
+  ['http.post.room.compare', 'room', 'operate', '对比功能房', '功能房管理'],
+  ['http.put.notification_id.read', 'notification', 'operate', '标记消息已读', '消息管理'],
+  ['http.put.notification.read-all', 'notification', 'operate', '标记全部消息已读', '消息管理'],
+  ['http.post.admin.upload', 'upload', 'operate', '上传管理图片', '文件管理'],
   ['http.post.admin.rooms', 'rooms', 'create', '新增功能房', '功能房管理'],
+  ['http.put.admin.config', 'config', 'update', '更新系统设置', '系统管理'],
+  ['http.put.admin.managers_id', 'managers', 'update', '更新管理账号', '管理账号'],
+  ['http.delete.admin.announcements_id', 'announcements', 'delete', '删除或停用公告', '公告管理'],
   ['http.post.admin.seats.batch', 'seats', 'create', '批量新增座位', '座位管理'],
   ['http.post.account-batch', 'account-batch', 'create', '批量新增账号', '批量账号导入'],
   ['http.post.admin.backup', 'backup', 'create', '创建数据备份', '数据备份'],
@@ -156,7 +172,7 @@ for (const [action, targetTable, category, actionLabel, moduleLabel] of realOper
 }
 assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'reading-room' }).actionLabel, '处理阅览记录')
 assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'reading_room' }).moduleLabel, '阅览室记录')
-assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'credit' }).moduleLabel, '信用管理')
+assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'credit' }).moduleLabel, '违规与信用治理')
 assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'account-batch' }).moduleLabel, '批量账号导入')
 assert.equal(operationLogPresenter.presentOperationLog({ action: 'command.unknown', target_table: 'account_batch' }).moduleLabel, '批量账号导入')
 assert.match(logsSource, /label="业务处理"\s+value="operate"/)
