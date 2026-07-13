@@ -85,18 +85,21 @@
         <strong>{{ timelineView.emptyState.title }}</strong>
         <span>{{ timelineView.emptyState.description }}</span>
       </div>
-      <div v-else class="timeline-grid">
-        <div v-for="slot in timelineView.slots" :key="`${slot.time}-${slot.reservationId || slot.status}`" class="timeline-slot" :class="slot.status">
-          <span class="slot-time">{{ slot.time }}</span>
-          <strong>{{ slot.label }}</strong>
-          <template v-if="isStudyRoom">
-            <small v-if="slot.totalCount">剩余 {{ slot.availableCount }}/{{ slot.totalCount }} 座</small>
-          </template>
-          <template v-else-if="slot.status === 'reserved' || slot.status === 'using'">
-            <small v-if="slot.userName">{{ slot.userName }}</small>
-            <small>{{ slot.timeRange }}</small>
-            <small v-if="slot.purpose">{{ slot.purpose }}</small>
-          </template>
+      <div v-else>
+        <div v-if="timelineView.message" class="timeline-notice">{{ timelineView.message }}</div>
+        <div class="timeline-grid">
+          <div v-for="slot in timelineView.slots" :key="`${slot.time}-${slot.reservationId || slot.status}`" class="timeline-slot" :class="slot.status">
+            <span class="slot-time">{{ slot.time }}</span>
+            <strong>{{ slot.label }}</strong>
+            <template v-if="isStudyRoom">
+              <small v-if="slot.totalCount">剩余 {{ slot.availableCount }}/{{ slot.totalCount }} 座</small>
+            </template>
+            <template v-else-if="slot.status === 'reserved' || slot.status === 'using'">
+              <small v-if="slot.userName">{{ slot.userName }}</small>
+              <small>{{ slot.timeRange }}</small>
+              <small v-if="slot.purpose">{{ slot.purpose }}</small>
+            </template>
+          </div>
         </div>
       </div>
     </el-dialog>
@@ -129,8 +132,8 @@ const timelineLegend = [
 const isStudyRoom = computed(() => currentRoom.value?.type === 'study_room')
 const roomOpeningHours = computed(() => {
   const room = currentRoom.value || {}
-  const start = room.openTime || room.open_time || room.openStartTime
-  const end = room.closeTime || room.close_time || room.openEndTime
+  const start = timelineView.value.openStartTime || room.openStartTime || room.open_start_time || room.openTime || room.open_time
+  const end = timelineView.value.openEndTime || room.openEndTime || room.open_end_time || room.closeTime || room.close_time
   return start && end ? `${start}-${end}` : '以场地当日安排为准'
 })
 
@@ -426,6 +429,7 @@ onBeforeUnmount(() => {
 .timeline-slot.reserved { background: #fdf6ec; border-color: #e6a23c; }
 .timeline-slot.using { background: #ecf5ff; border-color: #409eff; }
 .timeline-slot.maintenance { background: #fef0f0; border-color: #f56c6c; }
+.timeline-slot.unknown { background: #f4f4f5; border-color: #909399; }
 .timeline-legend .available { background: #67c23a; }
 .timeline-legend .reserved { background: #e6a23c; }
 .timeline-legend .using { background: #409eff; }
@@ -444,6 +448,14 @@ onBeforeUnmount(() => {
 .timeline-message strong {
   color: #303133;
   font-size: 16px;
+}
+
+.timeline-notice {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  color: #3f7d20;
+  background: #f0f9eb;
+  border-radius: 6px;
 }
 
 @media (max-width: 720px) {

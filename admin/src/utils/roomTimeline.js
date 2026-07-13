@@ -18,14 +18,17 @@ const timelineStatus = {
   open: { key: 'available', label: '空闲' },
   occupied: { key: 'reserved', label: '已预约' },
   reserved: { key: 'reserved', label: '已预约' },
-  myReservation: { key: 'reserved', label: '已预约' },
+  myReservation: { key: 'using', label: '使用中' },
+  checked_in: { key: 'using', label: '使用中' },
   using: { key: 'using', label: '使用中' },
-  maintenance: { key: 'maintenance', label: '维护' }
+  unavailable: { key: 'maintenance', label: '维护' },
+  maintenance: { key: 'maintenance', label: '维护' },
+  unknown: { key: 'unknown', label: '状态未知' }
 }
 
 export function buildTimelineView(data) {
   const slots = normalizeTimelineResponse(data).map(slot => {
-    const state = timelineStatus[slot.status] || timelineStatus.available
+    const state = timelineStatus[slot.status] || timelineStatus.unknown
     return {
       ...slot,
       status: state.key,
@@ -34,14 +37,18 @@ export function buildTimelineView(data) {
     }
   })
   const reservationCount = slots.filter(slot => slot.status === 'reserved' || slot.status === 'using').length
+  const isAllAvailable = slots.every(slot => slot.status === 'available')
 
   return {
     slots,
+    openStartTime: data?.openStartTime || data?.open_start_time || '',
+    openEndTime: data?.openEndTime || data?.open_end_time || '',
     summary: {
       total: slots.length,
       reservationCount,
-      isAllAvailable: slots.every(slot => slot.status === 'available')
+      isAllAvailable
     },
+    message: slots.length && isAllAvailable ? '今日暂无预约，当前时段均可使用' : '',
     emptyState: slots.length ? null : {
       title: '今日全天空闲',
       description: '当前没有预约或维护安排'

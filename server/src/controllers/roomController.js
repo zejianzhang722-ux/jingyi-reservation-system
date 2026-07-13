@@ -156,23 +156,34 @@ const timeline = async function(req, res) {
 
         let status = 'available';
         const occupiedCount = conflictReservations.length;
+        let activeReservation = null;
         if (occupiedCount > 0) {
-          const hasMyReservation = conflictReservations.some(function(r) {
-            return req.user && r.user_id === req.user.id;
-          });
-          if (hasMyReservation) {
+          activeReservation = conflictReservations.find(function(r) { return r.status === 'checked_in'; }) ||
+            conflictReservations.find(function(r) { return req.user && r.user_id === req.user.id; }) ||
+            conflictReservations[0];
+          if (activeReservation.status === 'checked_in') {
+            status = 'checked_in';
+          } else if (req.user && activeReservation.user_id === req.user.id) {
             status = 'myReservation';
           } else {
             status = 'occupied';
           }
         }
 
+        const canViewDetails = activeReservation && req.user && (
+          activeReservation.user_id === req.user.id ||
+          ['admin', 'super_admin', 'counselor'].includes(req.user.role)
+        );
+
         return {
           time: hour,
           endTime: slotEnd,
           status: status,
           availableCount: status === 'available' ? room.capacity : Math.max(0, room.capacity - occupiedCount),
-          totalCount: room.capacity || 1
+          totalCount: room.capacity || 1,
+          reservationId: canViewDetails ? activeReservation.id : null,
+          userName: canViewDetails ? (activeReservation.real_name || activeReservation.nickname || '') : '',
+          purpose: canViewDetails ? (activeReservation.purpose || '') : ''
         };
       }
     });
