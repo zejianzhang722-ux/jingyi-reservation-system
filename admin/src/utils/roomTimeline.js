@@ -81,6 +81,27 @@ export function createLatestRequestGate() {
   }
 }
 
+export function createTimelineRequestCoordinator({ load, onStart, onSuccess, onError, onFinish }) {
+  const gate = createLatestRequestGate()
+  return {
+    async run(...args) {
+      const requestId = gate.begin()
+      onStart()
+      try {
+        const result = await load(...args)
+        if (gate.isLatest(requestId)) onSuccess(result)
+      } catch (error) {
+        if (gate.isLatest(requestId)) onError(error)
+      } finally {
+        if (gate.isLatest(requestId)) onFinish()
+      }
+    },
+    invalidate() {
+      gate.invalidate()
+    }
+  }
+}
+
 export function normalizeTimelineResponse(data) {
   if (Array.isArray(data)) return data.map(normalizeSlot);
   if (Array.isArray(data?.timeline)) return data.timeline.map(normalizeSlot);

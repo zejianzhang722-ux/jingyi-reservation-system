@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
-import { buildTimelineView, createLatestRequestGate } from '../admin/src/utils/roomTimeline.js'
+import { buildTimelineView, createLatestRequestGate, createTimelineRequestCoordinator } from '../admin/src/utils/roomTimeline.js'
 
 const timelineView = buildTimelineView({
   openStartTime: '08:00',
@@ -45,6 +45,9 @@ assert.match(monitorSource, /timelineView\.message/)
 assert.match(monitorSource, /timelineError/)
 assert.match(monitorSource, /retryTimeline/)
 assert.match(monitorSource, /\u91cd\u8bd5/)
+assert.match(monitorSource, /createTimelineRequestCoordinator/)
+assert.match(monitorSource, /timelineRequestCoordinator\.run/)
+assert.match(monitorSource, /timelineRequestCoordinator\.invalidate/)
 assert.doesNotMatch(monitorTemplate, /WebSocket|Token|\u4ee4\u724c/i)
 
 const controllerSource = readFileSync(new URL('../server/src/controllers/roomController.js', import.meta.url), 'utf8')
@@ -128,5 +131,66 @@ await pendingSecond
 finishFirst('A')
 await pendingFirst
 assert.equal(visibleRoom, 'B')
+
+function deferred() {
+  let resolve
+  let reject
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function coordinatorHarness() {
+  const requests = new Map()
+  const state = { loading: false, value: '', error: '', writes: 0 }
+  const coordinator = createTimelineRequestCoordinator({
+    load: key => requests.get(key).promise,
+    onStart: () => { state.loading = true; state.error = ''; state.writes += 1 },
+    onSuccess: value => { state.value = value; state.writes += 1 },
+    onError: error => { state.error = error.message; state.writes += 1 },
+    onFinish: () => { state.loading = false; state.writes += 1 }
+  })
+  return { requests, state, coordinator }
+}
+
+const successOrder = coordinatorHarness()
+successOrder.requests.set('A', deferred())
+successOrder.requests.set('B', deferred())
+const slowA = successOrder.coordinator.run('A')
+const fastB = successOrder.coordinator.run('B')
+successOrder.requests.get('A').resolve('A')
+await slowA
+assert.equal(successOrder.state.value, '')
+assert.equal(successOrder.state.loading, true)
+successOrder.requests.get('B').resolve('B')
+await fastB
+assert.deepEqual(successOrder.state, { loading: false, value: 'B', error: '', writes: 4 })
+
+const staleFailure = coordinatorHarness()
+staleFailure.requests.set('A', deferred())
+staleFailure.requests.set('B', deferred())
+const failingA = staleFailure.coordinator.run('A')
+const succeedingB = staleFailure.coordinator.run('B')
+staleFailure.requests.get('A').reject(new Error('A failed'))
+await failingA
+assert.equal(staleFailure.state.error, '')
+assert.equal(staleFailure.state.loading, true)
+staleFailure.requests.get('B').resolve('B')
+await succeedingB
+assert.deepEqual(staleFailure.state, { loading: false, value: 'B', error: '', writes: 4 })
+
+for (const outcome of ['success', 'failure']) {
+  const invalidated = coordinatorHarness()
+  invalidated.requests.set('A', deferred())
+  const pending = invalidated.coordinator.run('A')
+  invalidated.coordinator.invalidate()
+  const writesBeforeSettlement = invalidated.state.writes
+  if (outcome === 'success') invalidated.requests.get('A').resolve('A')
+  else invalidated.requests.get('A').reject(new Error('stale failure'))
+  await pending
+  assert.equal(invalidated.state.writes, writesBeforeSettlement)
+}
 
 console.log('admin monitor timeline checks passed')

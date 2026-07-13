@@ -113,7 +113,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { io } from 'socket.io-client'
 import { getList, getTimeline, getBuildings } from '@/api/room'
-import { buildMiniTimeline, buildTimelineView, createLatestRequestGate } from '@/utils/roomTimeline'
+import { buildMiniTimeline, buildTimelineView, createTimelineRequestCoordinator } from '@/utils/roomTimeline'
 
 const filters = reactive({ buildingId: '', type: '' })
 const rooms = ref([])
@@ -127,7 +127,22 @@ const timelineError = ref(false)
 const timelineView = ref(buildTimelineView([]))
 const timelineDate = ref('')
 let socket = null
-const timelineRequestGate = createLatestRequestGate()
+const timelineRequestCoordinator = createTimelineRequestCoordinator({
+  load: ({ roomId, date }) => getTimeline(roomId, { date }),
+  onStart: () => {
+    timelineLoading.value = true
+    timelineError.value = false
+  },
+  onSuccess: (res) => {
+    timelineView.value = buildTimelineView(res.data)
+  },
+  onError: () => {
+    timelineError.value = true
+  },
+  onFinish: () => {
+    timelineLoading.value = false
+  }
+})
 
 const timelineLegend = [
   { status: 'available', label: '空闲' }, { status: 'reserved', label: '已预约' },
@@ -205,20 +220,7 @@ function formatLocalDate(date) {
 
 async function loadTimeline() {
   if (!currentRoom.value) return
-  const requestId = timelineRequestGate.begin()
-  const roomId = currentRoom.value.id
-  timelineLoading.value = true
-  timelineError.value = false
-  try {
-    const res = await getTimeline(roomId, { date: timelineDate.value })
-    if (!timelineRequestGate.isLatest(requestId)) return
-    timelineView.value = buildTimelineView(res.data)
-  } catch (e) {
-    if (!timelineRequestGate.isLatest(requestId)) return
-    timelineError.value = true
-  } finally {
-    if (timelineRequestGate.isLatest(requestId)) timelineLoading.value = false
-  }
+  await timelineRequestCoordinator.run({ roomId: currentRoom.value.id, date: timelineDate.value })
 }
 
 function retryTimeline() {
@@ -268,7 +270,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  timelineRequestGate.invalidate()
+  timelineRequestCoordinator.invalidate()
   socket?.disconnect()
 })
 </script>
