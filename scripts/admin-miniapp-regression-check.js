@@ -1,3 +1,4 @@
+const fs = require('fs')
 const path = require('path')
 
 const root = path.resolve(__dirname, '..')
@@ -243,7 +244,10 @@ async function main() {
   assert(typeof reservationPage.onShow === 'function', '全部预约页应在 onShow 加载和刷新列表')
   reservationPage.onShow.call(reservationPage)
   await flushPromises()
-  assert(reservationPage.data.queueType === 'admin', '导生管理员不能通过页面参数获得辅导员审批权限')
+  const reservationWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation/admin-reservation.wxml'), 'utf8')
+  assert(!Object.prototype.hasOwnProperty.call(reservationPage.data, 'queueType') && !Object.prototype.hasOwnProperty.call(reservationPage.data, 'queueLabel'), '全部预约页不应保留审核队列状态')
+  assert(reservationWxml.indexOf('全部预约') !== -1, '全部预约页标题应明确说明展示全部预约')
+  assert(reservationWxml.indexOf('queueLabel') === -1 && reservationWxml.indexOf('普通预约审核') === -1 && reservationWxml.indexOf('辅导员重点审核') === -1, '全部预约页不应显示审核队列标签')
   assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation' }), '全部预约页仍应读取 /reservation')
   assert(approvalCalls.filter(function(call) { return call.url === '/reservation' }).length === 1, '全部预约页首次 onLoad + onShow 只能产生一轮列表请求')
   assert(reservationPage.data.list[0].canAudit === true && reservationPage.data.list[1].canAudit === false, '导生管理员只能操作 pending 状态')
@@ -263,6 +267,13 @@ async function main() {
   modalResponse = { confirm: true, content: '重复提交检查' }
   approvalCalls.length = 0
   const homeApproval = deferred()
+  const homePendingRefresh = deferred()
+  const homeStatsRefresh = deferred()
+  request.get = function(url) {
+    approvalCalls.push({ method: 'GET', url: url, params: {} })
+    if (url === '/audit/pending') return homePendingRefresh.promise
+    return homeStatsRefresh.promise
+  }
   request.post = function(url, body) {
     approvalCalls.push({ method: 'POST', url: url, body: body || {} })
     return homeApproval.promise
@@ -275,10 +286,30 @@ async function main() {
   homeApproval.resolve({})
   await flushPromises()
   await flushPromises()
-  assert(!homePage.data.processingById[101], '首页请求结束后应恢复该预约操作状态')
+  assert(homePage.data.processingById[101], '首页批准成功但列表和统计仍在刷新时应继续锁定该预约')
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  assert(approvalCalls.filter(function(call) { return call.url === '/audit/101/approve' }).length === 1, '首页刷新未完成时再次点击不得重复提交')
+  homePendingRefresh.resolve({ list: [], total: 0, page: 1, pageSize: 10 })
+  homeStatsRefresh.resolve({ count: 0, activeRooms: 6, todayReservations: 2, total: 0 })
+  await flushPromises()
+  await flushPromises()
+  assert(!homePage.data.processingById[101], '首页列表和统计刷新完成后应恢复该预约操作状态')
+
+  const failedHomeApproval = deferred()
+  request.post = function() { return failedHomeApproval.promise }
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 102 } } })
+  failedHomeApproval.reject(new Error('expected failure'))
+  await flushPromises()
+  assert(!homePage.data.processingById[102], '首页审批失败后也应恢复该预约操作状态')
 
   approvalCalls.length = 0
   const reservationApproval = deferred()
+  const reservationRefresh = deferred()
+  request.get = function(url) {
+    approvalCalls.push({ method: 'GET', url: url, params: {} })
+    if (url === '/reservation') return reservationRefresh.promise
+    return Promise.resolve({})
+  }
   request.post = function(url, body) {
     approvalCalls.push({ method: 'POST', url: url, body: body || {} })
     return reservationApproval.promise
@@ -291,7 +322,20 @@ async function main() {
   reservationApproval.resolve({})
   await flushPromises()
   await flushPromises()
-  assert(!reservationPage.data.processingById[101], '全部预约页请求结束后应恢复该预约操作状态')
+  assert(reservationPage.data.processingById[101], '全部预约页批准成功但列表仍在刷新时应继续锁定该预约')
+  reservationPage.onApprove.call(reservationPage, { currentTarget: { dataset: { id: 101 } } })
+  assert(approvalCalls.filter(function(call) { return call.url === '/audit/101/approve' }).length === 1, '全部预约页刷新未完成时再次点击不得重复提交')
+  reservationRefresh.resolve({ list: [], total: 0, page: 1, pageSize: 20 })
+  await flushPromises()
+  await flushPromises()
+  assert(!reservationPage.data.processingById[101], '全部预约页列表刷新完成后应恢复该预约操作状态')
+
+  const failedApproval = deferred()
+  request.post = function() { return failedApproval.promise }
+  reservationPage.onApprove.call(reservationPage, { currentTarget: { dataset: { id: 102 } } })
+  failedApproval.reject(new Error('expected failure'))
+  await flushPromises()
+  assert(!reservationPage.data.processingById[102], '全部预约页审批失败后也应恢复该预约操作状态')
 
   const homeRequests = [deferred(), deferred()]
   let homeRequestIndex = 0
@@ -306,6 +350,22 @@ async function main() {
   homeRequests[0].resolve({ list: [{ id: 201 }], total: 1, page: 1, pageSize: 10 })
   await flushPromises()
   assert(homePage.data.pendingList[0].id === 202, '首页旧列表响应不得覆盖较新的列表结果')
+
+  const pendingCountRequests = [deferred(), deferred()]
+  let pendingCountRequestIndex = 0
+  request.get = function(url) {
+    if (url === '/reservation/pending-count') return pendingCountRequests[pendingCountRequestIndex++].promise
+    if (url === '/room/stats') return Promise.resolve({ activeRooms: 6, todayReservations: 2 })
+    if (url === '/feedback') return Promise.resolve({ total: 3 })
+    return Promise.resolve({})
+  }
+  homePage.loadStats.call(homePage)
+  homePage.loadStats.call(homePage)
+  pendingCountRequests[1].resolve({ count: 9 })
+  await flushPromises()
+  pendingCountRequests[0].resolve({ count: 2 })
+  await flushPromises()
+  assert(homePage.data.pendingCount === 9, '首页较旧的待审核数量响应不得覆盖最新统计')
 
   const reservationRequests = [deferred(), deferred()]
   let reservationRequestIndex = 0

@@ -9,8 +9,6 @@ Page({
     keyword: '',
     page: 1,
     hasMore: true,
-    queueType: 'admin',
-    queueLabel: '普通预约审核',
     processingById: {},
     statusMap: { pending: '待审批', counselor_pending: '待辅导员审批', approved: '已通过', rejected: '已拒绝', cancelled: '已取消', checked_in: '使用中', completed: '已完成' }
   },
@@ -22,14 +20,8 @@ Page({
     }
     return true
   },
-  onLoad: function (options) {
+  onLoad: function () {
     if (!this.ensureAccess()) return
-    var role = auth.getUserRole()
-    var queueType = adminPolicy.queueType(role, options && options.queueType)
-    this.setData({
-      queueType: queueType,
-      queueLabel: queueType === 'counselor' ? '辅导员重点审核' : '普通预约审核'
-    })
   },
   onShow: function () {
     if (!this.ensureAccess()) return
@@ -62,7 +54,7 @@ Page({
     var requestVersion = this._listRequestVersion
     var params = { page: this.data.page, pageSize: 20 }
     if (this.data.filterStatus) params.status = this.data.filterStatus
-    request.get('/reservation', params, { silent: true }).then(function (data) {
+    return request.get('/reservation', params, { silent: true }).then(function (data) {
       if (requestVersion !== that._listRequestVersion) return
       var list = data
       if (!Array.isArray(list)) list = (data && (data.list || data.reservations)) || []
@@ -103,7 +95,7 @@ Page({
         that.setProcessing(id, true)
         request.post('/audit/' + id + '/approve', {}).then(function () {
           wx.showToast({ title: '已通过', icon: 'success' })
-          that.loadData()
+          return that.loadData()
         }, function () {
           wx.showToast({ title: '操作失败', icon: 'none' })
         }).then(function () {
@@ -134,7 +126,7 @@ Page({
         that.setProcessing(id, true)
         request.post('/audit/' + id + '/reject', { reason: reason }).then(function () {
           wx.showToast({ title: '已拒绝', icon: 'success' })
-          that.loadData()
+          return that.loadData()
         }, function () {
           wx.showToast({ title: '操作失败', icon: 'none' })
         }).then(function () {

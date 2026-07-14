@@ -52,27 +52,35 @@ Page({
   loadStats: function () {
     var that = this
     var role = auth.getUserRole()
-    request.get('/reservation/pending-count', { type: this.data.queueType }, { silent: true }).then(function (data) {
+    this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
+    var requestVersion = this._statsRequestVersion
+    var pendingRequest = request.get('/reservation/pending-count', { type: this.data.queueType }, { silent: true }).then(function (data) {
+      if (requestVersion !== that._statsRequestVersion) return
       that.setData({ pendingCount: data.count || 0 })
     }).catch(function () {})
-    request.get('/room/stats', {}, { silent: true }).then(function (data) {
+    var roomRequest = request.get('/room/stats', {}, { silent: true }).then(function (data) {
+      if (requestVersion !== that._statsRequestVersion) return
       that.setData({ activeRooms: data.activeRooms || 12, todayReservations: data.todayReservations || 0 })
     }).catch(function () {
+      if (requestVersion !== that._statsRequestVersion) return
       that.setData({ activeRooms: 12 })
     })
+    var feedbackRequest = Promise.resolve()
     if (adminPolicy.can(role, 'feedbackManage')) {
-      request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
+      feedbackRequest = request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
+        if (requestVersion !== that._statsRequestVersion) return
         that.setData({ feedbackCount: data.total || 0 })
       }).catch(function () {})
     } else {
       this.setData({ feedbackCount: 0 })
     }
+    return Promise.all([pendingRequest, roomRequest, feedbackRequest])
   },
   loadPendingList: function () {
     var that = this
     this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
     var requestVersion = this._pendingRequestVersion
-    request.get('/audit/pending', {
+    return request.get('/audit/pending', {
       type: this.data.queueType,
       page: 1,
       pageSize: 10
@@ -143,8 +151,7 @@ Page({
         that.setProcessing(id, true)
         request.post('/audit/' + id + '/approve', {}).then(function () {
           wx.showToast({ title: '已通过', icon: 'success' })
-          that.loadPendingList()
-          that.loadStats()
+          return Promise.all([that.loadPendingList(), that.loadStats()])
         }, function () {
           wx.showToast({ title: '操作失败', icon: 'none' })
         }).then(function () {
@@ -175,8 +182,7 @@ Page({
         that.setProcessing(id, true)
         request.post('/audit/' + id + '/reject', { reason: reason }).then(function () {
           wx.showToast({ title: '已拒绝', icon: 'success' })
-          that.loadPendingList()
-          that.loadStats()
+          return Promise.all([that.loadPendingList(), that.loadStats()])
         }, function () {
           wx.showToast({ title: '操作失败', icon: 'none' })
         }).then(function () {

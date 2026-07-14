@@ -1,7 +1,6 @@
 <view class="container">
   <view class="header">
-    <text class="title">预约列表</text>
-    <text class="queue-label">{{queueLabel}}</text>
+    <text class="title">全部预约</text>
     <view class="search-bar">
       <input class="search-input" placeholder="搜索用户/房间" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" />
     </view>
