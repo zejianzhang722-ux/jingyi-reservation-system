@@ -48,9 +48,18 @@ Page({
     if (this.ensureAdmin()) return this.loadData()
   },
 
+  hasReadAccess: function () {
+    return auth.isLoggedIn() && auth.isAdmin() && adminPolicy.can(auth.getUserRole(), 'roomView')
+  },
+
+  clearList: function () {
+    this._listRequestVersion = (this._listRequestVersion || 0) + 1
+    this.setData({ list: [] })
+  },
+
   ensureAdmin: function () {
-    var role = auth.getUserRole()
-    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'roomView')) {
+    if (!this.hasReadAccess()) {
+      this.clearList()
       wx.reLaunch({ url: '/pages/login/login' })
       return false
     }
@@ -59,14 +68,30 @@ Page({
 
   loadData: function () {
     var that = this
+    if (!this.hasReadAccess()) {
+      this.clearList()
+      return Promise.resolve()
+    }
+    this._listRequestVersion = (this._listRequestVersion || 0) + 1
+    var requestVersion = this._listRequestVersion
     var params = {}
     var apiType = apiTypeMap[this.data.filterType]
     if (apiType) params.type = apiType
 
     return request.get('/room', params, { silent: true }).then(function (data) {
+      if (!that.hasReadAccess()) {
+        that.clearList()
+        return
+      }
+      if (requestVersion !== that._listRequestVersion) return
       var list = Array.isArray(data) ? data : (data.list || data.rooms || [])
       that.setData({ list: list })
     }).catch(function () {
+      if (!that.hasReadAccess()) {
+        that.clearList()
+        return
+      }
+      if (requestVersion !== that._listRequestVersion) return
       that.setData({ list: [] })
     })
   },

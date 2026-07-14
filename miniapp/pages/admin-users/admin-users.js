@@ -4,9 +4,16 @@ var adminPolicy = require('../../utils/admin-policy')
 
 Page({
   data: { list: [], keyword: '', filteredList: [], canManageStudents: false },
+  hasReadAccess: function () {
+    return auth.isLoggedIn() && auth.isAdmin() && adminPolicy.can(auth.getUserRole(), 'residentView')
+  },
+  clearList: function () {
+    this._listRequestVersion = (this._listRequestVersion || 0) + 1
+    this.setData({ list: [], filteredList: [] })
+  },
   ensureAdmin: function () {
-    var role = auth.getUserRole()
-    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'residentView')) {
+    if (!this.hasReadAccess()) {
+      this.clearList()
       wx.reLaunch({ url: '/pages/login/login' })
       return false
     }
@@ -16,12 +23,28 @@ Page({
   onShow: function () { if (this.ensureAdmin()) return this.loadData() },
   loadData: function () {
     var that = this
-    request.get('/user/list', {}, { silent: true }).then(function (data) {
+    if (!this.hasReadAccess()) {
+      this.clearList()
+      return Promise.resolve()
+    }
+    this._listRequestVersion = (this._listRequestVersion || 0) + 1
+    var requestVersion = this._listRequestVersion
+    return request.get('/user/list', {}, { silent: true }).then(function (data) {
+      if (!that.hasReadAccess()) {
+        that.clearList()
+        return
+      }
+      if (requestVersion !== that._listRequestVersion) return
       var list = data
       if (!Array.isArray(list)) list = data.list || data.users || []
       list = that.enhanceUsers(list)
       that.setData({ list: list, filteredList: that.applyFilter(list, that.data.keyword) })
     }).catch(function () {
+      if (!that.hasReadAccess()) {
+        that.clearList()
+        return
+      }
+      if (requestVersion !== that._listRequestVersion) return
       that.setData({ list: [], filteredList: [] })
     })
   },

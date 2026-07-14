@@ -9,6 +9,8 @@ const storage = {
 const navCalls = []
 const toastCalls = []
 let modalResponse = { confirm: true, content: '' }
+let holdModal = false
+let pendingModalSuccess = null
 
 global.wx = {
   getStorageSync: function(key) { return storage[key] },
@@ -18,6 +20,10 @@ global.wx = {
   reLaunch: function(options) { navCalls.push({ type: 'reLaunch', url: options.url }) },
   showToast: function(options) { toastCalls.push(options || {}) },
   showModal: function(options) {
+    if (holdModal) {
+      pendingModalSuccess = options && options.success
+      return
+    }
     if (options && options.success) options.success(modalResponse)
   },
   stopPullDownRefresh: function() {}
@@ -261,6 +267,198 @@ async function main() {
     assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/feedback' }), role + ' 应能加载反馈')
     assert(capabilityCalls.some(function(call) { return call.method === 'PUT' && call.url === '/feedback/2/resolve' }), role + ' 应能处理反馈')
   })
+
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  const staleBlacklist = deferred()
+  request.get = function(url) {
+    capabilityCalls.push({ method: 'GET', url: url, params: {} })
+    if (url === '/credit/blacklist') return staleBlacklist.promise
+    return Promise.resolve([])
+  }
+  creditPage = loadPage('miniapp/pages/admin-credit/admin-credit.js')
+  creditPage.onLoad.call(creditPage, { tab: 'blacklist' })
+  storage.userInfo.role = 'admin'
+  assert(typeof creditPage.onShow === 'function', '信用页应在 onShow 重新同步当前角色能力')
+  creditPage.onShow.call(creditPage)
+  assert(creditPage.data.activeTab === 'violations', '信用页角色降级后 onShow 应立即回到违规记录')
+  assert(creditPage.data.tabs.map(function(tab) { return tab.key }).join(',') === 'violations', '信用页角色降级后 onShow 应立即移除黑名单标签')
+  assert(creditPage.data.blacklist.length === 0, '信用页角色降级后 onShow 应立即清空黑名单')
+  staleBlacklist.resolve([{ id: 901, student_id: 'sensitive' }])
+  await flushPromises()
+  assert(creditPage.data.blacklist.length === 0, '角色降级后完成的旧黑名单请求不得回写')
+
+  storage.userInfo.role = 'admin'
+  const creditReads = [deferred(), deferred()]
+  let creditReadIndex = 0
+  request.get = function(url) {
+    capabilityCalls.push({ method: 'GET', url: url, params: {} })
+    if (url === '/credit/violations') return creditReads[creditReadIndex++].promise
+    return Promise.resolve([])
+  }
+  creditPage.loadViolations.call(creditPage)
+  creditPage.loadViolations.call(creditPage)
+  creditReads[1].resolve([{ id: 902 }])
+  await flushPromises()
+  creditReads[0].resolve([{ id: 901 }])
+  await flushPromises()
+  assert(creditPage.data.violations.length === 1 && creditPage.data.violations[0].id === 902, '信用页较旧读取不得覆盖最新结果')
+  const staleCreditOnLogout = [deferred(), deferred()]
+  let staleCreditIndex = 0
+  request.get = function() { return staleCreditOnLogout[staleCreditIndex++].promise }
+  creditPage.setData({ violations: [{ id: 903 }], blacklist: [{ id: 904 }] })
+  creditPage.loadViolations.call(creditPage)
+  creditPage.loadViolations.call(creditPage)
+  storage.userInfo.role = 'student'
+  staleCreditOnLogout[0].resolve([{ id: 905 }])
+  await flushPromises()
+  assert(creditPage.data.violations.length === 0 && creditPage.data.blacklist.length === 0, '信用页旧请求完成时发现已退出管理员也应立即清空全部数据')
+
+  storage.userInfo.role = 'admin'
+  const userReads = [deferred(), deferred()]
+  let userReadIndex = 0
+  request.get = function(url) {
+    if (url === '/user/list') return userReads[userReadIndex++].promise
+    return Promise.resolve([])
+  }
+  let usersRacePage = loadPage('miniapp/pages/admin-users/admin-users.js')
+  usersRacePage.loadData.call(usersRacePage)
+  usersRacePage.loadData.call(usersRacePage)
+  userReads[1].resolve([{ id: 912, name: '最新宿生' }])
+  await flushPromises()
+  userReads[0].resolve([{ id: 911, name: '旧宿生' }])
+  await flushPromises()
+  assert(usersRacePage.data.list.length === 1 && usersRacePage.data.list[0].id === 912, '宿生页较旧读取不得覆盖最新结果')
+  const staleUsersWhileLatestPending = [deferred(), deferred()]
+  let staleUsersPendingIndex = 0
+  request.get = function() { return staleUsersWhileLatestPending[staleUsersPendingIndex++].promise }
+  usersRacePage.setData({ list: [{ id: 915 }], filteredList: [{ id: 915 }] })
+  usersRacePage.loadData.call(usersRacePage)
+  usersRacePage.loadData.call(usersRacePage)
+  storage.userInfo.role = 'student'
+  staleUsersWhileLatestPending[0].resolve([{ id: 916 }])
+  await flushPromises()
+  assert(usersRacePage.data.list.length === 0 && usersRacePage.data.filteredList.length === 0, '宿生页旧请求完成时发现已退出管理员也应立即清空列表')
+  storage.userInfo.role = 'admin'
+  const staleUsers = deferred()
+  request.get = function() { return staleUsers.promise }
+  usersRacePage.setData({ list: [{ id: 913 }], filteredList: [{ id: 913 }] })
+  usersRacePage.loadData.call(usersRacePage)
+  storage.userInfo.role = 'student'
+  staleUsers.resolve([{ id: 914, name: '越权宿生' }])
+  await flushPromises()
+  assert(usersRacePage.data.list.length === 0 && usersRacePage.data.filteredList.length === 0, '退出管理员角色后完成的宿生请求不得回写且应清空列表')
+
+  storage.userInfo.role = 'admin'
+  const roomReads = [deferred(), deferred()]
+  let roomReadIndex = 0
+  request.get = function(url) {
+    if (url === '/room') return roomReads[roomReadIndex++].promise
+    return Promise.resolve([])
+  }
+  let roomsRacePage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  roomsRacePage.loadData.call(roomsRacePage)
+  roomsRacePage.loadData.call(roomsRacePage)
+  roomReads[1].resolve([{ id: 922, name: '最新房间' }])
+  await flushPromises()
+  roomReads[0].resolve([{ id: 921, name: '旧房间' }])
+  await flushPromises()
+  assert(roomsRacePage.data.list.length === 1 && roomsRacePage.data.list[0].id === 922, '房间页较旧读取不得覆盖最新结果')
+  const staleRoomsWhileLatestPending = [deferred(), deferred()]
+  let staleRoomsPendingIndex = 0
+  request.get = function() { return staleRoomsWhileLatestPending[staleRoomsPendingIndex++].promise }
+  roomsRacePage.setData({ list: [{ id: 925 }] })
+  roomsRacePage.loadData.call(roomsRacePage)
+  roomsRacePage.loadData.call(roomsRacePage)
+  storage.userInfo.role = 'student'
+  staleRoomsWhileLatestPending[0].resolve([{ id: 926 }])
+  await flushPromises()
+  assert(roomsRacePage.data.list.length === 0, '房间页旧请求完成时发现已退出管理员也应立即清空列表')
+  storage.userInfo.role = 'admin'
+  const staleRooms = deferred()
+  request.get = function() { return staleRooms.promise }
+  roomsRacePage.setData({ list: [{ id: 923 }] })
+  roomsRacePage.loadData.call(roomsRacePage)
+  storage.userInfo.role = 'student'
+  staleRooms.resolve([{ id: 924, name: '越权房间' }])
+  await flushPromises()
+  assert(roomsRacePage.data.list.length === 0, '退出管理员角色后完成的房间请求不得回写且应清空列表')
+
+  storage.userInfo.role = 'counselor'
+  const feedbackReads = [deferred(), deferred()]
+  let feedbackReadIndex = 0
+  request.get = function(url) {
+    if (url === '/feedback') return feedbackReads[feedbackReadIndex++].promise
+    return Promise.resolve([])
+  }
+  let feedbackRacePage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  feedbackRacePage.loadFeedback.call(feedbackRacePage)
+  feedbackRacePage.loadFeedback.call(feedbackRacePage)
+  feedbackReads[1].resolve({ list: [{ id: 932 }] })
+  await flushPromises()
+  feedbackReads[0].resolve({ list: [{ id: 931 }] })
+  await flushPromises()
+  assert(feedbackRacePage.data.list.length === 1 && feedbackRacePage.data.list[0].id === 932, '反馈页较旧读取不得覆盖最新结果')
+  const staleFeedbackWhileLatestPending = [deferred(), deferred()]
+  let staleFeedbackPendingIndex = 0
+  request.get = function() { return staleFeedbackWhileLatestPending[staleFeedbackPendingIndex++].promise }
+  feedbackRacePage.setData({ list: [{ id: 935 }] })
+  feedbackRacePage.loadFeedback.call(feedbackRacePage)
+  feedbackRacePage.loadFeedback.call(feedbackRacePage)
+  storage.userInfo.role = 'admin'
+  staleFeedbackWhileLatestPending[0].resolve({ list: [{ id: 936 }] })
+  await flushPromises()
+  assert(feedbackRacePage.data.list.length === 0, '反馈页旧请求完成时发现能力失效也应立即清空列表')
+  storage.userInfo.role = 'counselor'
+  const staleFeedback = deferred()
+  request.get = function() { return staleFeedback.promise }
+  feedbackRacePage.setData({ list: [{ id: 933 }] })
+  feedbackRacePage.loadFeedback.call(feedbackRacePage)
+  storage.userInfo.role = 'admin'
+  feedbackRacePage.onShow.call(feedbackRacePage)
+  assert(feedbackRacePage.data.list.length === 0, '反馈权限降级后 onShow 应立即清空反馈数据')
+  staleFeedback.resolve({ list: [{ id: 934, content: '越权反馈' }] })
+  await flushPromises()
+  assert(feedbackRacePage.data.list.length === 0, '反馈权限降级后完成的旧请求不得回写')
+
+  request.put = function(url, body) {
+    capabilityCalls.push({ method: 'PUT', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+  holdModal = true
+  pendingModalSuccess = null
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  toastCalls.length = 0
+  navCalls.length = 0
+  creditPage = loadPage('miniapp/pages/admin-credit/admin-credit.js')
+  creditPage.setData({ violations: [{ id: 940 }], blacklist: [{ id: 941 }] })
+  creditPage.onUnban.call(creditPage, { currentTarget: { dataset: { id: 941 } } })
+  assert(typeof pendingModalSuccess === 'function', '解除黑名单应等待用户确认')
+  storage.userInfo.role = 'student'
+  pendingModalSuccess({ confirm: true })
+  await flushPromises()
+  assert(!capabilityCalls.some(function(call) { return call.url === '/credit/blacklist/941' }), '解除黑名单弹窗打开后角色降级不得提交')
+  assert(creditPage.data.violations.length === 0 && creditPage.data.blacklist.length === 0, '解除黑名单确认时退出管理员应清空全部信用数据')
+  assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), '解除黑名单确认时权限失效应提示')
+  assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/login/login' }), '解除黑名单确认时退出管理员应返回登录页')
+
+  pendingModalSuccess = null
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  toastCalls.length = 0
+  navCalls.length = 0
+  feedbackPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  feedbackPage.onResolve.call(feedbackPage, { currentTarget: { dataset: { id: 942 } } })
+  assert(typeof pendingModalSuccess === 'function', '反馈处理应等待用户确认')
+  storage.userInfo.role = 'admin'
+  pendingModalSuccess({ confirm: true })
+  await flushPromises()
+  assert(!capabilityCalls.some(function(call) { return call.url === '/feedback/942/resolve' }), '反馈处理弹窗打开后角色降级不得提交')
+  assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), '反馈确认时权限失效应提示')
+  assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/admin-manage/admin-manage' }), '反馈确认时权限失效应返回管理中心')
+  holdModal = false
+  pendingModalSuccess = null
 
   ;['admin', 'counselor', 'super_admin'].forEach(function(role) {
     storage.userInfo.role = role
