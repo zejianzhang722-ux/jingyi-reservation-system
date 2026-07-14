@@ -25,6 +25,7 @@
     "pages/profile-edit/profile-edit",
     "pages/admin-home/admin-home",
     "pages/admin-manage/admin-manage",
+    "pages/admin-poster/admin-poster",
     "pages/admin-feedback/admin-feedback",
     "pages/admin-reservation/admin-reservation",
     "pages/admin-users/admin-users",

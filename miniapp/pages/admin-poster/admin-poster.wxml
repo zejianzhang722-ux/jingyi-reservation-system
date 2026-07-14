@@ -1,0 +1,61 @@
+<view class="page">
+  <view class="page-header">
+    <text class="page-title">待审核海报</text>
+    <text class="page-subtitle">请核对投放内容与时间，再完成审核</text>
+  </view>
+
+  <view class="state-card" wx:if="{{loading}}">
+    <view class="loading-dot"></view>
+    <text>正在加载待审核海报</text>
+  </view>
+
+  <view class="state-card error-state" wx:if="{{!loading && error}}">
+    <text class="state-title">海报审核暂时未能加载</text>
+    <text class="state-note">请检查网络后重试</text>
+    <button class="retry-button" bindtap="onRetry">重新加载</button>
+  </view>
+
+  <view class="poster-list" wx:if="{{!loading && !error && list.length > 0}}">
+    <view class="poster-card" wx:for="{{list}}" wx:key="id">
+      <view class="card-heading">
+        <view class="heading-copy">
+          <text class="poster-title">{{item.title || '未命名海报'}}</text>
+          <text class="applicant">申请人：{{item.real_name || item.nickname || item.student_id || '未知申请人'}}</text>
+        </view>
+        <text class="status status-{{item.status}}">{{statusMap[item.status] || item.status || '未知状态'}}</text>
+      </view>
+
+      <view class="info-grid">
+        <view class="info-row">
+          <text class="info-label">申请组织</text>
+          <text class="info-value">{{item.organization || '-'}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">投放位置</text>
+          <text class="info-value">{{item.position_name || item.position || item.location || '未填写'}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">投放时间</text>
+          <text class="info-value">{{item.start_date || item.startDate || '-'}} 至 {{item.end_date || item.endDate || '-'}}</text>
+        </view>
+        <view class="info-row description-row">
+          <text class="info-label">内容说明</text>
+          <text class="info-value description">{{item.description || item.content || '未填写'}}</text>
+        </view>
+      </view>
+
+      <view class="actions" wx:if="{{item.status === 'pending'}}">
+        <text class="processing" wx:if="{{processingIds[item.id]}}">正在提交并刷新列表</text>
+        <block wx:else>
+          <button class="action-button reject-button" data-id="{{item.id}}" bindtap="onReject">拒绝</button>
+          <button class="action-button approve-button" data-id="{{item.id}}" bindtap="onApprove">通过</button>
+        </block>
+      </view>
+    </view>
+  </view>
+
+  <view class="state-card empty-state" wx:if="{{!loading && !error && list.length === 0}}">
+    <text class="state-title">暂无待审核海报</text>
+    <text class="state-note">新的申请提交后会显示在这里</text>
+  </view>
+</view>

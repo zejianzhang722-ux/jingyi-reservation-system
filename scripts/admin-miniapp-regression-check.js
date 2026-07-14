@@ -487,6 +487,222 @@ async function main() {
   assert(announcementWxml.indexOf('请在电脑后台处理此项功能') !== -1, '移动端公告页应显示电脑后台说明')
   assert(announcementWxml.indexOf('bindtap="onAdd"') === -1 && announcementWxml.indexOf('bindtap="onSubmit"') === -1 && announcementWxml.indexOf('bindtap="onDelete"') === -1, '移动端公告页不应提供公告操作')
 
+  const posterAppJson = require('../miniapp/app.json')
+  assert(posterAppJson.pages.indexOf('pages/admin-poster/admin-poster') !== -1, 'app.json 应注册移动端海报审核页')
+
+  storage.userInfo.role = 'admin'
+  capabilityCalls.length = 0
+  toastCalls.length = 0
+  navCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve({ list: [] })
+  }
+  request.post = function(url, body) {
+    capabilityCalls.push({ method: 'POST', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+  let posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  posterPage.onLoad.call(posterPage)
+  posterPage.onShow.call(posterPage)
+  await flushPromises()
+  assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/poster') === 0 }), '导生管理员进入海报审核页时任何生命周期都不得请求海报接口')
+  assert(toastCalls.length > 0, '导生管理员进入海报审核页应收到无权访问提示')
+  assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/admin-manage/admin-manage' }), '导生管理员进入海报审核页应返回管理中心')
+
+  ;['counselor', 'super_admin'].forEach(function(role) {
+    storage.userInfo.role = role
+    capabilityCalls.length = 0
+    request.get = function(url, params) {
+      capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+      return Promise.resolve({ list: [{ id: 101, status: 'pending', title: '迎新海报' }], total: 1, page: 1, pageSize: 20 })
+    }
+    posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+    posterPage.onLoad.call(posterPage)
+    assert(!capabilityCalls.some(function(call) { return call.url === '/poster' }), role + ' 海报页 onLoad 只初始化，不应重复读取')
+    posterPage.onShow.call(posterPage)
+  })
+  await flushPromises()
+  var posterReadCalls = capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/poster' })
+  assert(posterReadCalls.length === 1, '海报页首次 onLoad + onShow 只能读取一次')
+  assert(posterReadCalls[0].params.status === 'pending' && posterReadCalls[0].params.page === 1 && posterReadCalls[0].params.pageSize === 20, '海报页应请求待审核第一页并固定每页 20 条')
+  assert(posterPage.data.list.length === 1 && posterPage.data.list[0].id === 101, '海报页应解析分页响应 data.list')
+
+  const posterWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-poster/admin-poster.wxml'), 'utf8')
+  const posterJs = fs.readFileSync(path.join(root, 'miniapp/pages/admin-poster/admin-poster.js'), 'utf8')
+  assert(posterJs.indexOf('local-data') === -1, '海报审核页不得使用本地样例数据')
+  ;['loading', 'error', 'list.length === 0', 'onRetry', '海报审核暂时未能加载', '暂无待审核海报'].forEach(function(text) {
+    assert(posterWxml.indexOf(text) !== -1, '海报审核页应提供加载、空、错误和重试状态：' + text)
+  })
+  ;['real_name', 'nickname', 'student_id', 'position_name', 'position', 'location', 'start_date', 'end_date', 'description', 'status'].forEach(function(field) {
+    assert(posterWxml.indexOf(field) !== -1, '海报审核卡片应展示真实服务端字段及兜底：' + field)
+  })
+  assert(posterWxml.indexOf("item.status === 'pending'") !== -1, '海报审核操作只应对 pending 状态显示')
+  assert(posterWxml.indexOf('processingIds[item.id]') !== -1, '海报审核卡片应显示按申请锁定的处理中状态')
+
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.reject(new Error('expected poster load failure'))
+  }
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  await posterPage.loadData.call(posterPage)
+  assert(posterPage.data.loading === false && posterPage.data.error === '海报审核暂时未能加载', '海报加载失败应落入可重试错误状态')
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve({ list: [] })
+  }
+  await posterPage.onRetry.call(posterPage)
+  assert(capabilityCalls.filter(function(call) { return call.url === '/poster' }).length === 1, '海报错误态重试应重新读取服务端')
+  assert(posterPage.data.loading === false && posterPage.data.error === '' && posterPage.data.list.length === 0, '海报重试成功后应进入明确空态')
+
+  const posterReads = [deferred(), deferred()]
+  let posterReadIndex = 0
+  request.get = function() { return posterReads[posterReadIndex++].promise }
+  posterPage.loadData.call(posterPage)
+  posterPage.loadData.call(posterPage)
+  posterReads[1].resolve({ list: [{ id: 202, status: 'pending' }] })
+  await flushPromises()
+  posterReads[0].resolve({ list: [{ id: 201, status: 'pending' }] })
+  await flushPromises()
+  assert(posterPage.data.list.length === 1 && posterPage.data.list[0].id === 202, '海报旧列表响应不得覆盖较新的列表结果')
+
+  const stalePosterRead = deferred()
+  request.get = function() { return stalePosterRead.promise }
+  posterPage.setData({ list: [{ id: 203, title: '敏感海报' }] })
+  posterPage.loadData.call(posterPage)
+  storage.userInfo.role = 'admin'
+  stalePosterRead.resolve({ list: [{ id: 204, title: '越权海报' }] })
+  await flushPromises()
+  assert(posterPage.data.list.length === 0, '海报请求完成时角色降级不得回写并应清空敏感列表')
+
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  navCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve({ list: [] })
+  }
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  posterPage.setData({ list: [{ id: 205, title: '待清空海报' }] })
+  storage.userInfo.role = 'admin'
+  posterPage.onShow.call(posterPage)
+  assert(posterPage.data.list.length === 0, '海报页 onShow 发现角色降级应立即清空敏感列表')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/poster' }), '海报页 onShow 发现角色降级不得发读取请求')
+  assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/admin-manage/admin-manage' }), '海报页角色降级应返回管理中心')
+
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve({ list: [] })
+  }
+  request.post = function(url, body) {
+    capabilityCalls.push({ method: 'POST', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  posterPage.setData({ list: [{ id: 101, status: 'pending' }] })
+  modalResponse = { confirm: true, content: '' }
+  posterPage.onApprove.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  await flushPromises()
+  await flushPromises()
+  assert(capabilityCalls.some(function(call) { return call.method === 'POST' && call.url === '/poster/101/approve' }), '海报批准应 POST /poster/101/approve')
+
+  modalResponse = { confirm: true, content: '   ' }
+  capabilityCalls.length = 0
+  posterPage.onReject.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  await flushPromises()
+  assert(!capabilityCalls.some(function(call) { return call.method === 'POST' && call.url === '/poster/101/reject' }), '海报拒绝理由为空白时不得提交')
+
+  modalResponse = { confirm: true, content: '  信息不完整  ' }
+  capabilityCalls.length = 0
+  posterPage.onReject.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  await flushPromises()
+  await flushPromises()
+  assert(capabilityCalls.some(function(call) { return call.method === 'POST' && call.url === '/poster/101/reject' && call.body.reason === '信息不完整' }), '海报拒绝应提交清理空白后的理由')
+
+  capabilityCalls.length = 0
+  modalResponse = { confirm: true, content: '重复提交检查' }
+  const posterApproval = deferred()
+  const posterRefresh = deferred()
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return posterRefresh.promise
+  }
+  request.post = function(url, body) {
+    capabilityCalls.push({ method: 'POST', url: url, body: body || {} })
+    return posterApproval.promise
+  }
+  posterPage.onApprove.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  posterPage.onApprove.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  posterPage.onReject.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  assert(capabilityCalls.filter(function(call) { return call.url === '/poster/101/approve' }).length === 1, '同一海报处理中不得重复提交')
+  assert(posterPage.data.processingIds[101], '海报提交期间应按申请编号锁定操作')
+  posterApproval.resolve({})
+  await flushPromises()
+  await flushPromises()
+  assert(posterPage.data.processingIds[101], '海报批准成功但服务端列表仍在刷新时应继续锁定')
+  posterPage.onApprove.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  assert(capabilityCalls.filter(function(call) { return call.url === '/poster/101/approve' }).length === 1, '海报刷新未完成时再次点击不得重复提交')
+  posterRefresh.resolve({ list: [] })
+  await flushPromises()
+  await flushPromises()
+  assert(!posterPage.data.processingIds[101], '海报服务端列表刷新完成后应解锁操作')
+
+  const failedPosterApproval = deferred()
+  request.post = function() { return failedPosterApproval.promise }
+  posterPage.onApprove.call(posterPage, { currentTarget: { dataset: { id: 102 } } })
+  failedPosterApproval.reject(new Error('expected poster approval failure'))
+  await flushPromises()
+  assert(!posterPage.data.processingIds[102], '海报审批失败后也应解锁操作')
+
+  holdModal = true
+  pendingModalSuccess = null
+  capabilityCalls.length = 0
+  navCalls.length = 0
+  storage.userInfo.role = 'counselor'
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  posterPage.setData({ list: [{ id: 101, status: 'pending', title: '敏感海报' }] })
+  request.post = function(url, body) {
+    capabilityCalls.push({ method: 'POST', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+  posterPage.onReject.call(posterPage, { currentTarget: { dataset: { id: 101 } } })
+  assert(typeof pendingModalSuccess === 'function', '海报拒绝应等待用户确认')
+  storage.userInfo.role = 'admin'
+  pendingModalSuccess({ confirm: true, content: '角色已降级' })
+  await flushPromises()
+  assert(!capabilityCalls.some(function(call) { return call.url === '/poster/101/reject' }), '海报拒绝弹窗打开后角色降级不得发写请求')
+  assert(posterPage.data.list.length === 0, '海报拒绝确认时角色降级应清空敏感列表')
+  assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/admin-manage/admin-manage' }), '海报拒绝确认时角色降级应返回管理中心')
+  holdModal = false
+  pendingModalSuccess = null
+
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  const posterWriteWhileDowngraded = deferred()
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  posterPage.setData({ list: [{ id: 103, status: 'pending', title: '处理中海报' }] })
+  request.post = function(url, body) {
+    capabilityCalls.push({ method: 'POST', url: url, body: body || {} })
+    return posterWriteWhileDowngraded.promise
+  }
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve({ list: [] })
+  }
+  modalResponse = { confirm: true, content: '' }
+  posterPage.onApprove.call(posterPage, { currentTarget: { dataset: { id: 103 } } })
+  storage.userInfo.role = 'admin'
+  posterWriteWhileDowngraded.resolve({})
+  await flushPromises()
+  await flushPromises()
+  assert(!capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/poster' }), '海报写请求完成时角色降级不得继续读取敏感列表')
+  assert(posterPage.data.list.length === 0 && Object.keys(posterPage.data.processingIds).length === 0, '海报写请求期间角色降级应清空敏感列表和操作锁')
+
   request.get = originalGet
   request.put = originalPut
   request.post = originalPost
