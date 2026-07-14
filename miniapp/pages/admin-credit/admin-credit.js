@@ -1,27 +1,32 @@
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
+var adminPolicy = require('../../utils/admin-policy')
+
+var violationTab = { key: 'violations', name: '违规记录' }
+var blacklistTab = { key: 'blacklist', name: '黑名单' }
 
 Page({
   data: {
     activeTab: 'violations',
-    tabs: [
-      { key: 'violations', name: '违规记录' },
-      { key: 'blacklist', name: '黑名单' },
-      { key: 'config', name: '信用配置' }
-    ],
+    tabs: [violationTab],
     violations: [],
     blacklist: [],
-    configList: [],
     loading: true
   },
 
-  onLoad: function () {
+  onLoad: function (options) {
     if (!this.ensureAdmin()) return
-    this.loadData()
+    var role = auth.getUserRole()
+    var tabs = adminPolicy.can(role, 'blacklistManage') ? [violationTab, blacklistTab] : [violationTab]
+    var requestedTab = options && options.tab
+    var activeTab = tabs.some(function (tab) { return tab.key === requestedTab }) ? requestedTab : 'violations'
+    this.setData({ tabs: tabs, activeTab: activeTab })
+    return this.loadData()
   },
 
   ensureAdmin: function () {
-    if (!auth.isLoggedIn() || !auth.isAdmin()) {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'violationView')) {
       wx.reLaunch({ url: '/pages/login/login' })
       return false
     }
@@ -29,14 +34,17 @@ Page({
   },
 
   onTabTap: function (e) {
-    this.setData({ activeTab: e.currentTarget.dataset.key })
-    this.loadData()
+    var key = e.currentTarget.dataset.key
+    var visible = this.data.tabs.some(function (tab) { return tab.key === key })
+    this.setData({ activeTab: visible ? key : 'violations' })
+    return this.loadData()
   },
 
   loadData: function () {
     if (this.data.activeTab === 'violations') return this.loadViolations()
-    if (this.data.activeTab === 'blacklist') return this.loadBlacklist()
-    return this.loadConfig()
+    if (this.data.activeTab === 'blacklist' && adminPolicy.can(auth.getUserRole(), 'blacklistManage')) return this.loadBlacklist()
+    this.setData({ activeTab: 'violations' })
+    return this.loadViolations()
   },
 
   loadViolations: function () {
@@ -62,25 +70,11 @@ Page({
     })
   },
 
-  loadConfig: function () {
-    var that = this
-    this.setData({ loading: true })
-    return request.get('/admin/config', {}, { silent: true }).then(function (data) {
-      var list = Object.keys(data || {}).map(function (key) {
-        return { key: key, value: data[key] }
-      })
-      that.setData({ configList: list, loading: false })
-    }).catch(function () {
-      that.setData({ configList: [], loading: false })
-      wx.showToast({ title: '信用配置加载失败', icon: 'none' })
-    })
-  },
-
-  onGoUsers: function () {
-    wx.navigateTo({ url: '/pages/admin-users/admin-users' })
-  },
-
   onUnban: function (e) {
+    if (!adminPolicy.can(auth.getUserRole(), 'blacklistManage')) {
+      wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
+      return
+    }
     var that = this
     var id = e.currentTarget.dataset.id
     wx.showModal({

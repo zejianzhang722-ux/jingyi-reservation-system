@@ -7,6 +7,7 @@ const storage = {
   userInfo: { id: 1, role: 'admin', name: '管理员' }
 }
 const navCalls = []
+const toastCalls = []
 let modalResponse = { confirm: true, content: '' }
 
 global.wx = {
@@ -15,7 +16,7 @@ global.wx = {
   removeStorageSync: function(key) { delete storage[key] },
   navigateTo: function(options) { navCalls.push({ type: 'navigateTo', url: options.url }) },
   reLaunch: function(options) { navCalls.push({ type: 'reLaunch', url: options.url }) },
-  showToast: function() {},
+  showToast: function(options) { toastCalls.push(options || {}) },
   showModal: function(options) {
     if (options && options.success) options.success(modalResponse)
   },
@@ -161,6 +162,129 @@ async function main() {
   assert(adminPolicy.queueType('super_admin', 'counselor') === 'counselor', '超级管理员可进入重点审核队列')
 
   const originalPost = request.post
+  const originalPut = request.put
+  const originalDelete = request.delete
+  const capabilityCalls = []
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    if (url === '/user/list') return Promise.resolve([])
+    if (url === '/room') return Promise.resolve([])
+    if (url === '/feedback') return Promise.resolve({ list: [] })
+    return Promise.resolve([])
+  }
+  request.put = function(url, body) {
+    capabilityCalls.push({ method: 'PUT', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+  request.post = function(url, body) {
+    capabilityCalls.push({ method: 'POST', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+  request.delete = function(url) {
+    capabilityCalls.push({ method: 'DELETE', url: url })
+    return Promise.resolve({})
+  }
+
+  storage.userInfo.role = 'admin'
+  capabilityCalls.length = 0
+  let creditPage = loadPage('miniapp/pages/admin-credit/admin-credit.js')
+  creditPage.onLoad.call(creditPage, { tab: 'blacklist' })
+  await flushPromises()
+  assert(creditPage.data.tabs.map(function(tab) { return tab.key }).join(',') === 'violations', '导生管理员信用页只能显示违规记录')
+  assert(creditPage.data.activeTab === 'violations', '导生管理员通过旧链接进入黑名单时应回退到违规记录')
+  assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/credit/violations' }), '导生管理员信用页应加载违规记录')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/credit/blacklist' }), '导生管理员不得通过旧链接请求黑名单')
+  creditPage.onUnban.call(creditPage, { currentTarget: { dataset: { id: 1 } } })
+  await flushPromises()
+  assert(!capabilityCalls.some(function(call) { return call.method === 'PUT' && call.url === '/credit/blacklist/1' }), '导生管理员直接调用解除黑名单也不得发请求')
+
+  ;['counselor', 'super_admin'].forEach(function(role) {
+    storage.userInfo.role = role
+    capabilityCalls.length = 0
+    creditPage = loadPage('miniapp/pages/admin-credit/admin-credit.js')
+    creditPage.onLoad.call(creditPage, { tab: 'blacklist' })
+    assert(creditPage.data.tabs.map(function(tab) { return tab.key }).join(',') === 'violations,blacklist', role + ' 信用页应精确显示违规记录和黑名单')
+    assert(creditPage.data.activeTab === 'blacklist', role + ' 应能通过旧链接进入黑名单')
+    assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/credit/blacklist' }), role + ' 进入黑名单时应加载黑名单')
+  })
+  const creditWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-credit/admin-credit.wxml'), 'utf8')
+  assert(creditWxml.indexOf("activeTab === 'config'") === -1 && creditWxml.indexOf('信用配置') === -1, '信用页移动端不应出现配置标签或内容')
+
+  const usersWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-users/admin-users.wxml'), 'utf8')
+  ;['admin', 'counselor', 'super_admin'].forEach(function(role) {
+    storage.userInfo.role = role
+    capabilityCalls.length = 0
+    toastCalls.length = 0
+    var usersPage = loadPage('miniapp/pages/admin-users/admin-users.js')
+    usersPage.onLoad.call(usersPage)
+    assert(usersPage.data.canManageStudents === false, role + ' 移动端宿生页不得管理账号状态或调分')
+    assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/user/list' }), role + ' 移动端宿生页仍应允许查看列表')
+    usersPage.onAdjustCredit.call(usersPage, { currentTarget: { dataset: { id: 1, score: 100 } } })
+    usersPage.onToggleStatus.call(usersPage, { currentTarget: { dataset: { id: 1, nextStatus: 'banned', action: '停用' } } })
+    assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/student-ops/') === 0 }), role + ' 直接调用宿生管理操作也不得发请求')
+    assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), role + ' 宿生管理操作应提示前往电脑后台')
+  })
+  assert(usersWxml.indexOf('wx:if="{{canManageStudents}}"') !== -1, '宿生页操作区域应受移动端管理能力控制')
+
+  storage.userInfo.role = 'admin'
+  capabilityCalls.length = 0
+  toastCalls.length = 0
+  const roomsPageReadOnly = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  roomsPageReadOnly.onLoad.call(roomsPageReadOnly)
+  assert(roomsPageReadOnly.data.canConfigureRooms === false, '移动端功能房页应为只读')
+  assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/room' }), '移动端功能房页仍应读取房间列表')
+  roomsPageReadOnly.onToggleStatus.call(roomsPageReadOnly, { currentTarget: { dataset: { id: 1, status: 'open' } } })
+  assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/admin/rooms/') === 0 }), '直接调用房间状态操作也不得发请求')
+  assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), '房间配置操作应提示前往电脑后台')
+  const roomsWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-rooms/admin-rooms.wxml'), 'utf8')
+  assert(roomsWxml.indexOf('bindtap="onToggleStatus"') === -1, '移动端功能房页不应渲染状态变更按钮')
+
+  storage.userInfo.role = 'admin'
+  capabilityCalls.length = 0
+  toastCalls.length = 0
+  navCalls.length = 0
+  let feedbackPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  feedbackPage.onLoad.call(feedbackPage)
+  feedbackPage.setData({ replyId: 1, replyContent: '处理完成' })
+  feedbackPage.submitReply.call(feedbackPage)
+  feedbackPage.onResolve.call(feedbackPage, { currentTarget: { dataset: { id: 1 } } })
+  assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/feedback') === 0 }), '导生管理员直接进入或调用反馈处理均不得请求反馈接口')
+  assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), '导生管理员直接进入反馈页应提示前往电脑后台')
+  assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/admin-manage/admin-manage' }), '导生管理员直接进入反馈页应返回管理中心')
+
+  ;['counselor', 'super_admin'].forEach(function(role) {
+    storage.userInfo.role = role
+    capabilityCalls.length = 0
+    feedbackPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+    feedbackPage.onLoad.call(feedbackPage)
+    feedbackPage.onResolve.call(feedbackPage, { currentTarget: { dataset: { id: 2 } } })
+    assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/feedback' }), role + ' 应能加载反馈')
+    assert(capabilityCalls.some(function(call) { return call.method === 'PUT' && call.url === '/feedback/2/resolve' }), role + ' 应能处理反馈')
+  })
+
+  ;['admin', 'counselor', 'super_admin'].forEach(function(role) {
+    storage.userInfo.role = role
+    capabilityCalls.length = 0
+    toastCalls.length = 0
+    navCalls.length = 0
+    var announcementPage = loadPage('miniapp/pages/admin-announcement/admin-announcement.js')
+    announcementPage.onLoad.call(announcementPage)
+    announcementPage.onAdd.call(announcementPage)
+    announcementPage.onSubmit.call(announcementPage)
+    announcementPage.onDelete.call(announcementPage, { currentTarget: { dataset: { id: 1 } } })
+    assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/admin/announcements') === 0 }), role + ' 移动端公告页不得请求公告接口')
+    assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), role + ' 移动端公告页应提示前往电脑后台')
+    assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/admin-manage/admin-manage' }), role + ' 移动端公告页应返回管理中心')
+  })
+  const announcementWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-announcement/admin-announcement.wxml'), 'utf8')
+  assert(announcementWxml.indexOf('请在电脑后台处理此项功能') !== -1, '移动端公告页应显示电脑后台说明')
+  assert(announcementWxml.indexOf('bindtap="onAdd"') === -1 && announcementWxml.indexOf('bindtap="onSubmit"') === -1 && announcementWxml.indexOf('bindtap="onDelete"') === -1, '移动端公告页不应提供公告操作')
+
+  request.get = originalGet
+  request.put = originalPut
+  request.post = originalPost
+  request.delete = originalDelete
+
   const approvalCalls = []
   request.get = function(url, params) {
     approvalCalls.push({ method: 'GET', url: url, params: params || {} })

@@ -1,7 +1,7 @@
 <view class="container">
   <view class="page-header">
     <text class="title">信用管理</text>
-    <text class="subtitle">查看违规、限制名单和信用配置摘要</text>
+    <text class="subtitle">查看违规记录和可用的限制名单</text>
   </view>
 
   <view class="tabs">
@@ -10,11 +10,6 @@
           wx:key="key"
           data-key="{{item.key}}"
           bindtap="onTabTap">{{item.name}}</view>
-  </view>
-
-  <view class="action-strip">
-    <text>需要手动调整信用分时，请进入宿生管理。</text>
-    <text class="link" bindtap="onGoUsers">去调分</text>
   </view>
 
   <view wx:if="{{activeTab === 'violations'}}">
@@ -45,13 +40,4 @@
     <view class="empty" wx:else>暂无受限或封禁宿生</view>
   </view>
 
-  <view wx:if="{{activeTab === 'config'}}">
-    <view class="list-card" wx:if="{{configList.length > 0}}">
-      <view class="config-row" wx:for="{{configList}}" wx:key="key">
-        <text class="config-key">{{item.key}}</text>
-        <text class="config-value">{{item.value}}</text>
-      </view>
-    </view>
-    <view class="empty" wx:else>暂无信用配置</view>
-  </view>
 </view>

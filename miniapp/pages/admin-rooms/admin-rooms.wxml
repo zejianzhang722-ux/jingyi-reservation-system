@@ -26,11 +26,6 @@
           <text class="detail-text">容量 {{item.capacity || '-'}} 人 | {{item.open_start_time || '-'}}-{{item.open_end_time || '-'}}</text>
         </view>
       </view>
-      <view class="room-actions">
-        <view class="btn-toggle" data-id="{{item.id}}" data-status="{{item.status}}" bindtap="onToggleStatus">
-          {{item.status === 'open' ? '关闭' : '开放'}}
-        </view>
-      </view>
     </view>
   </view>
 

@@ -1,4 +1,6 @@
 var request = require('../../utils/request')
+var auth = require('../../utils/auth')
+var adminPolicy = require('../../utils/admin-policy')
 
 var apiTypeMap = {
   study: 'study_room',
@@ -16,6 +18,7 @@ Page({
   data: {
     list: [],
     filterType: '',
+    canConfigureRooms: false,
     typeMap: {
       study_room: '自习室',
       seminar_room: '共享空间',
@@ -38,11 +41,20 @@ Page({
   },
 
   onLoad: function () {
-    this.loadData()
+    if (this.ensureAdmin()) return this.loadData()
   },
 
   onShow: function () {
-    this.loadData()
+    if (this.ensureAdmin()) return this.loadData()
+  },
+
+  ensureAdmin: function () {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'roomView')) {
+      wx.reLaunch({ url: '/pages/login/login' })
+      return false
+    }
+    return true
   },
 
   loadData: function () {
@@ -65,25 +77,7 @@ Page({
   },
 
   onToggleStatus: function (e) {
-    var that = this
-    var id = e.currentTarget.dataset.id
-    var currentStatus = e.currentTarget.dataset.status
-    var newStatus = currentStatus === 'open' ? 'closed' : 'open'
-    var statusText = newStatus === 'open' ? '开放' : '关闭'
-    wx.showModal({
-      title: '确认操作',
-      content: '确定将功能房状态改为“' + statusText + '”？',
-      success: function (res) {
-        if (res.confirm) {
-          request.put('/admin/rooms/' + id, { status: newStatus }).then(function () {
-            wx.showToast({ title: '操作成功', icon: 'success' })
-            that.loadData()
-          }).catch(function () {
-            wx.showToast({ title: '操作失败', icon: 'none' })
-          })
-        }
-      }
-    })
+    wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
   },
 
   onViewDetail: function (e) {

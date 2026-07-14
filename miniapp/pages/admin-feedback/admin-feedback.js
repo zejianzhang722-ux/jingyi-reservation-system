@@ -1,10 +1,26 @@
 var request = require('../../utils/request')
+var auth = require('../../utils/auth')
+var adminPolicy = require('../../utils/admin-policy')
 
 Page({
   data: { list: [], filterStatus: '', replyId: null, replyContent: '' },
-  onLoad: function () { this.loadFeedback() },
-  onShow: function () { this.loadFeedback() },
+  ensureFeedbackAccess: function () {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin()) {
+      wx.reLaunch({ url: '/pages/login/login' })
+      return false
+    }
+    if (!adminPolicy.can(role, 'feedbackManage')) {
+      wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
+      wx.reLaunch({ url: '/pages/admin-manage/admin-manage' })
+      return false
+    }
+    return true
+  },
+  onLoad: function () { if (this.ensureFeedbackAccess()) return this.loadFeedback() },
+  onShow: function () { if (this.ensureFeedbackAccess()) return this.loadFeedback() },
   loadFeedback: function () {
+    if (!this.ensureFeedbackAccess()) return Promise.resolve()
     var that = this
     request.get('/feedback', { status: this.data.filterStatus }, { silent: true }).then(function (data) {
       var list = data.list || data || []
@@ -14,6 +30,7 @@ Page({
     })
   },
   onFilter: function (e) {
+    if (!this.ensureFeedbackAccess()) return
     this.setData({ filterStatus: e.currentTarget.dataset.status })
     this.loadFeedback()
   },
@@ -27,6 +44,7 @@ Page({
     this.setData({ replyId: null, replyContent: '' })
   },
   submitReply: function () {
+    if (!this.ensureFeedbackAccess()) return
     var that = this
     var id = this.data.replyId
     if (!this.data.replyContent) { wx.showToast({ title: '请输入回复内容', icon: 'none' }); return }
@@ -39,6 +57,7 @@ Page({
     })
   },
   onResolve: function (e) {
+    if (!this.ensureFeedbackAccess()) return
     var that = this
     var id = e.currentTarget.dataset.id
     wx.showModal({

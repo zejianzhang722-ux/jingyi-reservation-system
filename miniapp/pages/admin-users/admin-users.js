@@ -1,9 +1,19 @@
 var request = require('../../utils/request')
+var auth = require('../../utils/auth')
+var adminPolicy = require('../../utils/admin-policy')
 
 Page({
-  data: { list: [], keyword: '', filteredList: [] },
-  onLoad: function () { this.loadData() },
-  onShow: function () { this.loadData() },
+  data: { list: [], keyword: '', filteredList: [], canManageStudents: false },
+  ensureAdmin: function () {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'residentView')) {
+      wx.reLaunch({ url: '/pages/login/login' })
+      return false
+    }
+    return true
+  },
+  onLoad: function () { if (this.ensureAdmin()) return this.loadData() },
+  onShow: function () { if (this.ensureAdmin()) return this.loadData() },
   loadData: function () {
     var that = this
     request.get('/user/list', {}, { silent: true }).then(function (data) {
@@ -41,48 +51,9 @@ Page({
     this.setData({ keyword: keyword, filteredList: this.applyFilter(this.data.list, keyword) })
   },
   onAdjustCredit: function (e) {
-    var that = this
-    var id = e.currentTarget.dataset.id
-    var currentScore = e.currentTarget.dataset.score
-    wx.showModal({
-      title: '调整信用分',
-      content: '当前信用分: ' + currentScore,
-      editable: true,
-      placeholderText: '输入新的信用分(0-120)',
-      success: function (res) {
-        if (res.confirm) {
-          var newScore = parseInt(res.content)
-          if (isNaN(newScore) || newScore < 0 || newScore > 120) {
-            wx.showToast({ title: '请输入0-120的数字', icon: 'none' }); return
-          }
-          request.put('/student-ops/' + id + '/credit', { score: newScore }).then(function () {
-            wx.showToast({ title: '已调整', icon: 'success' })
-            that.loadData()
-          }).catch(function () {
-            wx.showToast({ title: '调整失败', icon: 'none' })
-          })
-        }
-      }
-    })
+    wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
   },
   onToggleStatus: function (e) {
-    var that = this
-    var id = e.currentTarget.dataset.id
-    var newStatus = e.currentTarget.dataset.nextStatus
-    var action = e.currentTarget.dataset.action
-    wx.showModal({
-      title: '确认' + action,
-      content: '确定要' + action + '该用户？',
-      success: function (res) {
-        if (res.confirm) {
-          request.put('/student-ops/' + id + '/status', { status: newStatus }).then(function () {
-            wx.showToast({ title: action + '成功', icon: 'success' })
-            that.loadData()
-          }).catch(function () {
-            wx.showToast({ title: action + '失败', icon: 'none' })
-          })
-        }
-      }
-    })
+    wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
   }
 })
