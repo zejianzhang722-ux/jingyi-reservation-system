@@ -9,7 +9,7 @@ const WORKSPACE_LABELS = {
 const DEFAULT_OPEN_GROUPS = {
   admin: ['today', 'reservation'],
   counselor: ['today', 'reservation', 'content'],
-  super_admin: ['today', 'system']
+  super_admin: ['today', 'reservation', 'system']
 }
 
 function accountIdentity(account = {}) {

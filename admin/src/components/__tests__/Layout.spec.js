@@ -120,8 +120,8 @@ describe('Layout navigation wiring', () => {
     await router.push('/room/monitor')
     await settle()
     expect(menuCalls).toContainEqual(['open', 'space'])
-    expect(wrapper.text()).toContain('空间运行')
-    expect(wrapper.get('.breadcrumb').text()).toContain('空间运行')
+    expect(wrapper.text()).toContain('空间管理')
+    expect(wrapper.get('.breadcrumb').text()).toContain('空间管理')
 
     const collapseButton = wrapper.get('button.collapse-btn')
     expect(collapseButton.attributes('aria-label')).toBe('收起侧栏')
