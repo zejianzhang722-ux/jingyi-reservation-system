@@ -2,7 +2,7 @@
   <PageShell
     title="功能房管理"
     eyebrow="空间管理"
-    description="统一维护功能房信息、开放状态和座位数据；座位编辑支持保存与撤销，避免只在前端临时修改。"
+    description="统一维护功能房信息、开放状态和座位；座位调整可在确认无误后一次保存。"
   >
     <template #actions>
       <el-button type="primary" @click="handleAdd">
@@ -37,13 +37,15 @@
       </el-select>
     </FilterBar>
 
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" class="load-alert"><template #default><el-button link type="primary" @click="loadData">重试</el-button></template></el-alert>
+
     <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
+      <el-empty v-if="!loading && !loadError && !tableData.length" description="暂无符合条件的功能房" />
+      <el-table v-else-if="tableData.length || loading" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="150" />
         <el-table-column prop="type" label="类型" width="130">
           <template #default="{ row }">
-            <el-tag size="small">{{ typeLabels[row.type] || row.type }}</el-tag>
+            <el-tag size="small">{{ typeLabels[row.type] || '类型待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="building_name" label="楼栋" width="110" />
@@ -51,7 +53,7 @@
         <el-table-column prop="capacity" label="容量" width="90" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
@@ -64,7 +66,7 @@
         </el-table-column>
       </el-table>
 
-      <div class="pagination-wrap">
+      <div v-if="tableData.length" class="pagination-wrap">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
@@ -165,15 +167,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getList, create, update, deleteRoom, getBuildings, updateSeat, deleteSeat, createSeats } from '@/api/room'
 import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 
 const loading = ref(false)
+const loadError = ref('')
 const submitLoading = ref(false)
 const tableData = ref([])
 const buildingOptions = ref([])
@@ -227,17 +231,23 @@ const removedSeatIds = ref([])
 const seatDirty = ref(false)
 const seatSaving = ref(false)
 
-async function loadData() {
-  loading.value = true
-  try {
-    const res = await getList({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+const roomListRequest = createLatestRequestCoordinator({
+  load: params => getList(params, { silentError: true }),
+  onStart: () => { loading.value = true; loadError.value = '' },
+  onSuccess: res => {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
-  } catch (e) {
-    // Keep the last successful total visible during a transient refresh failure.
-  } finally {
-    loading.value = false
-  }
+  },
+  onError: () => {
+    loadError.value = tableData.value.length
+      ? '功能房列表加载失败，已保留上次结果，请重试'
+      : '功能房列表加载失败，请重试'
+  },
+  onFinish: () => { loading.value = false }
+})
+
+async function loadData() {
+  return roomListRequest.run({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
 }
 
 function resetFilters() {
@@ -398,6 +408,7 @@ onMounted(() => {
   loadData()
   loadBuildings()
 })
+onBeforeUnmount(() => { roomListRequest.invalidate() })
 </script>
 
 <style scoped>
@@ -405,6 +416,10 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.load-alert {
+  margin-bottom: 16px;
 }
 
 .seat-toolbar {

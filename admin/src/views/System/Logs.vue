@@ -12,6 +12,7 @@
             <el-option label="更新" value="update" />
             <el-option label="删除" value="delete" />
             <el-option label="审核" value="audit" />
+            <el-option label="业务处理" value="operate" />
             <el-option label="导出" value="export" />
           </el-select>
         </el-form-item>
@@ -25,23 +26,25 @@
       </el-form>
     </el-card>
 
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false"><template #default><el-button link type="primary" @click="loadData">重试</el-button></template></el-alert>
+
     <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
+      <el-empty v-if="!loading && !loadError && !tableData.length" description="暂无操作记录" />
+      <el-table v-else-if="tableData.length || loading" :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="operatorName" label="操作人" width="100" />
-        <el-table-column prop="action" label="操作类型" width="90">
+        <el-table-column prop="actionLabel" label="具体操作" min-width="150">
           <template #default="{ row }">
-            <el-tag :type="actionMap[row.action]?.type || 'info'" size="small">{{ actionMap[row.action]?.label || row.action }}</el-tag>
+            <el-tag :type="actionTypeMap[row.actionCategory] || 'info'" size="small">{{ row.actionLabel || '操作待确认' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="module" label="模块" width="100" />
-        <el-table-column prop="target" label="操作对象" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="moduleLabel" label="业务范围" width="130" />
+        <el-table-column prop="targetDescription" label="操作对象" min-width="180" show-overflow-tooltip />
         <el-table-column prop="detail" label="操作详情" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="ip" label="IP地址" width="130" />
+        <el-table-column label="来源记录" width="100"><template #default="{ row }">{{ row.sourceRecorded ? '已记录' : '未记录' }}</template></el-table-column>
         <el-table-column prop="createdAt" label="操作时间" width="170" />
       </el-table>
 
-      <div class="pagination-wrap">
+      <div v-if="tableData.length" class="pagination-wrap">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
@@ -57,43 +60,43 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { getLogs } from '@/api/admin'
+import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 
 const loading = ref(false)
+const loadError = ref('')
 const tableData = ref([])
 
-const actionMap = {
-  login: { label: '登录', type: '' },
-  create: { label: '创建', type: 'success' },
-  update: { label: '更新', type: 'warning' },
-  delete: { label: '删除', type: 'danger' },
-  audit: { label: '审核', type: '' },
-  export: { label: '导出', type: 'success' }
-}
+const actionTypeMap = { login: '', create: 'success', update: 'warning', operate: 'warning', delete: 'danger', audit: '', export: 'success', other: 'info' }
 
 const filters = reactive({ operator: '', action: '', dateRange: null })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
-async function loadData() {
-  loading.value = true
-  try {
-    const params = {
-      operator: filters.operator,
-      action: filters.action,
-      startDate: filters.dateRange?.[0] || '',
-      endDate: filters.dateRange?.[1] || '',
-      page: pagination.page,
-      pageSize: pagination.pageSize
-    }
-    const res = await getLogs(params)
+const logsRequest = createLatestRequestCoordinator({
+  load: params => getLogs(params, { silentError: true }),
+  onStart: () => { loading.value = true; loadError.value = '' },
+  onSuccess: res => {
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
-  } catch (e) {
-    // handled
-  } finally {
-    loading.value = false
-  }
+  },
+  onError: () => {
+    loadError.value = tableData.value.length
+      ? '操作记录加载失败，已保留上次结果，请重试'
+      : '操作记录加载失败，请重试'
+  },
+  onFinish: () => { loading.value = false }
+})
+
+async function loadData() {
+  return logsRequest.run({
+    operator: filters.operator,
+    category: filters.action,
+    startDate: filters.dateRange?.[0] || '',
+    endDate: filters.dateRange?.[1] || '',
+    page: pagination.page,
+    pageSize: pagination.pageSize
+  })
 }
 
 function resetFilters() {
@@ -105,6 +108,7 @@ function resetFilters() {
 onMounted(() => {
   loadData()
 })
+onBeforeUnmount(() => { logsRequest.invalidate() })
 </script>
 
 <style scoped>

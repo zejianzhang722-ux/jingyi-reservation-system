@@ -1,6 +1,7 @@
 ﻿import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { getErrorPresentation } from './requestErrorPolicy'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -21,36 +22,13 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const { response } = error
-    if (response) {
-      switch (response.status) {
-        case 401:
-          ElMessage.error('登录已过期，请重新登录')
-          localStorage.removeItem('token')
-          localStorage.removeItem('userInfo')
-          router.push('/login')
-          break
-        case 403:
-          ElMessage.error('没有权限执行此操作')
-          break
-        case 404:
-          ElMessage.error('请求的资源不存在')
-          break
-        case 422:
-          ElMessage.error(response.data.message || '参数校验失败')
-          break
-        case 429:
-          ElMessage.error(response.data.message || '操作过快，请稍后再试')
-          break
-        case 500:
-          ElMessage.error('服务器内部错误')
-          break
-        default:
-          ElMessage.error(response.data.message || '请求失败')
-      }
-    } else {
-      ElMessage.error('网络连接异常，请检查后台接口地址')
+    const presentation = getErrorPresentation(error)
+    if (presentation.shouldNotify) ElMessage.error(presentation.message)
+    if (presentation.clearSession) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
     }
+    if (presentation.redirectTo) router.push(presentation.redirectTo)
     return Promise.reject(error)
   }
 )

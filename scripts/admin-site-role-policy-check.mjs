@@ -38,8 +38,10 @@ const navigationNamesFor = role => navigationFor(role).flatMap(section => sectio
 for (const role of roles) {
   const navigation = navigationFor(role)
   const expectedSections = role === 'admin'
-    ? ['总览', '预约运营', '空间管理', '用户与信用', '数据统计']
-    : ['总览', '预约运营', '空间管理', '用户与信用', '数据统计', '内容与系统']
+    ? ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表']
+    : role === 'counselor'
+      ? ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表', '内容审核']
+      : ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表', '内容审核', '系统管理']
   assert.deepEqual(navigation.map(section => section.title), expectedSections)
   assert.ok(navigation.every(section => section.children.length), `${role} should not receive empty navigation sections`)
   for (const name of navigationNamesFor(role)) {

@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 
-export function getList(params) {
-  return request.get('/admin/rooms', { params })
+export function getList(params, options = {}) {
+  return request.get('/admin/rooms', { ...options, params })
 }
 
 export function getDetail(id) {

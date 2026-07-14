@@ -7,16 +7,18 @@ import path from 'path'
 
 const apiTarget = process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:3000'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
-    AutoImport({
-      resolvers: [ElementPlusResolver()],
-      imports: ['vue', 'vue-router', 'pinia']
-    }),
-    Components({
-      resolvers: [ElementPlusResolver()]
-    })
+    ...(mode === 'test' ? [] : [
+      AutoImport({
+        resolvers: [ElementPlusResolver()],
+        imports: ['vue', 'vue-router', 'pinia']
+      }),
+      Components({
+        resolvers: [ElementPlusResolver()]
+      })
+    ])
   ],
   resolve: {
     alias: {
@@ -36,4 +38,4 @@ export default defineConfig({
       }
     }
   }
-})
+}))

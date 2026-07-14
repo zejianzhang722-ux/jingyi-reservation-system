@@ -16,7 +16,7 @@
         <MetricCard label="处理方式" value="人工 + 自动" caption="支持学号封禁和列表解封" icon="Operation" tone="warning" />
       </el-col>
       <el-col :xs="24" :sm="8">
-        <MetricCard label="审计要求" value="必须填原因" caption="封禁原因会随请求提交" icon="DocumentChecked" tone="primary" />
+        <MetricCard label="处理要求" value="必须填原因" caption="原因将留存在操作记录中" icon="DocumentChecked" tone="primary" />
       </el-col>
     </el-row>
 
@@ -26,7 +26,6 @@
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="userName" label="学生姓名" width="120" />
         <el-table-column prop="studentId" label="学号" width="140" />
         <el-table-column prop="creditScore" label="信用分" width="100">
@@ -36,7 +35,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || row.status || '低信用' }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="reason" label="进入原因" min-width="180" show-overflow-tooltip />
@@ -64,7 +63,7 @@
     </el-card>
 
     <el-dialog v-model="banDialogVisible" title="手动封禁宿生" width="500px">
-      <el-alert title="请输入宿生学号，系统会通过接口定位对应用户；封禁原因将用于审计追踪。" type="warning" show-icon :closable="false" class="form-alert" />
+      <el-alert title="请核对宿生学号并填写封禁原因；原因将留存在操作记录中，便于后续查询。" type="warning" show-icon :closable="false" class="form-alert" />
       <el-form ref="formRef" :model="banForm" :rules="rules" label-width="100px">
         <el-form-item label="学号" prop="studentId">
           <el-input v-model="banForm.studentId" placeholder="请输入学号" />

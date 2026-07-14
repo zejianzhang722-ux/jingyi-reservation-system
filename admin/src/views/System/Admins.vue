@@ -2,14 +2,13 @@
   <div class="page-container">
     <el-card shadow="never">
       <div class="table-header">
-        <span class="table-title">管理员管理</span>
+        <span class="table-title">管理账号</span>
         <el-button type="primary" @click="handleAdd">
-          <el-icon><Plus /></el-icon>新增管理员
+          <el-icon><Plus /></el-icon>新增管理账号
         </el-button>
       </div>
 
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="username" label="账号" width="130" />
         <el-table-column prop="name" label="姓名" width="100" />
         <el-table-column prop="role" label="角色" width="120">
@@ -48,7 +47,7 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑管理员' : '新增管理员'" width="500px" @close="resetForm">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑管理账号' : '新增管理账号'" width="500px" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="账号" prop="username">
           <el-input v-model="form.username" placeholder="请输入账号" :disabled="isEdit" />
@@ -61,7 +60,7 @@
         </el-form-item>
         <el-form-item label="角色" prop="role">
           <el-select v-model="form.role" style="width: 100%">
-            <el-option label="管理员" value="admin" />
+            <el-option label="导生管理员" value="admin" />
             <el-option label="辅导员" value="counselor" />
           </el-select>
         </el-form-item>
@@ -100,7 +99,7 @@ const formRef = ref(null)
 
 const roleMap = {
   super_admin: { label: '超级管理员', type: 'danger' },
-  admin: { label: '管理员', type: '' },
+  admin: { label: '导生管理员', type: '' },
   counselor: { label: '辅导员', type: 'success' }
 }
 
@@ -139,7 +138,7 @@ function handleEdit(row) {
 
 async function handleDelete(row) {
   try {
-    await ElMessageBox.confirm(`确认删除管理员"${row.name}"？`, '提示', { type: 'warning' })
+    await ElMessageBox.confirm(`确认删除管理账号“${row.name}”？`, '提示', { type: 'warning' })
     await deleteAdmin(row.id)
     ElMessage.success('删除成功')
     loadData()
