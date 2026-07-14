@@ -1,6 +1,7 @@
 <view class="container">
   <view class="header">
     <text class="title">预约列表</text>
+    <text class="queue-label">{{queueLabel}}</text>
     <view class="search-bar">
       <input class="search-input" placeholder="搜索用户/房间" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" />
     </view>
@@ -24,16 +25,12 @@
         <text class="info-row">日期: {{item.date || '-'}}</text>
         <text class="info-row">时间: {{item.startTime || item.start_time || '-'}} - {{item.endTime || item.end_time || '-'}}</text>
       </view>
-      <view class="item-actions" wx:if="{{item.status === 'pending' || item.status === 'counselor_pending'}}" catchtap="">
+      <view class="item-actions" wx:if="{{item.canAudit}}" catchtap="">
         <view class="btn-approve" data-id="{{item.id}}" catchtap="onApprove">通过</view>
         <view class="btn-reject" data-id="{{item.id}}" catchtap="onReject">拒绝</view>
       </view>
     </view>
   </view>
-  <view class="empty" wx:else>
-    <text>暂无预约记录</text>
-  </view>
-  <view class="load-more" wx:if="{{hasMore && list.length > 0}}" bindtap="onLoadMore">
-    <text>加载更多</text>
-  </view>
+  <view class="empty" wx:else><text>暂无预约记录</text></view>
+  <view class="load-more" wx:if="{{hasMore && list.length > 0}}" bindtap="onLoadMore"><text>加载更多</text></view>
 </view>

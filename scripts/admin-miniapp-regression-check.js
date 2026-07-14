@@ -6,6 +6,7 @@ const storage = {
   userInfo: { id: 1, role: 'admin', name: '管理员' }
 }
 const navCalls = []
+let modalResponse = { confirm: true, content: '' }
 
 global.wx = {
   getStorageSync: function(key) { return storage[key] },
@@ -14,7 +15,10 @@ global.wx = {
   navigateTo: function(options) { navCalls.push({ type: 'navigateTo', url: options.url }) },
   reLaunch: function(options) { navCalls.push({ type: 'reLaunch', url: options.url }) },
   showToast: function() {},
-  showModal: function() {}
+  showModal: function(options) {
+    if (options && options.success) options.success(modalResponse)
+  },
+  stopPullDownRefresh: function() {}
 }
 global.getApp = function() { return { globalData: {} } }
 
@@ -68,6 +72,10 @@ function assertExcludesAll(actual, expected, message) {
   })
 }
 
+function flushPromises() {
+  return new Promise(function(resolve) { setImmediate(resolve) })
+}
+
 async function main() {
   const request = require('../miniapp/utils/request')
   const originalGet = request.get
@@ -110,6 +118,12 @@ async function main() {
   assert(typeof managePage.goToStatsOverview === 'function', '管理页应提供数据统计入口')
   assert(typeof managePage.goToCreditManage === 'function', '管理页应提供信用管理入口')
   navCalls.length = 0
+  managePage.onItemTap({ currentTarget: { dataset: { key: 'pending' } } })
+  assert(navCalls[0] && navCalls[0].url === '/pages/admin-home/admin-home?queueType=admin', '普通审核入口应明确携带 admin 队列参数')
+  navCalls.length = 0
+  managePage.onItemTap({ currentTarget: { dataset: { key: 'counselorPending' } } })
+  assert(navCalls[0] && navCalls[0].url === '/pages/admin-home/admin-home?queueType=counselor', '辅导员重点审核入口应明确携带 counselor 队列参数')
+  navCalls.length = 0
   managePage.goToStatsOverview()
   assert(navCalls[0] && navCalls[0].url === '/pages/admin-stats/admin-stats', '数据统计应进入管理员统计页')
   navCalls.length = 0
@@ -134,6 +148,106 @@ async function main() {
   assert(adminPolicy.queueType('admin', 'counselor') === 'admin', '导生管理员不能切换到辅导员审批队列')
   assert(adminPolicy.queueType('counselor', 'counselor') === 'counselor', '辅导员可进入重点审核队列')
   assert(adminPolicy.queueType('super_admin', 'counselor') === 'counselor', '超级管理员可进入重点审核队列')
+
+  const originalPost = request.post
+  const approvalCalls = []
+  request.get = function(url, params) {
+    approvalCalls.push({ method: 'GET', url: url, params: params || {} })
+    if (url === '/audit/pending') {
+      return Promise.resolve({ list: [{ id: 101, status: params.type === 'counselor' ? 'counselor_pending' : 'pending' }], total: 1, page: 1, pageSize: 10 })
+    }
+    if (url === '/reservation') {
+      return Promise.resolve({ list: [{ id: 101, status: 'pending' }, { id: 102, status: 'counselor_pending' }], total: 2, page: 1, pageSize: 20 })
+    }
+    if (url === '/reservation/pending-count') return Promise.resolve({ count: 1 })
+    if (url === '/room/stats') return Promise.resolve({ activeRooms: 6, todayReservations: 2 })
+    if (url === '/feedback') return Promise.resolve({ total: 3 })
+    return Promise.resolve([])
+  }
+  request.post = function(url, body) {
+    approvalCalls.push({ method: 'POST', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+
+  storage.userInfo.role = 'admin'
+  let homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  homePage.onLoad.call(homePage, { queueType: 'counselor' })
+  await flushPromises()
+  let pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
+  assert(pendingCall && pendingCall.params.type === 'admin' && pendingCall.params.page === 1 && pendingCall.params.pageSize === 10, '普通审核入口应请求 admin 队列的 /audit/pending')
+  assert(!approvalCalls.some(function(call) { return call.url === '/audit/pending' && call.params.type === 'counselor' }), '导生管理员不得请求 counselor 审核队列')
+  assert(approvalCalls.some(function(call) { return call.url === '/reservation/pending-count' && call.params.type === 'admin' }), '待审核数量应明确请求 admin 队列')
+  assert(homePage.data.queueType === 'admin' && homePage.data.queueLabel === '普通预约审核', '普通审核入口应显示普通队列标签')
+  assert(homePage.data.pendingList.length === 1 && homePage.data.pendingList[0].id === 101, '审核列表应处理 list/total/page/pageSize 响应')
+  assert(!approvalCalls.some(function(call) { return call.url === '/feedback' }), '导生管理员不应请求反馈管理数据')
+
+  approvalCalls.length = 0
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  await flushPromises()
+  assert(approvalCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/101/approve' }), '批准应 POST /audit/101/approve')
+  assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/audit/pending' }), '批准成功后应从服务端重载审核列表')
+  assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation/pending-count' }), '批准成功后应从服务端重载统计')
+
+  approvalCalls.length = 0
+  modalResponse = { confirm: true, content: '时间冲突' }
+  homePage.onReject.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  await flushPromises()
+  assert(approvalCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/101/reject' && call.body.reason === '时间冲突' }), '拒绝应 POST /audit/101/reject 并传递理由')
+
+  approvalCalls.length = 0
+  storage.userInfo.role = 'counselor'
+  homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  homePage.onLoad.call(homePage, {})
+  await flushPromises()
+  pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
+  assert(pendingCall && pendingCall.params.type === 'counselor', '辅导员默认应请求 counselor 队列')
+  assert(homePage.data.canSwitchQueue && homePage.data.queueLabel === '辅导员重点审核', '辅导员应可切换队列并显示重点审核标签')
+
+  approvalCalls.length = 0
+  storage.userInfo.role = 'super_admin'
+  homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  homePage.onLoad.call(homePage, { queueType: 'admin' })
+  await flushPromises()
+  pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
+  assert(pendingCall && pendingCall.params.type === 'admin', '超级管理员应消费明确的普通队列参数')
+  approvalCalls.length = 0
+  homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  homePage.onLoad.call(homePage, { queueType: 'counselor' })
+  await flushPromises()
+  pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
+  assert(pendingCall && pendingCall.params.type === 'counselor', '超级管理员应消费明确的辅导员队列参数')
+
+  approvalCalls.length = 0
+  storage.userInfo.role = 'admin'
+  const reservationPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  reservationPage.onLoad.call(reservationPage, { queueType: 'counselor' })
+  await flushPromises()
+  assert(reservationPage.data.queueType === 'admin', '导生管理员不能通过页面参数获得辅导员审批权限')
+  assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation' }), '全部预约页仍应读取 /reservation')
+  assert(reservationPage.data.list[0].canAudit === true && reservationPage.data.list[1].canAudit === false, '导生管理员只能操作 pending 状态')
+  modalResponse = { confirm: true, content: '材料不全' }
+  approvalCalls.length = 0
+  reservationPage.onReject.call(reservationPage, { currentTarget: { dataset: { id: 101 } } })
+  await flushPromises()
+  assert(approvalCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/101/reject' && call.body.reason === '材料不全' }), '全部预约页拒绝应使用统一审核接口')
+  assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation' }), '全部预约页审批后应重载服务端列表')
+
+  modalResponse = { confirm: true, content: '   ' }
+  approvalCalls.length = 0
+  reservationPage.onReject.call(reservationPage, { currentTarget: { dataset: { id: 101 } } })
+  await flushPromises()
+  assert(!approvalCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/101/reject' }), '拒绝理由为空时不得提交审批')
+
+  storage.userInfo.role = 'counselor'
+  approvalCalls.length = 0
+  const counselorReservationPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  counselorReservationPage.onLoad.call(counselorReservationPage, { queueType: 'counselor' })
+  await flushPromises()
+  assert(counselorReservationPage.data.list.every(function(item) { return item.canAudit }), '辅导员可操作 pending 和 counselor_pending 状态')
+
+  request.get = originalGet
+  request.post = originalPost
+  modalResponse = { confirm: true, content: '' }
 
   const profilePage = loadPage('miniapp/pages/admin-profile/admin-profile.js')
   const profileKeys = (profilePage.data.menuList || []).map(function(item) { return item.key })

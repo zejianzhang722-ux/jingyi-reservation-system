@@ -4,6 +4,12 @@
     <text class="admin-role">{{roleName}}</text>
   </view>
 
+  <view class="section-title">{{queueLabel}}</view>
+  <view class="filter-tabs" wx:if="{{canSwitchQueue}}">
+    <navigator class="tab {{queueType === 'admin' ? 'active' : ''}}" url="/pages/admin-home/admin-home?queueType=admin">普通预约审核</navigator>
+    <navigator class="tab {{queueType === 'counselor' ? 'active' : ''}}" url="/pages/admin-home/admin-home?queueType=counselor">辅导员重点审核</navigator>
+  </view>
+
   <view class="scan-checkin-card" bindtap="onScanCheckin">
     <view class="scan-checkin-icon"></view>
     <view class="scan-checkin-content">
@@ -22,7 +28,7 @@
       <text class="stat-value">{{todayReservations}}</text>
       <text class="stat-label">今日预约</text>
     </view>
-    <view class="stat-card">
+    <view class="stat-card" wx:if="{{canManageFeedback}}">
       <text class="stat-value">{{feedbackCount}}</text>
       <text class="stat-label">待处理反馈</text>
     </view>
@@ -31,13 +37,13 @@
       <text class="stat-label">开放功能房</text>
     </view>
   </view>
-  <view class="section-title">待审批预约</view>
+
   <view class="pending-list" wx:if="{{pendingList.length > 0}}">
     <view class="pending-item" wx:for="{{pendingList}}" wx:key="id">
       <view class="pending-info">
         <text class="pending-name">{{item.userName || item.user_name || '未知用户'}}</text>
         <text class="pending-room">{{item.roomName || item.room_name || '未知房间'}}</text>
-        <text class="pending-time">{{item.date}} {{item.start_time}}-{{item.end_time}}</text>
+        <text class="pending-time">{{item.date}} {{item.startTime || item.start_time}}-{{item.endTime || item.end_time}}</text>
       </view>
       <view class="pending-actions">
         <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove">通过</view>
@@ -45,8 +51,6 @@
       </view>
     </view>
   </view>
-  <view class="empty-tip" wx:else>
-    <text>暂无待审批预约</text>
-  </view>
+  <view class="empty-tip" wx:else><text>暂无待审批预约</text></view>
 </view>
 <admin-nav selected="home"></admin-nav>

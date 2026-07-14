@@ -95,6 +95,19 @@ async function main() {
   })
   assert(counselorBlacklist.json.code === 200, '辅导员信用黑名单接口应可用')
 
+  const guideOrdinaryAudit = await api('/audit/pending?type=admin&page=1&pageSize=10', {
+    headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
+  })
+  assert(guideOrdinaryAudit.json.code === 200, '导生管理员应能读取普通预约审核队列')
+  const guideCounselorAudit = await api('/audit/pending?type=counselor&page=1&pageSize=10', {
+    headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
+  })
+  assert(guideCounselorAudit.status === 403 && guideCounselorAudit.json.code === 403, '导生管理员不应读取辅导员重点审核队列')
+  const counselorAudit = await api('/audit/pending?type=counselor&page=1&pageSize=10', {
+    headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }
+  })
+  assert(counselorAudit.json.code === 200, '辅导员应能读取辅导员重点审核队列')
+
   const expiredAccessToken = jwt.sign({
     id: login.json.data.userInfo.id,
     openid: login.json.data.userInfo.openid,
