@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import Layout from '@/components/Layout.vue'
 import { adminChildren, hasRouteRole } from './adminRoutes'
 
@@ -30,6 +31,11 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.onError((error) => {
+  console.error('Admin route navigation failed:', error)
+  ElMessage.error('页面暂时未能打开，请稍后重试')
 })
 
 router.beforeEach((to, from, next) => {

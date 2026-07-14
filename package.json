@@ -13,6 +13,7 @@
     "check:admin-miniapp": "node scripts/admin-miniapp-regression-check.js",
     "check:admin-site:roles": "node scripts/admin-site-role-policy-check.mjs",
     "check:admin-site:ux": "node scripts/admin-site-ux-check.mjs",
+    "check:admin-navigation-runtime": "node scripts/admin-navigation-runtime-config-check.mjs",
     "check:miniapp-ui": "node scripts/miniapp-ui-polish-check.js",
     "check:request-refresh": "node scripts/request-refresh-check.js",
     "check:reservation-consistency": "node scripts/reservation-consistency-check.js && node scripts/mysql-reservation-concurrency-check.js",
