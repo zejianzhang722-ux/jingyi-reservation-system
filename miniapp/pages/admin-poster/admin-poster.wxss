@@ -142,6 +142,40 @@
   font-size: 24rpx;
 }
 
+.load-more-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 8rpx 0 24rpx;
+}
+
+.load-more-error {
+  margin-bottom: 14rpx;
+  color: #d14343;
+  font-size: 23rpx;
+}
+
+.load-more-button {
+  width: 260rpx;
+  height: 72rpx;
+  margin: 0;
+  border-radius: 999rpx;
+  background: #eaf3fd;
+  color: #0877e8;
+  font-size: 25rpx;
+  line-height: 72rpx;
+}
+
+.load-more-button::after {
+  border: 0;
+}
+
+.load-more-button[disabled] {
+  background: #f0f3f7;
+  color: #8992a3;
+}
+
 .state-card {
   display: flex;
   min-height: 260rpx;

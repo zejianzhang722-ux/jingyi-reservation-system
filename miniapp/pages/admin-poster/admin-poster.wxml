@@ -52,6 +52,13 @@
         </block>
       </view>
     </view>
+
+    <view class="load-more-wrap" wx:if="{{hasMore || loadingMore || loadMoreError}}">
+      <text class="load-more-error" wx:if="{{loadMoreError}}">{{loadMoreError}}，请重试</text>
+      <button class="load-more-button" bindtap="onLoadMore" disabled="{{loadingMore}}" loading="{{loadingMore}}">
+        {{loadingMore ? '加载中' : (loadMoreError ? '重试加载更多' : '加载更多')}}
+      </button>
+    </view>
   </view>
 
   <view class="state-card empty-state" wx:if="{{!loading && !error && list.length === 0}}">

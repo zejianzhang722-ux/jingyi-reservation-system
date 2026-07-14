@@ -510,8 +510,10 @@ async function main() {
   assert(toastCalls.length > 0, '导生管理员进入海报审核页应收到无权访问提示')
   assert(navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/admin-manage/admin-manage' }), '导生管理员进入海报审核页应返回管理中心')
 
-  ;['counselor', 'super_admin'].forEach(function(role) {
-    storage.userInfo.role = role
+  var posterRoles = ['counselor', 'super_admin']
+  for (var posterRoleIndex = 0; posterRoleIndex < posterRoles.length; posterRoleIndex++) {
+    var posterRole = posterRoles[posterRoleIndex]
+    storage.userInfo.role = posterRole
     capabilityCalls.length = 0
     request.get = function(url, params) {
       capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
@@ -519,14 +521,14 @@ async function main() {
     }
     posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
     posterPage.onLoad.call(posterPage)
-    assert(!capabilityCalls.some(function(call) { return call.url === '/poster' }), role + ' 海报页 onLoad 只初始化，不应重复读取')
+    assert(!capabilityCalls.some(function(call) { return call.url === '/poster' }), posterRole + ' 海报页 onLoad 只初始化，不应重复读取')
     posterPage.onShow.call(posterPage)
-  })
-  await flushPromises()
-  var posterReadCalls = capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/poster' })
-  assert(posterReadCalls.length === 1, '海报页首次 onLoad + onShow 只能读取一次')
-  assert(posterReadCalls[0].params.status === 'pending' && posterReadCalls[0].params.page === 1 && posterReadCalls[0].params.pageSize === 20, '海报页应请求待审核第一页并固定每页 20 条')
-  assert(posterPage.data.list.length === 1 && posterPage.data.list[0].id === 101, '海报页应解析分页响应 data.list')
+    var posterReadCalls = capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/poster' })
+    assert(posterReadCalls.length === 1, posterRole + ' 海报页首次 onLoad + onShow 只能读取一次')
+    assert(posterReadCalls[0].params.status === 'pending' && posterReadCalls[0].params.page === 1 && posterReadCalls[0].params.pageSize === 20, posterRole + ' 海报页应请求待审核第一页并固定每页 20 条')
+    await flushPromises()
+    assert(posterPage.data.list.length === 1 && posterPage.data.list[0].id === 101, posterRole + ' 海报页应解析分页响应 data.list')
+  }
 
   const posterWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-poster/admin-poster.wxml'), 'utf8')
   const posterJs = fs.readFileSync(path.join(root, 'miniapp/pages/admin-poster/admin-poster.js'), 'utf8')
@@ -557,6 +559,48 @@ async function main() {
   await posterPage.onRetry.call(posterPage)
   assert(capabilityCalls.filter(function(call) { return call.url === '/poster' }).length === 1, '海报错误态重试应重新读取服务端')
   assert(posterPage.data.loading === false && posterPage.data.error === '' && posterPage.data.list.length === 0, '海报重试成功后应进入明确空态')
+
+  storage.userInfo.role = 'counselor'
+  capabilityCalls.length = 0
+  var firstPosterPage = []
+  for (var posterId = 1; posterId <= 20; posterId++) firstPosterPage.push({ id: posterId, status: 'pending' })
+  const secondPosterPage = deferred()
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    if (params.page === 1) return Promise.resolve({ list: firstPosterPage, total: 21, page: 1, pageSize: 20 })
+    return secondPosterPage.promise
+  }
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  posterPage.onLoad.call(posterPage)
+  posterPage.onShow.call(posterPage)
+  await flushPromises()
+  assert(posterPage.data.page === 1 && posterPage.data.pageSize === 20 && posterPage.data.total === 21 && posterPage.data.hasMore === true, '海报第一页应保存服务端分页信息并标记仍有更多')
+  posterPage.onLoadMore.call(posterPage)
+  posterPage.onLoadMore.call(posterPage)
+  var secondPageCalls = capabilityCalls.filter(function(call) { return call.url === '/poster' && call.params.page === 2 })
+  assert(secondPageCalls.length === 1 && secondPageCalls[0].params.pageSize === 20 && secondPageCalls[0].params.status === 'pending', '海报加载更多应准确请求第二页且阻止并发重复')
+  assert(posterPage.data.loadingMore === true, '海报加载更多期间应显示独立加载状态')
+  secondPosterPage.resolve({ list: [{ id: 20, status: 'pending' }, { id: 21, status: 'pending' }], total: 21, page: 2, pageSize: 20 })
+  await flushPromises()
+  assert(posterPage.data.list.length === 21 && posterPage.data.list[20].id === 21, '海报加载更多应按 id 去重后追加到已有列表')
+  assert(posterPage.data.page === 2 && posterPage.data.total === 21 && posterPage.data.hasMore === false && posterPage.data.loadingMore === false, '海报第二页完成后应更新分页并停止加载状态')
+  var readsBeforeNoMore = capabilityCalls.length
+  posterPage.onLoadMore.call(posterPage)
+  assert(capabilityCalls.length === readsBeforeNoMore, '海报没有更多数据时不得继续请求')
+
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    if (params.page === 1) return Promise.resolve({ list: firstPosterPage, total: 21, page: 1, pageSize: 20 })
+    return Promise.reject(new Error('expected poster load-more failure'))
+  }
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  await posterPage.loadData.call(posterPage)
+  await posterPage.onLoadMore.call(posterPage)
+  assert(posterPage.data.list.length === 20 && posterPage.data.page === 1 && posterPage.data.hasMore === true, '海报加载更多失败应保留已有列表和当前页')
+  assert(posterPage.data.loadingMore === false && posterPage.data.loadMoreError, '海报加载更多失败应提供可重试提示')
+  const posterPagingWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-poster/admin-poster.wxml'), 'utf8')
+  assert(posterPagingWxml.indexOf('onLoadMore') !== -1 && posterPagingWxml.indexOf('loadingMore') !== -1 && posterPagingWxml.indexOf('加载更多') !== -1, '海报列表应提供加载更多和加载中入口')
 
   const posterReads = [deferred(), deferred()]
   let posterReadIndex = 0

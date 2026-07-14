@@ -6,7 +6,13 @@ Page({
   data: {
     list: [],
     loading: false,
+    loadingMore: false,
     error: '',
+    loadMoreError: '',
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    hasMore: false,
     processingIds: {},
     statusMap: {
       pending: '待审核',
@@ -24,7 +30,17 @@ Page({
 
   clearSensitiveData: function () {
     this._listRequestVersion = (this._listRequestVersion || 0) + 1
-    this.setData({ list: [], loading: false, error: '', processingIds: {} })
+    this.setData({
+      list: [],
+      loading: false,
+      loadingMore: false,
+      error: '',
+      loadMoreError: '',
+      page: 1,
+      total: 0,
+      hasMore: false,
+      processingIds: {}
+    })
   },
 
   ensureAccess: function () {
@@ -48,27 +64,55 @@ Page({
     return this.loadData()
   },
 
-  loadData: function () {
+  loadData: function (options) {
     if (!this.ensureAccess()) return Promise.resolve()
+    options = options || {}
+    var append = !!options.append
+    var requestedPage = append ? (options.page || this.data.page + 1) : 1
     var that = this
     this._listRequestVersion = (this._listRequestVersion || 0) + 1
     var requestVersion = this._listRequestVersion
-    this.setData({ loading: true, error: '' })
+    if (append) this.setData({ loadingMore: true, loadMoreError: '' })
+    else this.setData({ loading: true, loadingMore: false, error: '', loadMoreError: '' })
     return request.get('/poster', {
       status: 'pending',
-      page: 1,
-      pageSize: 20
+      page: requestedPage,
+      pageSize: this.data.pageSize
     }, { silent: true }).then(function (data) {
       if (requestVersion !== that._listRequestVersion) return
       if (!that.hasAccess()) {
         that.ensureAccess()
         return
       }
-      var list = Array.isArray(data) ? data : ((data && data.list) || [])
+      var pageList = Array.isArray(data) ? data : ((data && data.list) || [])
+      if (!Array.isArray(pageList)) pageList = []
+      var list = append ? that.data.list.concat(pageList) : pageList.slice()
+      var seenIds = {}
+      list = list.filter(function (item) {
+        if (!item || item.id === undefined || item.id === null) return true
+        var key = String(item.id)
+        if (seenIds[key]) return false
+        seenIds[key] = true
+        return true
+      })
+      var responsePage = parseInt(data && data.page, 10)
+      var responsePageSize = parseInt(data && data.pageSize, 10)
+      var responseTotal = Number(data && data.total)
+      var hasResponseTotal = data && data.total !== undefined && data.total !== null && !isNaN(responseTotal)
+      var page = isNaN(responsePage) ? requestedPage : Math.max(requestedPage, responsePage)
+      var pageSize = isNaN(responsePageSize) || responsePageSize < 1 ? that.data.pageSize : responsePageSize
+      var total = hasResponseTotal ? responseTotal : list.length
+      var hasMore = hasResponseTotal ? list.length < responseTotal : pageList.length >= pageSize
       that.setData({
-        list: Array.isArray(list) ? list : [],
+        list: list,
         loading: false,
-        error: ''
+        loadingMore: false,
+        error: '',
+        loadMoreError: '',
+        page: page,
+        pageSize: pageSize,
+        total: total,
+        hasMore: hasMore
       })
     }).catch(function () {
       if (requestVersion !== that._listRequestVersion) return
@@ -76,16 +120,33 @@ Page({
         that.ensureAccess()
         return
       }
+      if (append) {
+        that.setData({
+          loadingMore: false,
+          loadMoreError: '更多海报暂时未能加载'
+        })
+        return
+      }
       that.setData({
         list: [],
         loading: false,
-        error: '海报审核暂时未能加载'
+        loadingMore: false,
+        error: '海报审核暂时未能加载',
+        loadMoreError: '',
+        page: 1,
+        total: 0,
+        hasMore: false
       })
     })
   },
 
   onRetry: function () {
     return this.loadData()
+  },
+
+  onLoadMore: function () {
+    if (!this.ensureAccess() || this.data.loading || this.data.loadingMore || !this.data.hasMore) return Promise.resolve()
+    return this.loadData({ append: true, page: this.data.page + 1 })
   },
 
   isProcessing: function (id) {
