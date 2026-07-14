@@ -14,6 +14,7 @@ Page({
     queueLabel: '普通预约审核',
     canSwitchQueue: false,
     canManageFeedback: false,
+    processingById: {},
     scanning: false
   },
   ensureAdmin: function () {
@@ -38,8 +39,6 @@ Page({
       canSwitchQueue: adminPolicy.can(role, 'counselorApproval'),
       canManageFeedback: adminPolicy.can(role, 'feedbackManage')
     })
-    this.loadStats()
-    this.loadPendingList()
   },
   onShow: function () {
     if (!this.ensureAdmin()) return
@@ -71,16 +70,29 @@ Page({
   },
   loadPendingList: function () {
     var that = this
+    this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
+    var requestVersion = this._pendingRequestVersion
     request.get('/audit/pending', {
       type: this.data.queueType,
       page: 1,
       pageSize: 10
     }, { silent: true }).then(function (data) {
+      if (requestVersion !== that._pendingRequestVersion) return
       var list = Array.isArray(data) ? data : (data && data.list) || []
       that.setData({ pendingList: list.slice(0, 10) })
     }).catch(function () {
+      if (requestVersion !== that._pendingRequestVersion) return
       that.setData({ pendingList: [] })
     })
+  },
+  isProcessing: function (id) {
+    return !!this.data.processingById[id]
+  },
+  setProcessing: function (id, processing) {
+    var next = Object.assign({}, this.data.processingById)
+    if (processing) next[id] = true
+    else delete next[id]
+    this.setData({ processingById: next })
   },
   showScanError: function (message) {
     wx.showToast({ title: message || '扫码签到失败', icon: 'none', duration: 2500 })
@@ -121,22 +133,32 @@ Page({
   onApprove: function (e) {
     var that = this
     var id = e.currentTarget.dataset.id
+    if (this.isProcessing(id)) return
     wx.showModal({
       title: '确认审批',
       content: '确定通过该预约申请？',
       success: function (res) {
         if (!res.confirm) return
+        if (that.isProcessing(id)) return
+        that.setProcessing(id, true)
         request.post('/audit/' + id + '/approve', {}).then(function () {
           wx.showToast({ title: '已通过', icon: 'success' })
           that.loadPendingList()
           that.loadStats()
-        }).catch(function () { wx.showToast({ title: '操作失败', icon: 'none' }) })
+        }, function () {
+          wx.showToast({ title: '操作失败', icon: 'none' })
+        }).then(function () {
+          that.setProcessing(id, false)
+        }, function () {
+          that.setProcessing(id, false)
+        })
       }
     })
   },
   onReject: function (e) {
     var that = this
     var id = e.currentTarget.dataset.id
+    if (this.isProcessing(id)) return
     wx.showModal({
       title: '拒绝预约',
       content: '请输入拒绝理由',
@@ -149,11 +171,19 @@ Page({
           wx.showToast({ title: '请填写拒绝理由', icon: 'none' })
           return
         }
+        if (that.isProcessing(id)) return
+        that.setProcessing(id, true)
         request.post('/audit/' + id + '/reject', { reason: reason }).then(function () {
           wx.showToast({ title: '已拒绝', icon: 'success' })
           that.loadPendingList()
           that.loadStats()
-        }).catch(function () { wx.showToast({ title: '操作失败', icon: 'none' }) })
+        }, function () {
+          wx.showToast({ title: '操作失败', icon: 'none' })
+        }).then(function () {
+          that.setProcessing(id, false)
+        }, function () {
+          that.setProcessing(id, false)
+        })
       }
     })
   }

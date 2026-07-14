@@ -76,6 +76,16 @@ function flushPromises() {
   return new Promise(function(resolve) { setImmediate(resolve) })
 }
 
+function deferred() {
+  var resolve
+  var reject
+  var promise = new Promise(function(resolvePromise, rejectPromise) {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise: promise, resolve: resolve, reject: reject }
+}
+
 async function main() {
   const request = require('../miniapp/utils/request')
   const originalGet = request.get
@@ -168,10 +178,14 @@ async function main() {
     approvalCalls.push({ method: 'POST', url: url, body: body || {} })
     return Promise.resolve({})
   }
+  const approvalGet = request.get
+  const approvalPost = request.post
 
   storage.userInfo.role = 'admin'
   let homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, { queueType: 'counselor' })
+  assert(!approvalCalls.some(function(call) { return call.url === '/audit/pending' }), '首页 onLoad 只初始化，不应重复加载列表')
+  homePage.onShow.call(homePage)
   await flushPromises()
   let pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'admin' && pendingCall.params.page === 1 && pendingCall.params.pageSize === 10, '普通审核入口应请求 admin 队列的 /audit/pending')
@@ -179,6 +193,7 @@ async function main() {
   assert(approvalCalls.some(function(call) { return call.url === '/reservation/pending-count' && call.params.type === 'admin' }), '待审核数量应明确请求 admin 队列')
   assert(homePage.data.queueType === 'admin' && homePage.data.queueLabel === '普通预约审核', '普通审核入口应显示普通队列标签')
   assert(homePage.data.pendingList.length === 1 && homePage.data.pendingList[0].id === 101, '审核列表应处理 list/total/page/pageSize 响应')
+  assert(approvalCalls.filter(function(call) { return call.url === '/audit/pending' }).length === 1, '首页首次 onLoad + onShow 只能产生一轮列表请求')
   assert(!approvalCalls.some(function(call) { return call.url === '/feedback' }), '导生管理员不应请求反馈管理数据')
 
   approvalCalls.length = 0
@@ -198,6 +213,7 @@ async function main() {
   storage.userInfo.role = 'counselor'
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, {})
+  homePage.onShow.call(homePage)
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'counselor', '辅导员默认应请求 counselor 队列')
@@ -207,12 +223,14 @@ async function main() {
   storage.userInfo.role = 'super_admin'
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, { queueType: 'admin' })
+  homePage.onShow.call(homePage)
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'admin', '超级管理员应消费明确的普通队列参数')
   approvalCalls.length = 0
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, { queueType: 'counselor' })
+  homePage.onShow.call(homePage)
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'counselor', '超级管理员应消费明确的辅导员队列参数')
@@ -221,9 +239,13 @@ async function main() {
   storage.userInfo.role = 'admin'
   const reservationPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
   reservationPage.onLoad.call(reservationPage, { queueType: 'counselor' })
+  assert(!approvalCalls.some(function(call) { return call.url === '/reservation' }), '全部预约页 onLoad 只初始化，不应重复加载列表')
+  assert(typeof reservationPage.onShow === 'function', '全部预约页应在 onShow 加载和刷新列表')
+  reservationPage.onShow.call(reservationPage)
   await flushPromises()
   assert(reservationPage.data.queueType === 'admin', '导生管理员不能通过页面参数获得辅导员审批权限')
   assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation' }), '全部预约页仍应读取 /reservation')
+  assert(approvalCalls.filter(function(call) { return call.url === '/reservation' }).length === 1, '全部预约页首次 onLoad + onShow 只能产生一轮列表请求')
   assert(reservationPage.data.list[0].canAudit === true && reservationPage.data.list[1].canAudit === false, '导生管理员只能操作 pending 状态')
   modalResponse = { confirm: true, content: '材料不全' }
   approvalCalls.length = 0
@@ -238,10 +260,75 @@ async function main() {
   await flushPromises()
   assert(!approvalCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/101/reject' }), '拒绝理由为空时不得提交审批')
 
+  modalResponse = { confirm: true, content: '重复提交检查' }
+  approvalCalls.length = 0
+  const homeApproval = deferred()
+  request.post = function(url, body) {
+    approvalCalls.push({ method: 'POST', url: url, body: body || {} })
+    return homeApproval.promise
+  }
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  homePage.onReject.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  assert(approvalCalls.filter(function(call) { return call.url === '/audit/101/approve' }).length === 1, '首页同一预约处理中不得重复提交')
+  assert(homePage.data.processingById && homePage.data.processingById[101], '首页提交期间应标记该预约正在处理')
+  homeApproval.resolve({})
+  await flushPromises()
+  await flushPromises()
+  assert(!homePage.data.processingById[101], '首页请求结束后应恢复该预约操作状态')
+
+  approvalCalls.length = 0
+  const reservationApproval = deferred()
+  request.post = function(url, body) {
+    approvalCalls.push({ method: 'POST', url: url, body: body || {} })
+    return reservationApproval.promise
+  }
+  reservationPage.onApprove.call(reservationPage, { currentTarget: { dataset: { id: 101 } } })
+  reservationPage.onApprove.call(reservationPage, { currentTarget: { dataset: { id: 101 } } })
+  reservationPage.onReject.call(reservationPage, { currentTarget: { dataset: { id: 101 } } })
+  assert(approvalCalls.filter(function(call) { return call.url === '/audit/101/approve' }).length === 1, '全部预约页同一预约处理中不得重复提交')
+  assert(reservationPage.data.processingById && reservationPage.data.processingById[101], '全部预约页提交期间应标记该预约正在处理')
+  reservationApproval.resolve({})
+  await flushPromises()
+  await flushPromises()
+  assert(!reservationPage.data.processingById[101], '全部预约页请求结束后应恢复该预约操作状态')
+
+  const homeRequests = [deferred(), deferred()]
+  let homeRequestIndex = 0
+  request.get = function(url) {
+    if (url === '/audit/pending') return homeRequests[homeRequestIndex++].promise
+    return Promise.resolve({})
+  }
+  homePage.loadPendingList.call(homePage)
+  homePage.loadPendingList.call(homePage)
+  homeRequests[1].resolve({ list: [{ id: 202 }], total: 1, page: 1, pageSize: 10 })
+  await flushPromises()
+  homeRequests[0].resolve({ list: [{ id: 201 }], total: 1, page: 1, pageSize: 10 })
+  await flushPromises()
+  assert(homePage.data.pendingList[0].id === 202, '首页旧列表响应不得覆盖较新的列表结果')
+
+  const reservationRequests = [deferred(), deferred()]
+  let reservationRequestIndex = 0
+  request.get = function(url) {
+    if (url === '/reservation') return reservationRequests[reservationRequestIndex++].promise
+    return Promise.resolve({})
+  }
+  reservationPage.loadData.call(reservationPage)
+  reservationPage.loadData.call(reservationPage)
+  reservationRequests[1].resolve({ list: [{ id: 302, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  reservationRequests[0].resolve({ list: [{ id: 301, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  assert(reservationPage.data.list[0].id === 302, '全部预约页旧列表响应不得覆盖较新的筛选或搜索结果')
+
+  request.get = approvalGet
+  request.post = approvalPost
+
   storage.userInfo.role = 'counselor'
   approvalCalls.length = 0
   const counselorReservationPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
   counselorReservationPage.onLoad.call(counselorReservationPage, { queueType: 'counselor' })
+  counselorReservationPage.onShow.call(counselorReservationPage)
   await flushPromises()
   assert(counselorReservationPage.data.list.every(function(item) { return item.canAudit }), '辅导员可操作 pending 和 counselor_pending 状态')
 

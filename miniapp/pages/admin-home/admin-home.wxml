@@ -46,8 +46,11 @@
         <text class="pending-time">{{item.date}} {{item.startTime || item.start_time}}-{{item.endTime || item.end_time}}</text>
       </view>
       <view class="pending-actions">
-        <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove">通过</view>
-        <view class="btn-reject" data-id="{{item.id}}" bindtap="onReject">拒绝</view>
+        <text wx:if="{{processingById[item.id]}}">处理中</text>
+        <block wx:else>
+          <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove">通过</view>
+          <view class="btn-reject" data-id="{{item.id}}" bindtap="onReject">拒绝</view>
+        </block>
       </view>
     </view>
   </view>
