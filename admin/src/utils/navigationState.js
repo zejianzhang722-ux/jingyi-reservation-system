@@ -1,4 +1,5 @@
-const STORAGE_PREFIX = 'jingyi-admin-navigation'
+const STORAGE_PREFIX = 'jingyi-admin-navigation:v2'
+const LEGACY_STORAGE_PREFIX = 'jingyi-admin-navigation'
 
 const WORKSPACE_LABELS = {
   admin: '导生工作区',
@@ -20,15 +21,38 @@ export function getNavigationStorageKey(account = {}) {
   return `${STORAGE_PREFIX}:${account.role || 'admin'}:${accountIdentity(account)}`
 }
 
+function getLegacyNavigationStorageKey(account = {}) {
+  return `${LEGACY_STORAGE_PREFIX}:${account.role || 'admin'}:${accountIdentity(account)}`
+}
+
+function parseOpenGroups(value) {
+  try {
+    const groups = JSON.parse(value)
+    return Array.isArray(groups) && groups.every(item => typeof item === 'string') ? groups : null
+  } catch {
+    return null
+  }
+}
+
 export function loadOpenGroups(storage, account = {}) {
   const defaults = DEFAULT_OPEN_GROUPS[account.role] || DEFAULT_OPEN_GROUPS.admin
   if (!storage?.getItem) return [...defaults]
-  try {
-    const value = JSON.parse(storage.getItem(getNavigationStorageKey(account)))
-    return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : [...defaults]
-  } catch {
-    return [...defaults]
+
+  const currentGroups = parseOpenGroups(storage.getItem(getNavigationStorageKey(account)))
+  if (currentGroups) return currentGroups
+
+  const legacyGroups = parseOpenGroups(storage.getItem(getLegacyNavigationStorageKey(account)))
+  if (legacyGroups) {
+    const migratedGroups = [...legacyGroups]
+    if (account.role === 'super_admin' && !migratedGroups.includes('reservation')) {
+      const todayIndex = migratedGroups.indexOf('today')
+      migratedGroups.splice(todayIndex >= 0 ? todayIndex + 1 : 0, 0, 'reservation')
+    }
+    storage.setItem?.(getNavigationStorageKey(account), JSON.stringify(migratedGroups))
+    return migratedGroups
   }
+
+  return [...defaults]
 }
 
 export function saveOpenGroups(storage, account = {}, groups = []) {

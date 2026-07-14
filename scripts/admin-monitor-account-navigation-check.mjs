@@ -232,10 +232,22 @@ assert.deepEqual(navSections.map(section => section.title), [
   '内容与沟通',
   '系统运维'
 ])
-assert.deepEqual(navSections.find(section => section.key === 'system').children, ['SystemLogs', 'SystemBackup'])
-assert.ok(navSections.find(section => section.key === 'space').children.includes('RoomManage'))
-assert.ok(navSections.find(section => section.key === 'governance').children.includes('AccountManage'))
-assert.ok(navSections.find(section => section.key === 'content').children.includes('SystemAnnouncements'))
+assert.deepEqual(Object.fromEntries(navSections.map(section => [section.key, section.children])), {
+  today: ['Dashboard'],
+  reservation: ['CounselorPending', 'ReservationPending', 'ReservationAll', 'CheckinManage', 'ReadingRoomLogs'],
+  space: ['RoomMonitor', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig'],
+  governance: ['CreditViolations', 'CreditBlacklist', 'AccountManage', 'CreditConfig'],
+  statistics: ['StatsOverview', 'StatsExport'],
+  content: ['PosterPending', 'PosterPosition', 'Feedback', 'SystemAnnouncements'],
+  system: ['SystemLogs', 'SystemBackup']
+})
+const groupedAdminRouteNames = navSections.flatMap(section => section.children)
+assert.equal(new Set(groupedAdminRouteNames).size, groupedAdminRouteNames.length, 'each admin route should belong to at most one navigation group')
+assert.deepEqual(
+  [...groupedAdminRouteNames].sort(),
+  adminChildren.map(route => route.name).sort(),
+  'every admin route should belong to exactly one navigation group'
+)
 
 for (const [role, expectedGroups] of Object.entries(expectedNavigationGroups)) {
   const navigation = buildNavigation(role)
@@ -286,6 +298,24 @@ assert.ok(navigationState.loadOpenGroups(storage, { id: 13, role: 'counselor' })
 assert.deepEqual(
   navigationState.loadOpenGroups(storage, { id: 14, role: 'super_admin' }),
   ['today', 'reservation', 'system']
+)
+const legacySuperAdmin = { id: 15, username: 'root-a', role: 'super_admin' }
+memory.set('jingyi-admin-navigation:super_admin:15', JSON.stringify(['today', 'system']))
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, legacySuperAdmin),
+  ['today', 'reservation', 'system'],
+  'legacy super admin navigation should gain the new default group once'
+)
+assert.deepEqual(
+  JSON.parse(memory.get(navigationState.getNavigationStorageKey(legacySuperAdmin))),
+  ['today', 'reservation', 'system'],
+  'migrated navigation should be stored under the current version key'
+)
+navigationState.saveOpenGroups(storage, legacySuperAdmin, ['today', 'system'])
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, legacySuperAdmin),
+  ['today', 'system'],
+  'closing reservation after migration should remain a saved choice'
 )
 assert.deepEqual(
   navigationState.ensureActiveGroup(['today'], counselorNavigation, '/poster/pending'),
