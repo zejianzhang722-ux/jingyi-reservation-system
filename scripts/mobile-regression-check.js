@@ -24,6 +24,12 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+function assertApprovalQueue(responseJson, expectedStatus, queueName) {
+  const data = responseJson && responseJson.data
+  assert(data && !Array.isArray(data) && Array.isArray(data.list), queueName + ' 应返回 data.list 分页列表')
+  assert(data.list.every(function(item) { return item && item.status === expectedStatus }), queueName + ' 只应包含 ' + expectedStatus + ' 状态的预约')
+}
+
 async function api(path, options) {
   const res = await fetch(BASE_URL + path, options || {})
   const text = await res.text()
@@ -99,6 +105,7 @@ async function main() {
     headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
   })
   assert(guideOrdinaryAudit.json.code === 200, '导生管理员应能读取普通预约审核队列')
+  assertApprovalQueue(guideOrdinaryAudit.json, 'pending', '导生管理员普通审核队列')
   const guideCounselorAudit = await api('/audit/pending?type=counselor&page=1&pageSize=10', {
     headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
   })
@@ -107,6 +114,8 @@ async function main() {
     headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }
   })
   assert(counselorAudit.json.code === 200, '辅导员应能读取辅导员重点审核队列')
+
+  assertApprovalQueue(counselorAudit.json, 'counselor_pending', '辅导员重点审核队列')
 
   const expiredAccessToken = jwt.sign({
     id: login.json.data.userInfo.id,
