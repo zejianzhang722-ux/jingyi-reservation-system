@@ -41,7 +41,7 @@ Page({
   },
 
   onLoad: function () {
-    if (this.ensureAdmin()) return this.loadData()
+    this.ensureAdmin()
   },
 
   onShow: function () {

@@ -19,7 +19,7 @@ Page({
     }
     return true
   },
-  onLoad: function () { if (this.ensureAdmin()) return this.loadData() },
+  onLoad: function () { this.ensureAdmin() },
   onShow: function () { if (this.ensureAdmin()) return this.loadData() },
   loadData: function () {
     var that = this

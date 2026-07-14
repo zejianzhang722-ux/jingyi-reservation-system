@@ -25,7 +25,7 @@ Page({
     }
     return true
   },
-  onLoad: function () { if (this.ensureFeedbackAccess()) return this.loadFeedback() },
+  onLoad: function () { this.ensureFeedbackAccess() },
   onShow: function () { if (this.ensureFeedbackAccess()) return this.loadFeedback() },
   loadFeedback: function () {
     if (!this.ensureFeedbackAccess()) return Promise.resolve()
