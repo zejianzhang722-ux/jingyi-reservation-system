@@ -86,6 +86,7 @@ Page({
       }
       var pageList = Array.isArray(data) ? data : ((data && data.list) || [])
       if (!Array.isArray(pageList)) pageList = []
+      var previousLength = append ? that.data.list.length : 0
       var list = append ? that.data.list.concat(pageList) : pageList.slice()
       var seenIds = {}
       list = list.filter(function (item) {
@@ -102,7 +103,9 @@ Page({
       var page = isNaN(responsePage) ? requestedPage : Math.max(requestedPage, responsePage)
       var pageSize = isNaN(responsePageSize) || responsePageSize < 1 ? that.data.pageSize : responsePageSize
       var total = hasResponseTotal ? responseTotal : list.length
-      var hasMore = hasResponseTotal ? list.length < responseTotal : pageList.length >= pageSize
+      var hasMore = append
+        ? pageList.length >= pageSize && list.length > previousLength && (!hasResponseTotal || list.length < responseTotal)
+        : (hasResponseTotal ? list.length < responseTotal : pageList.length >= pageSize)
       that.setData({
         list: list,
         loading: false,

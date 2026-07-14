@@ -588,6 +588,35 @@ async function main() {
   posterPage.onLoadMore.call(posterPage)
   assert(capabilityCalls.length === readsBeforeNoMore, '海报没有更多数据时不得继续请求')
 
+  var exhaustedPosterCases = [
+    { name: '空追加页', items: [], expectedLength: 20 },
+    { name: '不足一页', items: [{ id: 21, status: 'pending' }], expectedLength: 21 },
+    { name: '全部重复', items: firstPosterPage.slice(), expectedLength: 20 }
+  ]
+  for (var exhaustedIndex = 0; exhaustedIndex < exhaustedPosterCases.length; exhaustedIndex++) {
+    var exhaustedCase = exhaustedPosterCases[exhaustedIndex]
+    request.get = function(url, params) {
+      if (params.page === 1) return Promise.resolve({ list: firstPosterPage, total: 100, page: 1, pageSize: 20 })
+      return Promise.resolve({ list: exhaustedCase.items, total: 100, page: 2, pageSize: 20 })
+    }
+    posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+    await posterPage.loadData.call(posterPage)
+    await posterPage.onLoadMore.call(posterPage)
+    assert(posterPage.data.list.length === exhaustedCase.expectedLength, exhaustedCase.name + ' 应保留并正确合并已有海报')
+    assert(posterPage.data.hasMore === false, exhaustedCase.name + ' 即使服务端旧 total 较大也应停止继续加载')
+  }
+
+  var fullSecondPosterPage = []
+  for (var fullPosterId = 21; fullPosterId <= 40; fullPosterId++) fullSecondPosterPage.push({ id: fullPosterId, status: 'pending' })
+  request.get = function(url, params) {
+    if (params.page === 1) return Promise.resolve({ list: firstPosterPage, total: 60, page: 1, pageSize: 20 })
+    return Promise.resolve({ list: fullSecondPosterPage, total: 60, page: 2, pageSize: 20 })
+  }
+  posterPage = loadPage('miniapp/pages/admin-poster/admin-poster.js')
+  await posterPage.loadData.call(posterPage)
+  await posterPage.onLoadMore.call(posterPage)
+  assert(posterPage.data.list.length === 40 && posterPage.data.hasMore === true, '海报追加页满页、有新增且未达到 total 时应继续允许加载')
+
   capabilityCalls.length = 0
   request.get = function(url, params) {
     capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
