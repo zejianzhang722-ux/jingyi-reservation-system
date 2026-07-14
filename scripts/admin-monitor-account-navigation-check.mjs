@@ -317,6 +317,25 @@ assert.deepEqual(
   ['today', 'system'],
   'closing reservation after migration should remain a saved choice'
 )
+const customizedLegacySuperAdmin = { id: 16, username: 'root-b', role: 'super_admin' }
+memory.set('jingyi-admin-navigation:super_admin:16', JSON.stringify(['space', 'system']))
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, customizedLegacySuperAdmin),
+  ['space', 'system'],
+  'customized legacy navigation should migrate without gaining reservation'
+)
+assert.deepEqual(
+  JSON.parse(memory.get(navigationState.getNavigationStorageKey(customizedLegacySuperAdmin))),
+  ['space', 'system'],
+  'customized legacy navigation should be stored unchanged under the current version key'
+)
+const reorderedLegacyDefault = { id: 17, username: 'root-c', role: 'super_admin' }
+memory.set('jingyi-admin-navigation:super_admin:17', JSON.stringify(['system', 'today']))
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, reorderedLegacyDefault),
+  ['today', 'reservation', 'system'],
+  'legacy default navigation should be recognized regardless of stored order'
+)
 assert.deepEqual(
   navigationState.ensureActiveGroup(['today'], counselorNavigation, '/poster/pending'),
   ['today', 'content']

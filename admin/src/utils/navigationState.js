@@ -43,11 +43,13 @@ export function loadOpenGroups(storage, account = {}) {
 
   const legacyGroups = parseOpenGroups(storage.getItem(getLegacyNavigationStorageKey(account)))
   if (legacyGroups) {
-    const migratedGroups = [...legacyGroups]
-    if (account.role === 'super_admin' && !migratedGroups.includes('reservation')) {
-      const todayIndex = migratedGroups.indexOf('today')
-      migratedGroups.splice(todayIndex >= 0 ? todayIndex + 1 : 0, 0, 'reservation')
-    }
+    const isLegacySuperAdminDefault = account.role === 'super_admin' &&
+      legacyGroups.length === 2 &&
+      legacyGroups.includes('today') &&
+      legacyGroups.includes('system')
+    const migratedGroups = isLegacySuperAdminDefault
+      ? ['today', 'reservation', 'system']
+      : [...legacyGroups]
     storage.setItem?.(getNavigationStorageKey(account), JSON.stringify(migratedGroups))
     return migratedGroups
   }
