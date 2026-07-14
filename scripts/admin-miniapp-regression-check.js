@@ -44,6 +44,30 @@ function loadPage(relativePath) {
   return pageConfig
 }
 
+function getManageKeysForRole(role) {
+  storage.userInfo.role = role
+  const page = loadPage('miniapp/pages/admin-manage/admin-manage.js')
+  page.onLoad.call(page)
+  return {
+    page: page,
+    keys: (page.data.groups || []).reduce(function(all, group) {
+      return all.concat((group.items || []).map(function(item) { return item.key }))
+    }, [])
+  }
+}
+
+function assertIncludesAll(actual, expected, message) {
+  expected.forEach(function(key) {
+    assert(actual.indexOf(key) !== -1, message + ': ' + key)
+  })
+}
+
+function assertExcludesAll(actual, expected, message) {
+  expected.forEach(function(key) {
+    assert(actual.indexOf(key) === -1, message + ': ' + key)
+  })
+}
+
 async function main() {
   const request = require('../miniapp/utils/request')
   const originalGet = request.get
@@ -70,7 +94,19 @@ async function main() {
 
   request.get = originalGet
 
-  const managePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
+  const adminManage = getManageKeysForRole('admin')
+  assertIncludesAll(adminManage.keys, ['pending', 'reservation', 'rooms', 'users', 'violations', 'stats'], '导生管理员移动菜单应包含')
+  assertExcludesAll(adminManage.keys, ['counselorPending', 'poster', 'blacklist', 'feedback', 'announcement'], '导生管理员移动菜单不应包含')
+
+  const counselorManage = getManageKeysForRole('counselor')
+  assertIncludesAll(counselorManage.keys, ['pending', 'counselorPending', 'reservation', 'rooms', 'users', 'violations', 'blacklist', 'feedback', 'poster', 'stats'], '辅导员移动菜单应包含')
+  assertExcludesAll(counselorManage.keys, ['announcement'], '辅导员移动菜单不应包含')
+
+  const superAdminManage = getManageKeysForRole('super_admin')
+  assertIncludesAll(superAdminManage.keys, ['pending', 'counselorPending', 'reservation', 'rooms', 'users', 'violations', 'blacklist', 'feedback', 'poster', 'stats'], '超级管理员移动菜单应包含现场业务入口')
+  assertExcludesAll(superAdminManage.keys, ['announcement', 'accounts', 'backup', 'logs', 'config'], '超级管理员移动菜单不应包含电脑专属入口')
+
+  const managePage = counselorManage.page
   assert(typeof managePage.goToStatsOverview === 'function', '管理页应提供数据统计入口')
   assert(typeof managePage.goToCreditManage === 'function', '管理页应提供信用管理入口')
   navCalls.length = 0
@@ -79,6 +115,25 @@ async function main() {
   navCalls.length = 0
   managePage.goToCreditManage()
   assert(navCalls[0] && navCalls[0].url === '/pages/admin-credit/admin-credit', '信用管理应进入管理员信用页')
+  navCalls.length = 0
+  managePage.onItemTap({ currentTarget: { dataset: { key: 'poster' } } })
+  assert(navCalls[0] && navCalls[0].url === '/pages/admin-poster/admin-poster', '海报审核应进入预留海报审核页')
+  navCalls.length = 0
+  managePage.onItemTap({ currentTarget: { dataset: { key: 'violations' } } })
+  assert(navCalls[0] && navCalls[0].url === '/pages/admin-credit/admin-credit?tab=violations', '违规记录应进入信用页对应标签')
+  navCalls.length = 0
+  managePage.onItemTap({ currentTarget: { dataset: { key: 'blacklist' } } })
+  assert(navCalls[0] && navCalls[0].url === '/pages/admin-credit/admin-credit?tab=blacklist', '黑名单应进入信用页对应标签')
+
+  const adminPolicy = require('../miniapp/utils/admin-policy')
+  assert(adminPolicy.can('admin', 'ordinaryApproval'), '导生管理员应有普通审批能力')
+  assert(!adminPolicy.can('admin', 'counselorApproval'), '导生管理员不应有辅导员重点审核能力')
+  assert(adminPolicy.can('counselor', 'posterReview'), '辅导员应有海报审核能力')
+  assert(adminPolicy.can('super_admin', 'posterReview'), '超级管理员应复用现场移动能力')
+  assert(!adminPolicy.can('unknown', 'reservationView'), '未知角色不应获得移动管理能力')
+  assert(adminPolicy.queueType('admin', 'counselor') === 'admin', '导生管理员不能切换到辅导员审批队列')
+  assert(adminPolicy.queueType('counselor', 'counselor') === 'counselor', '辅导员可进入重点审核队列')
+  assert(adminPolicy.queueType('super_admin', 'counselor') === 'counselor', '超级管理员可进入重点审核队列')
 
   const profilePage = loadPage('miniapp/pages/admin-profile/admin-profile.js')
   const profileKeys = (profilePage.data.menuList || []).map(function(item) { return item.key })
