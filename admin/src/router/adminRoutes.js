@@ -42,16 +42,11 @@ export const adminChildren = [
 export const navSections = [
   { key: 'today', title: '今日工作', icon: 'DataBoard', children: ['Dashboard'] },
   { key: 'reservation', title: '预约与使用', icon: 'Calendar', children: ['CounselorPending', 'ReservationPending', 'ReservationAll', 'CheckinManage', 'ReadingRoomLogs'] },
-  { key: 'space', title: '空间运行', icon: 'Monitor', children: ['RoomMonitor'] },
-  { key: 'governance', title: '书院治理', icon: 'UserFilled', children: ['CreditViolations', 'CreditBlacklist', 'Feedback'] },
+  { key: 'space', title: '空间管理', icon: 'Monitor', children: ['RoomMonitor', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig'] },
+  { key: 'governance', title: '宿生与信用', icon: 'UserFilled', children: ['CreditViolations', 'CreditBlacklist', 'AccountManage', 'CreditConfig'] },
   { key: 'statistics', title: '数据与报表', icon: 'TrendCharts', children: ['StatsOverview', 'StatsExport'] },
-  { key: 'content', title: '内容审核', icon: 'PictureFilled', children: ['PosterPending'] },
-  {
-    key: 'system',
-    title: '系统管理',
-    icon: 'Setting',
-    children: ['RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig', 'AccountManage', 'CreditConfig', 'PosterPosition', 'SystemAnnouncements', 'SystemLogs', 'SystemBackup']
-  }
+  { key: 'content', title: '内容与沟通', icon: 'PictureFilled', children: ['PosterPending', 'PosterPosition', 'Feedback', 'SystemAnnouncements'] },
+  { key: 'system', title: '系统运维', icon: 'Setting', children: ['SystemLogs', 'SystemBackup'] }
 ]
 
 export function hasRouteRole(route, role) {

@@ -24,6 +24,27 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+function assertApprovalQueue(responseJson, expectedStatus, queueName, expectedPageSize) {
+  const data = responseJson && responseJson.data
+  assert(data && !Array.isArray(data) && Array.isArray(data.list), queueName + ' 应返回 data.list 分页列表')
+  assert(Number.isInteger(data.total) && Number.isInteger(data.page) && Number.isInteger(data.pageSize), queueName + ' 应返回 total、page、pageSize 分页字段')
+  assert(data.page === 1, queueName + ' 应返回第 1 页')
+  assert(data.pageSize === expectedPageSize, queueName + ' pageSize 应与请求值一致')
+  assert(data.total >= data.list.length, queueName + ' total 不得小于当前列表数量')
+  assert(data.total > 0 && data.list.length > 0, queueName + ' 在已知测试数据下不应为空')
+  assert(data.list.every(function(item) { return item && item.status === expectedStatus }), queueName + ' 只应包含 ' + expectedStatus + ' 状态的预约')
+}
+
+function assertFails(check, message) {
+  var failed = false
+  try {
+    check()
+  } catch (err) {
+    failed = true
+  }
+  assert(failed, message)
+}
+
 async function api(path, options) {
   const res = await fetch(BASE_URL + path, options || {})
   const text = await res.text()
@@ -37,6 +58,16 @@ async function api(path, options) {
 }
 
 async function main() {
+  assertFails(function() {
+    assertApprovalQueue({ data: { list: [{ status: 'pending' }] } }, 'pending', '缺少分页字段', 10)
+  }, '审核队列缺少分页字段时检查必须失败')
+  assertFails(function() {
+    assertApprovalQueue({ data: { list: [], total: 0, page: 1, pageSize: 10 } }, 'pending', '空队列', 10)
+  }, '已知测试服务审核队列为空时检查必须失败')
+  assertFails(function() {
+    assertApprovalQueue({ data: { list: [{ status: 'approved' }], total: 1, page: 1, pageSize: 10 } }, 'pending', '错误状态', 10)
+  }, '审核队列包含错误状态时检查必须失败')
+
   const localData = require('../miniapp/utils/local-data')
   assert(localData.resolveRoomId('B228') === 1, 'B228 应解析为功能房 1')
   assert(localData.resolveRoomId('B228自习室') === 1, 'B228自习室 应解析为功能房 1')
@@ -94,6 +125,22 @@ async function main() {
     headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }
   })
   assert(counselorBlacklist.json.code === 200, '辅导员信用黑名单接口应可用')
+
+  const guideOrdinaryAudit = await api('/audit/pending?type=admin&page=1&pageSize=10', {
+    headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
+  })
+  assert(guideOrdinaryAudit.json.code === 200, '导生管理员应能读取普通预约审核队列')
+  assertApprovalQueue(guideOrdinaryAudit.json, 'pending', '导生管理员普通审核队列', 10)
+  const guideCounselorAudit = await api('/audit/pending?type=counselor&page=1&pageSize=10', {
+    headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
+  })
+  assert(guideCounselorAudit.status === 403 && guideCounselorAudit.json.code === 403, '导生管理员不应读取辅导员重点审核队列')
+  const counselorAudit = await api('/audit/pending?type=counselor&page=1&pageSize=10', {
+    headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }
+  })
+  assert(counselorAudit.json.code === 200, '辅导员应能读取辅导员重点审核队列')
+
+  assertApprovalQueue(counselorAudit.json, 'counselor_pending', '辅导员重点审核队列', 10)
 
   const expiredAccessToken = jwt.sign({
     id: login.json.data.userInfo.id,

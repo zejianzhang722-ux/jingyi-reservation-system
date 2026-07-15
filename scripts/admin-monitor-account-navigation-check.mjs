@@ -11,7 +11,7 @@ import * as adminRoutes from '../admin/src/router/adminRoutes.js'
 const require = createRequire(import.meta.url)
 const adminRequire = createRequire(new URL('../admin/package.json', import.meta.url))
 const XLSX = adminRequire('xlsx')
-const { adminChildren, buildNavigation, getNavigationSectionForRoute } = adminRoutes
+const { adminChildren, navSections, buildNavigation, getNavigationSectionForRoute } = adminRoutes
 assert.equal(typeof getNavigationSectionForRoute, 'function')
 assert.equal(typeof createLatestRequestCoordinator, 'function')
 
@@ -218,10 +218,36 @@ for (const [relativePath, listName, retryName] of loadStatePages) {
 }
 
 const expectedNavigationGroups = {
-  admin: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表'],
-  counselor: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表', '内容审核'],
-  super_admin: ['今日工作', '预约与使用', '空间运行', '书院治理', '数据与报表', '内容审核', '系统管理']
+  admin: ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表'],
+  counselor: ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表', '内容与沟通'],
+  super_admin: ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表', '内容与沟通', '系统运维']
 }
+
+assert.deepEqual(navSections.map(section => section.title), [
+  '今日工作',
+  '预约与使用',
+  '空间管理',
+  '宿生与信用',
+  '数据与报表',
+  '内容与沟通',
+  '系统运维'
+])
+assert.deepEqual(Object.fromEntries(navSections.map(section => [section.key, section.children])), {
+  today: ['Dashboard'],
+  reservation: ['CounselorPending', 'ReservationPending', 'ReservationAll', 'CheckinManage', 'ReadingRoomLogs'],
+  space: ['RoomMonitor', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig'],
+  governance: ['CreditViolations', 'CreditBlacklist', 'AccountManage', 'CreditConfig'],
+  statistics: ['StatsOverview', 'StatsExport'],
+  content: ['PosterPending', 'PosterPosition', 'Feedback', 'SystemAnnouncements'],
+  system: ['SystemLogs', 'SystemBackup']
+})
+const groupedAdminRouteNames = navSections.flatMap(section => section.children)
+assert.equal(new Set(groupedAdminRouteNames).size, groupedAdminRouteNames.length, 'each admin route should belong to at most one navigation group')
+assert.deepEqual(
+  [...groupedAdminRouteNames].sort(),
+  adminChildren.map(route => route.name).sort(),
+  'every admin route should belong to exactly one navigation group'
+)
 
 for (const [role, expectedGroups] of Object.entries(expectedNavigationGroups)) {
   const navigation = buildNavigation(role)
@@ -237,17 +263,15 @@ for (const [role, expectedGroups] of Object.entries(expectedNavigationGroups)) {
 assert.ok(adminChildren.every(route => !Object.hasOwn(route.meta, 'parent')), 'route metadata should not duplicate navigation section titles')
 
 const adminNavigation = buildNavigation('admin')
-assert.ok(!adminNavigation.some(group => group.title === '系统管理'))
+assert.ok(!adminNavigation.some(group => group.title === '系统运维'))
 assert.ok(!adminNavigation.flatMap(group => group.children).some(item => item.name === 'AccountManage'))
 const counselorNavigation = buildNavigation('counselor')
 const counselorReservationNames = counselorNavigation.find(group => group.title === '预约与使用').children.map(item => item.name)
 assert.ok(counselorReservationNames.indexOf('CounselorPending') < counselorReservationNames.indexOf('ReservationPending'))
-assert.equal(counselorNavigation.find(group => group.title === '内容审核').children[0].name, 'PosterPending')
+assert.equal(counselorNavigation.find(group => group.title === '内容与沟通').children[0].name, 'PosterPending')
 const superNavigation = buildNavigation('super_admin')
-assert.ok(superNavigation.find(group => group.title === '系统管理').children.some(item => item.name === 'AccountManage'))
-const superSystemNames = superNavigation.find(group => group.title === '系统管理').children.map(item => item.name)
-assert.ok(superSystemNames.indexOf('AccountManage') < superSystemNames.indexOf('SystemLogs'))
-assert.ok(superSystemNames.indexOf('RulesConfig') < superSystemNames.indexOf('SystemBackup'))
+assert.ok(superNavigation.find(group => group.title === '宿生与信用').children.some(item => item.name === 'AccountManage'))
+assert.deepEqual(superNavigation.find(group => group.title === '系统运维').children.map(item => item.name), ['SystemLogs', 'SystemBackup'])
 
 const navigationState = await import('../admin/src/utils/navigationState.js').catch(() => ({}))
 assert.equal(typeof navigationState.getNavigationStorageKey, 'function')
@@ -271,6 +295,47 @@ navigationState.saveOpenGroups(storage, secondAdmin, ['space'])
 assert.deepEqual(navigationState.loadOpenGroups(storage, firstAdmin), ['today', 'reservation'])
 assert.deepEqual(navigationState.loadOpenGroups(storage, secondAdmin), ['space'])
 assert.ok(navigationState.loadOpenGroups(storage, { id: 13, role: 'counselor' }).includes('reservation'))
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, { id: 14, role: 'super_admin' }),
+  ['today', 'reservation', 'system']
+)
+const legacySuperAdmin = { id: 15, username: 'root-a', role: 'super_admin' }
+memory.set('jingyi-admin-navigation:super_admin:15', JSON.stringify(['today', 'system']))
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, legacySuperAdmin),
+  ['today', 'reservation', 'system'],
+  'legacy super admin navigation should gain the new default group once'
+)
+assert.deepEqual(
+  JSON.parse(memory.get(navigationState.getNavigationStorageKey(legacySuperAdmin))),
+  ['today', 'reservation', 'system'],
+  'migrated navigation should be stored under the current version key'
+)
+navigationState.saveOpenGroups(storage, legacySuperAdmin, ['today', 'system'])
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, legacySuperAdmin),
+  ['today', 'system'],
+  'closing reservation after migration should remain a saved choice'
+)
+const customizedLegacySuperAdmin = { id: 16, username: 'root-b', role: 'super_admin' }
+memory.set('jingyi-admin-navigation:super_admin:16', JSON.stringify(['space', 'system']))
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, customizedLegacySuperAdmin),
+  ['space', 'system'],
+  'customized legacy navigation should migrate without gaining reservation'
+)
+assert.deepEqual(
+  JSON.parse(memory.get(navigationState.getNavigationStorageKey(customizedLegacySuperAdmin))),
+  ['space', 'system'],
+  'customized legacy navigation should be stored unchanged under the current version key'
+)
+const reorderedLegacyDefault = { id: 17, username: 'root-c', role: 'super_admin' }
+memory.set('jingyi-admin-navigation:super_admin:17', JSON.stringify(['system', 'today']))
+assert.deepEqual(
+  navigationState.loadOpenGroups(storage, reorderedLegacyDefault),
+  ['today', 'reservation', 'system'],
+  'legacy default navigation should be recognized regardless of stored order'
+)
 assert.deepEqual(
   navigationState.ensureActiveGroup(['today'], counselorNavigation, '/poster/pending'),
   ['today', 'content']

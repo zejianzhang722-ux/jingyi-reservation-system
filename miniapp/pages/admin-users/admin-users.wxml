@@ -15,7 +15,7 @@
       </view>
       <view class="user-actions">
         <text class="user-status {{item.status}}">{{item.statusText}}</text>
-        <view class="action-btns">
+        <view class="action-btns" wx:if="{{canManageStudents}}">
           <view class="btn-credit" data-id="{{item.id}}" data-score="{{item.credit_score}}" catchtap="onAdjustCredit">调分</view>
           <view class="btn-ban {{item.statusActionClass}}" data-id="{{item.id}}" data-next-status="{{item.nextStatus}}" data-action="{{item.statusActionText}}" catchtap="onToggleStatus">{{item.statusActionText}}</view>
         </view>
