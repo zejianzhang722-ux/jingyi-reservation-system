@@ -101,6 +101,5 @@ Page({
   goToUserManage: function () { wx.navigateTo({ url: '/pages/admin-users/admin-users' }) },
   goToCreditManage: function () { wx.navigateTo({ url: '/pages/admin-credit/admin-credit' }) },
   goToStatsOverview: function () { wx.navigateTo({ url: '/pages/admin-stats/admin-stats' }) },
-  goToFeedback: function () { wx.navigateTo({ url: '/pages/admin-feedback/admin-feedback' }) },
-  goToAnnouncement: function () { wx.navigateTo({ url: '/pages/admin-announcement/admin-announcement' }) }
+  goToFeedback: function () { wx.navigateTo({ url: '/pages/admin-feedback/admin-feedback' }) }
 })

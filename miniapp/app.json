@@ -31,7 +31,6 @@
     "pages/admin-users/admin-users",
     "pages/admin-credit/admin-credit",
     "pages/admin-stats/admin-stats",
-    "pages/admin-announcement/admin-announcement",
     "pages/admin-rooms/admin-rooms",
     "pages/admin-profile/admin-profile"
   ],
