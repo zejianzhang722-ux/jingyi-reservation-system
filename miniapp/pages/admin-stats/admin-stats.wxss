@@ -10,7 +10,8 @@
 .section { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 22rpx; box-shadow: 0 6rpx 18rpx rgba(12, 32, 64, 0.05); }
 .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8rpx; }
 .section-title { font-size: 30rpx; font-weight: 700; color: #172033; }
-.refresh { font-size: 24rpx; color: #0066cc; }
+.refresh-button { min-width: 112rpx; min-height: 88rpx; margin: -24rpx -20rpx -24rpx 0; padding: 0 20rpx; border: 0; background: transparent; color: #0066cc; font-size: 24rpx; line-height: 88rpx; }
+.refresh-button::after { border: 0; }
 .rank-row, .simple-row, .summary-line { display: flex; justify-content: space-between; align-items: center; padding: 22rpx 0; border-bottom: 1rpx solid #eef1f5; }
 .rank-row:last-child, .simple-row:last-child { border-bottom: 0; }
 .rank-info { flex: 1; min-width: 0; }

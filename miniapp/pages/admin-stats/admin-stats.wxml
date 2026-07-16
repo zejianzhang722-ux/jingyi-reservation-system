@@ -42,7 +42,7 @@
     <view class="section">
       <view class="section-head">
         <text class="section-title">近 30 天使用排行</text>
-        <text class="refresh" bindtap="onRefresh" role="button" aria-label="刷新统计数据">刷新</text>
+        <button class="refresh-button" bindtap="onRefresh" aria-label="刷新统计数据">刷新</button>
       </view>
       <view wx:if="{{usageRows.length > 0}}">
         <view class="rank-row" wx:for="{{usageRows}}" wx:key="roomId">
@@ -71,7 +71,7 @@
     <view class="section">
       <text class="section-title">信用分布</text>
       <view class="simple-row" wx:for="{{creditDistribution}}" wx:key="level">
-        <text>{{item.level === 'good' ? '良好' : item.level === 'warning' ? '需注意' : item.level === 'restricted' ? '受限' : '封禁'}}</text>
+        <text>{{item.levelLabel}}</text>
         <text>{{item.count}} 人</text>
       </view>
       <view class="empty" wx:if="{{creditDistribution.length === 0}}">暂无信用分布数据</view>

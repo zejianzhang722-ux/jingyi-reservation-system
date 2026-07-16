@@ -1417,6 +1417,102 @@ async function main() {
   request.post = originalPost
   modalResponse = { confirm: true, content: '' }
 
+  storage.userInfo.role = 'admin'
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return Promise.resolve({ todayReservations: 0, ordinaryPendingCount: 0, counselorPendingCount: 9, usingCount: 0, activeRoomCount: 0 })
+    if (url === '/stats/usage-rate') return Promise.resolve([{ room_id: 1, room_name: 'B102共享空间', reservation_count: 0, used_days: 0 }])
+    if (url === '/stats/noshow') return Promise.resolve({})
+    if (url === '/stats/users') return Promise.resolve({ creditDistribution: [{ level: 'future_level', count: '2' }] })
+    return Promise.resolve({})
+  }
+  var statsPage = loadPage('miniapp/pages/admin-stats/admin-stats.js')
+  statsPage.onLoad.call(statsPage)
+  await flushPromises()
+  assert(statsPage.data.pageStatus === 'ready', '统计页合法零值和缺省结构应正常进入就绪状态')
+  assert(statsPage.data.showCounselorPending === false && statsPage.data.dashboard.activeRoomCount === 0, '导生管理员应隐藏重点待审并保留合法零值')
+  assert(statsPage.data.noshow.totalNoshow === 0 && Array.isArray(statsPage.data.noshow.topNoshowUsers), '统计页应归一化缺失的爽约结构')
+  assert(Array.isArray(statsPage.data.creditDistribution) && statsPage.data.creditDistribution[0].levelLabel === '未知', '未知信用等级不得误显示为封禁')
+
+  storage.userInfo.role = 'counselor'
+  statsPage = loadPage('miniapp/pages/admin-stats/admin-stats.js')
+  statsPage.onLoad.call(statsPage)
+  await flushPromises()
+  assert(statsPage.data.showCounselorPending === true && statsPage.data.dashboard.counselorPendingCount === 9, '辅导员应显示重点待审')
+
+  var statsShouldFail = true
+  request.get = function(url) {
+    if (statsShouldFail && url === '/stats/dashboard') return Promise.reject(new Error('network unavailable'))
+    if (url === '/stats/dashboard') return Promise.resolve({ ordinaryPendingCount: 3 })
+    if (url === '/stats/usage-rate') return Promise.resolve([])
+    if (url === '/stats/noshow') return Promise.resolve(null)
+    if (url === '/stats/users') return Promise.resolve({ creditDistribution: null })
+    return Promise.resolve({})
+  }
+  statsPage = loadPage('miniapp/pages/admin-stats/admin-stats.js')
+  statsPage.onLoad.call(statsPage)
+  await flushPromises()
+  assert(statsPage.data.pageStatus === 'error' && statsPage.data.errorMessage, '统计页任一接口失败应进入明确错误状态')
+  statsShouldFail = false
+  await statsPage.onRetry.call(statsPage)
+  assert(statsPage.data.pageStatus === 'ready' && statsPage.data.dashboard.ordinaryPendingCount === 3, '统计页重新加载应恢复可信数据')
+  assert(Array.isArray(statsPage.data.creditDistribution) && statsPage.data.creditDistribution.length === 0, '统计页应把异常信用分布归一化为空列表')
+
+  var firstStatsBatch = {
+    '/stats/dashboard': deferred(),
+    '/stats/usage-rate': deferred(),
+    '/stats/noshow': deferred(),
+    '/stats/users': deferred()
+  }
+  var useFreshStats = false
+  request.get = function(url) {
+    if (!useFreshStats) return firstStatsBatch[url].promise
+    if (url === '/stats/dashboard') return Promise.resolve({ todayReservations: 22, ordinaryPendingCount: 4 })
+    if (url === '/stats/usage-rate') return Promise.resolve([])
+    if (url === '/stats/noshow') return Promise.resolve({ totalNoshow: 0, topNoshowUsers: [], roomNoshowStats: [] })
+    if (url === '/stats/users') return Promise.resolve({ creditDistribution: [] })
+    return Promise.resolve({})
+  }
+  storage.userInfo.role = 'admin'
+  statsPage = loadPage('miniapp/pages/admin-stats/admin-stats.js')
+  statsPage.onLoad.call(statsPage)
+  useFreshStats = true
+  await statsPage.loadData.call(statsPage)
+  firstStatsBatch['/stats/dashboard'].resolve({ todayReservations: 1, ordinaryPendingCount: 1 })
+  firstStatsBatch['/stats/usage-rate'].resolve([])
+  firstStatsBatch['/stats/noshow'].resolve({})
+  firstStatsBatch['/stats/users'].resolve({ creditDistribution: [] })
+  await flushPromises()
+  assert(statsPage.data.dashboard.todayReservations === 22, '统计页旧请求不得覆盖较新的刷新结果')
+
+  var roleBatch = {
+    '/stats/dashboard': deferred(),
+    '/stats/usage-rate': deferred(),
+    '/stats/noshow': deferred(),
+    '/stats/users': deferred()
+  }
+  var roleRequestCount = 0
+  request.get = function(url) {
+    roleRequestCount += 1
+    if (roleRequestCount <= 4) return roleBatch[url].promise
+    if (url === '/stats/dashboard') return Promise.resolve({ ordinaryPendingCount: 8, counselorPendingCount: 0 })
+    if (url === '/stats/usage-rate') return Promise.resolve([])
+    if (url === '/stats/noshow') return Promise.resolve({})
+    if (url === '/stats/users') return Promise.resolve({ creditDistribution: [] })
+    return Promise.resolve({})
+  }
+  storage.userInfo.role = 'counselor'
+  statsPage = loadPage('miniapp/pages/admin-stats/admin-stats.js')
+  statsPage.onLoad.call(statsPage)
+  storage.userInfo.role = 'admin'
+  roleBatch['/stats/dashboard'].resolve({ ordinaryPendingCount: 1, counselorPendingCount: 99 })
+  roleBatch['/stats/usage-rate'].resolve([])
+  roleBatch['/stats/noshow'].resolve({})
+  roleBatch['/stats/users'].resolve({ creditDistribution: [] })
+  await flushPromises()
+  await flushPromises()
+  assert(statsPage.data.showCounselorPending === false && statsPage.data.dashboard.ordinaryPendingCount === 8, '请求中角色变化后应丢弃旧范围数据并按新角色重载')
+
+  request.get = originalGet
   const statsSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-stats/admin-stats.js'), 'utf8')
   const statsWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-stats/admin-stats.wxml'), 'utf8')
   assert(statsSource.indexOf('reservation_count / 30') === -1, '统计页不得用预约次数伪造使用率')
