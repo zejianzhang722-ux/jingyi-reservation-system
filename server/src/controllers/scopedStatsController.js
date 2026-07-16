@@ -29,6 +29,16 @@ const getRoomTypeLabel = function(type) {
   return roomTypeLabels[type] || type || '其他空间';
 };
 
+const canReviewCounselorPending = function(req) {
+  return !!(req.adminScope && ['counselor', 'super_admin'].includes(req.adminScope.role));
+};
+
+const pendingDetailCondition = function(req) {
+  return canReviewCounselorPending(req)
+    ? "r.status IN ('pending','counselor_pending')"
+    : "r.status = 'pending'";
+};
+
 const buildMockDashboard = function(req) {
   const tables = require('../config/mock-db').__tables;
   const today = helpers.formatDate(new Date());
@@ -47,8 +57,7 @@ const buildMockDashboard = function(req) {
   const activeStatuses = ['approved', 'checked_in', 'completed'];
   const ordinaryPendingCount = reservations.filter(function(row) { return row.status === 'pending'; }).length;
   const rawCounselorPendingCount = reservations.filter(function(row) { return row.status === 'counselor_pending'; }).length;
-  const canReviewCounselorPending = req.adminScope && ['counselor', 'super_admin'].includes(req.adminScope.role);
-  const counselorPendingCount = canReviewCounselorPending ? rawCounselorPendingCount : 0;
+  const counselorPendingCount = canReviewCounselorPending(req) ? rawCounselorPendingCount : 0;
   const actionablePendingCount = ordinaryPendingCount + counselorPendingCount;
   const activeRoomCount = rooms.filter(function(room) { return room.status === 'open'; }).length;
 
@@ -78,7 +87,9 @@ const buildMockDashboard = function(req) {
   }).sort(function(a, b) { return b.reservation_count - a.reservation_count; }).slice(0, 8);
 
   const pendingItems = reservations
-    .filter(function(row) { return row.status === 'pending' || row.status === 'counselor_pending'; })
+    .filter(function(row) {
+      return row.status === 'pending' || (canReviewCounselorPending(req) && row.status === 'counselor_pending');
+    })
     .sort(function(a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); })
     .slice(0, 10)
     .map(function(row) {
@@ -130,8 +141,7 @@ const dashboard = async function(req, res) {
     const todayReservations = await count('r.date = ?', [today]);
     const ordinaryPendingCount = await count("r.status = 'pending'", []);
     const rawCounselorPendingCount = await count("r.status = 'counselor_pending'", []);
-    const canReviewCounselorPending = req.adminScope && ['counselor', 'super_admin'].includes(req.adminScope.role);
-    const counselorPendingCount = canReviewCounselorPending ? rawCounselorPendingCount : 0;
+    const counselorPendingCount = canReviewCounselorPending(req) ? rawCounselorPendingCount : 0;
     const actionablePendingCount = ordinaryPendingCount + counselorPendingCount;
     const [activeRoomRows] = await db.query(
       "SELECT COUNT(*) AS count FROM rooms rm WHERE rm.status = 'open'" + scope.sql,
@@ -172,7 +182,7 @@ const dashboard = async function(req, res) {
     const [pendingItems] = await db.query(
       "SELECT r.id, r.status, r.purpose, r.date, r.start_time, u.real_name, rm.name AS room_name " +
       "FROM reservations r LEFT JOIN users u ON u.id = r.user_id JOIN rooms rm ON rm.id = r.room_id " +
-      "WHERE r.status IN ('pending','counselor_pending')" + scope.sql + ' ORDER BY r.created_at DESC LIMIT 10',
+      'WHERE ' + pendingDetailCondition(req) + scope.sql + ' ORDER BY r.created_at DESC LIMIT 10',
       scope.params
     );
 
@@ -232,15 +242,19 @@ const reservationStats = async function(req, res) {
 const usageRate = async function(req, res) {
   try {
     const range = dateRange(req);
+    const hasRoomId = req.query && Object.prototype.hasOwnProperty.call(req.query, 'roomId');
+    const parsedRoomId = hasRoomId ? Number(req.query.roomId) : null;
+    if (hasRoomId && (!Number.isInteger(parsedRoomId) || parsedRoomId <= 0)) {
+      return response.error(res, '房间编号无效', 400);
+    }
     if (db.isMock()) {
       const tables = require('../config/mock-db').__tables;
       const isGlobal = req.adminScope && req.adminScope.isGlobal;
       const buildingId = req.adminScope ? Number(req.adminScope.buildingId) : null;
-      const requestedRoomId = req.query.roomId ? Number(req.query.roomId) : null;
       const activeStatuses = ['approved', 'checked_in', 'completed'];
       const rows = (tables.rooms || []).filter(function(room) {
         if (!isGlobal && Number(room.building_id) !== buildingId) return false;
-        return requestedRoomId === null || Number(room.id) === requestedRoomId;
+        return parsedRoomId === null || Number(room.id) === parsedRoomId;
       }).map(function(room) {
         const roomReservations = (tables.reservations || []).filter(function(row) {
           return Number(row.room_id) === Number(room.id) &&
@@ -266,9 +280,9 @@ const usageRate = async function(req, res) {
       "FROM rooms rm LEFT JOIN reservations r ON r.room_id = rm.id AND r.date BETWEEN ? AND ? " +
       "AND r.status IN ('approved','checked_in','completed') WHERE 1=1" + scope.sql;
     const params = [range.start, range.end].concat(scope.params);
-    if (req.query.roomId) {
+    if (parsedRoomId !== null) {
       sql += ' AND rm.id = ?';
-      params.push(Number(req.query.roomId));
+      params.push(parsedRoomId);
     }
     sql += ' GROUP BY rm.id, rm.name, rm.type HAVING COUNT(r.id) > 0 ORDER BY reservation_count DESC, room_name ASC';
     const [rows] = await db.query(sql, params);

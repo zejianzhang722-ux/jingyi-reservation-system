@@ -29,15 +29,25 @@ function assertDashboardContract(payload, label) {
   assert(Number.isInteger(payload.counselorPendingCount), label + ' 缺少重点待审数')
   assert(Number.isInteger(payload.actionablePendingCount), label + ' 缺少可处理待审总数')
   assert(Number.isInteger(payload.activeRoomCount), label + ' 缺少开放房间数')
+  assert(payload.pendingCount === payload.actionablePendingCount, label + ' 旧待审总数应与可处理总数一致')
 }
 
 function assertUsageContract(rows, label) {
   assert(Array.isArray(rows), label + ' 使用排行应为数组')
   rows.forEach(function(row) {
     assert(row.room_id && row.room_name, label + ' 排行缺少房间标识或名称')
+    assert(row.room_type, label + ' 排行缺少房间类型')
     assert(Number.isInteger(row.reservation_count), label + ' 预约次数必须为整数')
     assert(Number.isInteger(row.used_days), label + ' 使用天数必须为整数')
   })
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = rows[index - 1]
+    const current = rows[index]
+    assert(previous.reservation_count >= current.reservation_count, label + ' 使用排行未按预约次数降序')
+    if (previous.reservation_count === current.reservation_count) {
+      assert(String(previous.room_name).localeCompare(String(current.room_name)) <= 0, label + ' 同次数房间名称排序不稳定')
+    }
+  }
 }
 
 function assertApprovalQueue(responseJson, expectedStatus, queueName, expectedPageSize) {
@@ -132,6 +142,8 @@ async function main() {
     headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
   })
   assert(adminStats.json.code === 200 && adminStats.json.data, '管理员数据统计接口应可用')
+  assertDashboardContract(adminStats.json.data, '全院导生管理员')
+  assert(adminStats.json.data.pendingItems.every(function(item) { return item.tag !== '辅导员审核' }), '全院导生管理员待审明细不得包含重点待审')
   const adminViolations = await api('/credit/violations', {
     headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
   })
@@ -172,8 +184,24 @@ async function main() {
     assertUsageContract(roleUsage.json.data, role.label)
     scopedStatsResults.push({ dashboard: roleDashboard.json.data, usage: roleUsage.json.data })
   }
+  const buildingAdminRooms = await api('/room', {
+    headers: { Authorization: 'Bearer ' + buildingAdminLogin.json.data.token }
+  })
+  assert(buildingAdminRooms.json.code === 200 && Array.isArray(buildingAdminRooms.json.data), '楼栋导生管理员房间列表应可用')
+  const buildingAdminRoomIds = new Set(buildingAdminRooms.json.data.map(function(room) { return Number(room.id) }))
+  assert(scopedStatsResults[0].usage.every(function(row) { return buildingAdminRoomIds.has(Number(row.room_id)) }), '楼栋导生管理员使用排行不得包含范围外房间')
   assert(scopedStatsResults[0].dashboard.activeRoomCount < scopedStatsResults[2].dashboard.activeRoomCount, '楼栋导生管理员开放房间数应小于全院超级管理员')
   assert(scopedStatsResults[0].dashboard.counselorPendingCount === 0, '楼栋导生管理员不应看到重点待审数')
+  assert(scopedStatsResults[0].dashboard.pendingItems.every(function(item) { return item.tag !== '辅导员审核' }), '楼栋导生管理员待审明细不得包含重点待审')
+  for (const result of scopedStatsResults.slice(1)) {
+    const pendingTags = new Set(result.dashboard.pendingItems.map(function(item) { return item.tag }))
+    assert(pendingTags.has('待审核') && pendingTags.has('辅导员审核'), '辅导员与超级管理员待审明细应允许普通和重点两类')
+  }
+
+  const invalidUsageRoom = await api('/stats/usage-rate?roomId=abc', {
+    headers: { Authorization: 'Bearer ' + buildingAdminLogin.json.data.token }
+  })
+  assert(invalidUsageRoom.status === 400 && invalidUsageRoom.json.code === 400, '非法房间编号应返回 400')
 
   const counselorBlacklist = await api('/credit/blacklist', {
     headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }

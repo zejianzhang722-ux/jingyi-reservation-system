@@ -301,23 +301,119 @@ for (const [name, source] of [['rooms', mobileRoomsSource], ['users', mobileUser
 }
 assert.ok(navigationCalls.some(url => /\/pages\/admin-credit\/admin-credit\?tab=violations$/.test(url)), 'the mobile violations entry must remain explicit')
 
-const [scopedStatsController, webStatsFormatter, mobileStatsPage, mobileStatsTemplate] = await Promise.all([
+const [scopedStatsControllerSource, webStatsFormatter, mobileStatsPage, mobileStatsTemplate] = await Promise.all([
   read('../server/src/controllers/scopedStatsController.js'),
   read('../admin/src/utils/statsFormatters.js'),
   read('../miniapp/pages/admin-stats/admin-stats.js'),
   read('../miniapp/pages/admin-stats/admin-stats.wxml')
 ])
 for (const field of ['ordinaryPendingCount', 'counselorPendingCount', 'actionablePendingCount', 'activeRoomCount']) {
-  assert.match(scopedStatsController, new RegExp(`\\b${field}\\b`), `scoped dashboard must expose ${field}`)
+  assert.match(scopedStatsControllerSource, new RegExp(`\\b${field}\\b`), `scoped dashboard must expose ${field}`)
 }
 for (const field of ['room_id', 'room_name', 'room_type', 'reservation_count', 'used_days']) {
-  assert.match(scopedStatsController, new RegExp(`\\b${field}\\b`), `scoped usage ranking must expose ${field}`)
+  assert.match(scopedStatsControllerSource, new RegExp(`\\b${field}\\b`), `scoped usage ranking must expose ${field}`)
 }
 for (const source of [webStatsFormatter, mobileStatsPage + mobileStatsTemplate]) {
   assert.match(source, /room_name/, 'both admin clients must consume the shared room_name usage field')
   assert.match(source, /reservation_count/, 'both admin clients must consume the shared reservation_count usage field')
 }
 assert.match(mobileStatsPage + mobileStatsTemplate, /used_days/, 'mobile stats must consume the shared used_days usage field')
+
+function createControllerResponse() {
+  const state = { statusCode: null, payload: null }
+  return {
+    state,
+    status(code) { state.statusCode = code; return this },
+    json(payload) { state.payload = payload; return this }
+  }
+}
+
+const scopedStatsController = require('../server/src/controllers/scopedStatsController.js')
+const sharedDb = require('../server/src/config/database.js')
+const originalIsMock = sharedDb.isMock
+const originalQuery = sharedDb.query
+const mysqlCalls = []
+sharedDb.isMock = () => false
+sharedDb.query = async (sql, params = []) => {
+  mysqlCalls.push({ sql, params: [...params] })
+  if (/^SELECT COUNT\(\*\) AS count FROM reservations/.test(sql)) {
+    if (sql.includes("r.status = 'pending'")) return [[{ count: '2' }]]
+    if (sql.includes("r.status = 'counselor_pending'")) return [[{ count: '1' }]]
+    return [[{ count: '0' }]]
+  }
+  if (/^SELECT COUNT\(\*\) AS count FROM rooms/.test(sql)) return [[{ count: '4' }]]
+  if (/^SELECT COUNT\(\*\) AS total/.test(sql)) return [[{ total: '0', used: '0', noshow: '0' }]]
+  if (/^SELECT rm\.type, COUNT/.test(sql)) return [[]]
+  if (/^SELECT rm\.name, COUNT/.test(sql)) return [[]]
+  if (/^SELECT r\.id, r\.status/.test(sql)) {
+    const rows = [{ id: 1, status: 'pending', purpose: '', date: '2026-07-16', start_time: '09:00', real_name: 'A', room_name: 'Room A' }]
+    if (sql.includes('counselor_pending')) rows.push({ id: 2, status: 'counselor_pending', purpose: '', date: '2026-07-16', start_time: '10:00', real_name: 'B', room_name: 'Room B' })
+    return [rows]
+  }
+  if (/^SELECT rm\.id AS room_id/.test(sql)) {
+    return [[{ room_id: '9', room_name: 'Room 9', room_type: 'study_room', reservation_count: '3', used_days: '2' }]]
+  }
+  assert.fail(`unexpected scoped stats SQL: ${sql}`)
+}
+
+try {
+  for (const role of ['admin', 'counselor', 'super_admin']) {
+    mysqlCalls.length = 0
+    const isBuildingAdmin = role === 'admin'
+    const res = createControllerResponse()
+    await scopedStatsController.dashboard({
+      query: {},
+      adminScope: { role, isGlobal: !isBuildingAdmin, buildingId: isBuildingAdmin ? 7 : null }
+    }, res)
+    assert.equal(res.state.statusCode, 200, `${role} MySQL dashboard must succeed`)
+    assert.equal(res.state.payload.data.pendingCount, res.state.payload.data.actionablePendingCount, `${role} pending totals must align`)
+    const pendingCall = mysqlCalls.find(call => /^SELECT r\.id, r\.status/.test(call.sql))
+    assert.ok(pendingCall, `${role} dashboard must query pending details`)
+    if (isBuildingAdmin) {
+      assert.match(pendingCall.sql, /WHERE r\.status = 'pending'/, 'admin pending details must allow only ordinary pending rows')
+      assert.doesNotMatch(pendingCall.sql, /counselor_pending/, 'admin pending details must exclude counselor pending rows')
+      assert.match(pendingCall.sql, /AND rm\.building_id = \?/, 'building admin pending details must retain room scope SQL')
+      assert.deepEqual(pendingCall.params, [7], 'building admin pending details must bind its building scope')
+      assert.deepEqual(res.state.payload.data.pendingItems.map(item => item.tag), ['待审核'], 'admin pending detail response must exclude counselor rows')
+    } else {
+      assert.match(pendingCall.sql, /r\.status IN \('pending','counselor_pending'\)/, `${role} pending details must allow both review queues`)
+      assert.deepEqual(res.state.payload.data.pendingItems.map(item => item.tag), ['待审核', '辅导员审核'], `${role} pending detail response must include both queues`)
+    }
+  }
+
+  mysqlCalls.length = 0
+  const usageRes = createControllerResponse()
+  await scopedStatsController.usageRate({
+    query: { startDate: '2026-07-01', endDate: '2026-07-16', roomId: '9' },
+    adminScope: { role: 'admin', isGlobal: false, buildingId: 7 }
+  }, usageRes)
+  assert.equal(usageRes.state.statusCode, 200, 'validated MySQL usage request must succeed')
+  const usageCall = mysqlCalls.find(call => /^SELECT rm\.id AS room_id/.test(call.sql))
+  assert.ok(usageCall, 'MySQL usage must execute its scoped query')
+  assert.match(usageCall.sql, /AND rm\.building_id = \? AND rm\.id = \?/, 'MySQL usage must retain building and validated room filters')
+  assert.deepEqual(usageCall.params, ['2026-07-01', '2026-07-16', 7, 9], 'MySQL usage must bind only finite validated numeric ids')
+  assert.deepEqual(usageRes.state.payload.data, [{
+    room_id: 9,
+    room_name: 'Room 9',
+    room_type: 'study_room',
+    reservation_count: 3,
+    used_days: 2
+  }], 'MySQL usage response must normalize shared fields and integer counts')
+
+  for (const roomId of ['abc', '0', '-2', '1.5']) {
+    mysqlCalls.length = 0
+    const invalidRes = createControllerResponse()
+    await scopedStatsController.usageRate({
+      query: { roomId },
+      adminScope: { role: 'admin', isGlobal: false, buildingId: 7 }
+    }, invalidRes)
+    assert.equal(invalidRes.state.statusCode, 400, `invalid roomId ${roomId} must return 400 before MySQL`)
+    assert.equal(mysqlCalls.length, 0, `invalid roomId ${roomId} must not reach MySQL`)
+  }
+} finally {
+  sharedDb.isMock = originalIsMock
+  sharedDb.query = originalQuery
+}
 
 assert.equal(packageJson.scripts['check:admin-cross-client'], 'node scripts/admin-cross-client-contract-check.mjs', 'root package must expose the cross-client admin contract check')
 assert.match(packageJson.scripts['check:all'], /check:admin-miniapp\s*&&\s*npm run check:admin-cross-client/, 'check:all must run the cross-client check immediately after admin-miniapp')
