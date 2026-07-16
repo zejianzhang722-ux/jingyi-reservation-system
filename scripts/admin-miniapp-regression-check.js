@@ -1417,6 +1417,15 @@ async function main() {
   request.post = originalPost
   modalResponse = { confirm: true, content: '' }
 
+  const statsSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-stats/admin-stats.js'), 'utf8')
+  const statsWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-stats/admin-stats.wxml'), 'utf8')
+  assert(statsSource.indexOf('reservation_count / 30') === -1, '统计页不得用预约次数伪造使用率')
+  assert(statsSource.indexOf('formatPercent') === -1, '统计页不得保留伪百分比格式化逻辑')
+  assert(statsWxml.indexOf('item.roomName') !== -1, '排行应使用统一房间名称字段')
+  assert(statsWxml.indexOf('item.displayRate') === -1, '排行不得显示伪百分比')
+  assert(statsWxml.indexOf('加载失败') !== -1 && statsWxml.indexOf('重新加载') !== -1, '统计页应提供失败重试')
+  assert(statsWxml.indexOf('近 30 天暂无已通过或已使用预约') !== -1, '统计排行空态应解释有效记录口径')
+
   const profilePage = loadPage('miniapp/pages/admin-profile/admin-profile.js')
   const profileKeys = (profilePage.data.menuList || []).map(function(item) { return item.key })
   ;['reservation', 'rooms', 'users', 'feedback', 'announcement', 'stats'].forEach(function(key) {

@@ -16,6 +16,12 @@
 .rank-info { flex: 1; min-width: 0; }
 .rank-name { display: block; font-size: 28rpx; color: #1f2a3d; font-weight: 600; }
 .rank-meta { display: block; margin-top: 6rpx; font-size: 22rpx; color: #8a94a6; }
-.rank-rate, .summary-value { color: #0066cc; font-size: 30rpx; font-weight: 800; margin-left: 20rpx; }
+.summary-value { color: #0066cc; font-size: 30rpx; font-weight: 800; margin-left: 20rpx; }
 .danger { color: #d94841; }
 .empty { text-align: center; color: #99a3b3; font-size: 26rpx; padding: 36rpx 0; }
+.state-card { background: #fff; border-radius: 16rpx; padding: 56rpx 32rpx; text-align: center; box-shadow: 0 6rpx 18rpx rgba(12, 32, 64, 0.05); }
+.state-title { display: block; color: #172033; font-size: 30rpx; font-weight: 700; }
+.state-message { display: block; margin-top: 12rpx; color: #7b8794; font-size: 24rpx; line-height: 1.6; }
+.error-state .state-title { color: #d94841; }
+.retry-button { width: 100%; min-height: 88rpx; margin-top: 28rpx; border: 0; border-radius: 14rpx; background: #0066cc; color: #fff; font-size: 28rpx; font-weight: 700; line-height: 88rpx; }
+.retry-button::after { border: 0; }
