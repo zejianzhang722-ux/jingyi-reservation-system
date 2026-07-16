@@ -1,17 +1,36 @@
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
+var approvalPresenter = require('../../utils/admin-approval-presenter')
+
+var ROLE_NAMES = {
+  super_admin: '超级管理员',
+  admin: '导生管理员',
+  counselor: '书院辅导员'
+}
+
+function numberOrZero(value) {
+  var number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
 
 Page({
   data: {
-    pendingCount: 0,
-    todayReservations: 0,
-    feedbackCount: 0,
-    activeRooms: 0,
-    pendingList: [],
-    roleName: '管理员',
     queueType: 'admin',
     queueLabel: '普通预约审核',
+    ordinaryPendingCount: 0,
+    counselorPendingCount: 0,
+    actionablePendingCount: 0,
+    activeRoomCount: 0,
+    todayReservations: 0,
+    inUseCount: 0,
+    feedbackCount: 0,
+    statsStatus: 'loading',
+    statsError: '',
+    listStatus: 'loading',
+    listError: '',
+    pendingList: [],
+    roleName: '管理员',
     canSwitchQueue: false,
     canManageFeedback: false,
     processingById: {},
@@ -25,23 +44,33 @@ Page({
     }
     return true
   },
-  onLoad: function (options) {
-    if (!this.ensureAdmin()) return
-    var role = auth.getUserRole()
-    var requested = options && options.queueType
-    var preferred = requested || (role === 'counselor' ? 'counselor' : 'admin')
-    var queueType = adminPolicy.queueType(role, preferred)
-    var nameMap = { super_admin: '超级管理员', admin: '导生管理员', counselor: '书院辅导员' }
+  applyRole: function (role, requestedQueue) {
+    var defaultQueue = adminPolicy.defaultQueueType(role)
+    var queueType = defaultQueue
+    if (requestedQueue === 'admin' || requestedQueue === 'counselor') {
+      queueType = adminPolicy.queueType(role, requestedQueue)
+    }
+    this._loadedRole = role
     this.setData({
-      roleName: nameMap[role] || '管理员',
+      roleName: ROLE_NAMES[role] || '管理员',
       queueType: queueType,
       queueLabel: queueType === 'counselor' ? '辅导员重点审核' : '普通预约审核',
       canSwitchQueue: adminPolicy.can(role, 'counselorApproval'),
       canManageFeedback: adminPolicy.can(role, 'feedbackManage')
     })
   },
+  onLoad: function (options) {
+    if (!this.ensureAdmin()) return
+    var requestedQueue = options && (options.type || options.queueType)
+    this.applyRole(auth.getUserRole(), requestedQueue)
+  },
   onShow: function () {
     if (!this.ensureAdmin()) return
+    var role = auth.getUserRole()
+    if (this._loadedRole !== role) {
+      this.applyRole(role)
+      this.setData({ pendingList: [], listStatus: 'loading', listError: '' })
+    }
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().switchTabList()
       this.getTabBar().setData({ selected: 0 })
@@ -54,27 +83,36 @@ Page({
     var role = auth.getUserRole()
     this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
     var requestVersion = this._statsRequestVersion
-    var pendingRequest = request.get('/reservation/pending-count', { type: this.data.queueType }, { silent: true }).then(function (data) {
+    this.setData({ statsStatus: 'loading', statsError: '' })
+
+    var dashboardRequest = request.get('/stats/dashboard', {}, { silent: true }).then(function (data) {
       if (requestVersion !== that._statsRequestVersion) return
-      that.setData({ pendingCount: data.count || 0 })
-    }).catch(function () {})
-    var roomRequest = request.get('/room/stats', {}, { silent: true }).then(function (data) {
-      if (requestVersion !== that._statsRequestVersion) return
-      that.setData({ activeRooms: data.activeRooms || 12, todayReservations: data.todayReservations || 0 })
+      data = data || {}
+      that.setData({
+        ordinaryPendingCount: numberOrZero(data.ordinaryPendingCount),
+        counselorPendingCount: numberOrZero(data.counselorPendingCount),
+        actionablePendingCount: numberOrZero(data.actionablePendingCount),
+        activeRoomCount: numberOrZero(data.activeRoomCount),
+        todayReservations: numberOrZero(data.todayReservations),
+        inUseCount: numberOrZero(data.inUseCount),
+        statsStatus: 'ready',
+        statsError: ''
+      })
     }).catch(function () {
       if (requestVersion !== that._statsRequestVersion) return
-      that.setData({ activeRooms: 12 })
+      that.setData({ statsStatus: 'error', statsError: '统计数据暂时无法更新，当前显示最近一次可信结果' })
     })
+
     var feedbackRequest = Promise.resolve()
     if (adminPolicy.can(role, 'feedbackManage')) {
       feedbackRequest = request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
         if (requestVersion !== that._statsRequestVersion) return
-        that.setData({ feedbackCount: data.total || 0 })
+        that.setData({ feedbackCount: numberOrZero(data && data.total) })
       }).catch(function () {})
     } else {
       this.setData({ feedbackCount: 0 })
     }
-    return Promise.all([pendingRequest, roomRequest, feedbackRequest])
+    return Promise.all([dashboardRequest, feedbackRequest])
   },
   loadPendingList: function () {
     var that = this
@@ -86,12 +124,44 @@ Page({
       pageSize: 10
     }, { silent: true }).then(function (data) {
       if (requestVersion !== that._pendingRequestVersion) return
-      var list = Array.isArray(data) ? data : (data && data.list) || []
-      that.setData({ pendingList: list.slice(0, 10) })
+      var rows = Array.isArray(data) ? data : (data && (data.items || data.list)) || []
+      var list = rows.slice(0, 10).map(approvalPresenter.toCard)
+      that.setData({
+        pendingList: list,
+        listStatus: list.length ? 'ready' : 'empty',
+        listError: ''
+      })
     }).catch(function () {
       if (requestVersion !== that._pendingRequestVersion) return
-      that.setData({ pendingList: [] })
+      that.setData({
+        pendingList: [],
+        listStatus: 'error',
+        listError: '审批列表加载失败，请检查网络后重新加载'
+      })
     })
+  },
+  onQueueChange: function (event) {
+    var role = auth.getUserRole()
+    var requestedQueue = event && event.currentTarget && event.currentTarget.dataset.type
+    var queueType = adminPolicy.queueType(role, requestedQueue)
+    if (queueType === this.data.queueType) return
+    this._loadedRole = role
+    this.setData({
+      queueType: queueType,
+      queueLabel: queueType === 'counselor' ? '辅导员重点审核' : '普通预约审核',
+      pendingList: [],
+      listStatus: 'loading',
+      listError: ''
+    })
+    this.loadPendingList()
+  },
+  onRetryList: function () {
+    this.setData({ pendingList: [], listStatus: 'loading', listError: '' })
+    return this.loadPendingList()
+  },
+  onViewDetail: function (event) {
+    var id = event.currentTarget.dataset.id
+    wx.navigateTo({ url: '/pages/admin-reservation-detail/admin-reservation-detail?id=' + id })
   },
   isProcessing: function (id) {
     return !!this.data.processingById[id]
@@ -138,16 +208,15 @@ Page({
       complete: function () { that.setData({ scanning: false }) }
     })
   },
-  onApprove: function (e) {
+  onApprove: function (event) {
     var that = this
-    var id = e.currentTarget.dataset.id
-    if (this.isProcessing(id)) return
+    var id = event.currentTarget.dataset.id
+    if (this.data.queueType !== 'admin' || this.isProcessing(id)) return
     wx.showModal({
       title: '确认审批',
       content: '确定通过该预约申请？',
-      success: function (res) {
-        if (!res.confirm) return
-        if (that.isProcessing(id)) return
+      success: function (result) {
+        if (!result.confirm || that.isProcessing(id)) return
         that.setProcessing(id, true)
         request.post('/audit/' + id + '/approve', {}).then(function () {
           wx.showToast({ title: '已通过', icon: 'success' })
@@ -162,18 +231,18 @@ Page({
       }
     })
   },
-  onReject: function (e) {
+  onReject: function (event) {
     var that = this
-    var id = e.currentTarget.dataset.id
-    if (this.isProcessing(id)) return
+    var id = event.currentTarget.dataset.id
+    if (this.data.queueType !== 'admin' || this.isProcessing(id)) return
     wx.showModal({
       title: '拒绝预约',
       content: '请输入拒绝理由',
       editable: true,
       placeholderText: '请输入拒绝理由',
-      success: function (res) {
-        if (!res.confirm) return
-        var reason = String(res.content || '').trim()
+      success: function (result) {
+        if (!result.confirm) return
+        var reason = String(result.content || '').trim()
         if (!reason) {
           wx.showToast({ title: '请填写拒绝理由', icon: 'none' })
           return

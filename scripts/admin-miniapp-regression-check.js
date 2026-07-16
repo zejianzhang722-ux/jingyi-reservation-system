@@ -839,16 +839,30 @@ async function main() {
   request.delete = originalDelete
 
   const approvalCalls = []
+  const homeSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.js'), 'utf8')
+  const homeWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.wxml'), 'utf8')
+  assert(homeWxml.indexOf('加载失败') !== -1 && homeWxml.indexOf('重新加载') !== -1, '审批工作台应提供明确的加载失败和重新加载状态')
+  assert(homeWxml.indexOf('item.purpose') !== -1 && homeWxml.indexOf('item.participants') !== -1, '审批卡片应展示用途和人数')
+  assert(homeWxml.indexOf("queueType === 'admin'") !== -1, '只有普通队列应显示快捷审批操作')
+  assert(homeWxml.indexOf('<navigator class="queue-tab') === -1, '队列切换应在当前页面完成，不应重复导航首页')
+  assert(homeSource.indexOf('data.activeRooms || 12') === -1, '合法的开放房间数 0 不得被固定数字覆盖')
+  assert(homeSource.indexOf('/room/stats') === -1 && homeSource.indexOf('activeRooms: 12') === -1, '首页统计不得请求旧房间统计或伪造开放房间数')
   request.get = function(url, params) {
     approvalCalls.push({ method: 'GET', url: url, params: params || {} })
     if (url === '/audit/pending') {
-      return Promise.resolve({ list: [{ id: 101, status: params.type === 'counselor' ? 'counselor_pending' : 'pending' }], total: 1, page: 1, pageSize: 10 })
+      return Promise.resolve({ items: [{ id: 101, status: params.type === 'counselor' ? 'counselor_pending' : 'pending' }], total: 1, page: 1, pageSize: 10 })
     }
     if (url === '/reservation') {
       return Promise.resolve({ list: [{ id: 101, status: 'pending' }, { id: 102, status: 'counselor_pending' }], total: 2, page: 1, pageSize: 20 })
     }
-    if (url === '/reservation/pending-count') return Promise.resolve({ count: 1 })
-    if (url === '/room/stats') return Promise.resolve({ activeRooms: 6, todayReservations: 2 })
+    if (url === '/stats/dashboard') return Promise.resolve({
+      ordinaryPendingCount: 1,
+      counselorPendingCount: 2,
+      actionablePendingCount: 3,
+      activeRoomCount: 0,
+      todayReservations: 2,
+      inUseCount: 1
+    })
     if (url === '/feedback') return Promise.resolve({ total: 3 })
     return Promise.resolve([])
   }
@@ -861,14 +875,28 @@ async function main() {
 
   storage.userInfo.role = 'admin'
   let homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  homePage.onLoad.call(homePage, {})
+  assert(homePage.data.queueType === 'admin', '导生首页默认应是普通队列')
+  storage.userInfo.role = 'counselor'
+  homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  homePage.onLoad.call(homePage, {})
+  assert(homePage.data.queueType === 'counselor', '辅导员首页默认应是重点队列')
+  storage.userInfo.role = 'super_admin'
+  homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  homePage.onLoad.call(homePage, {})
+  assert(homePage.data.queueType === 'counselor', '超级管理员首页默认应是重点队列')
+
+  storage.userInfo.role = 'admin'
+  homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, { queueType: 'counselor' })
+  assert(homePage.data.queueType === 'admin', '导生首页默认且越权降级后应是普通队列')
   assert(!approvalCalls.some(function(call) { return call.url === '/audit/pending' }), '首页 onLoad 只初始化，不应重复加载列表')
   homePage.onShow.call(homePage)
   await flushPromises()
   let pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'admin' && pendingCall.params.page === 1 && pendingCall.params.pageSize === 10, '普通审核入口应请求 admin 队列的 /audit/pending')
   assert(!approvalCalls.some(function(call) { return call.url === '/audit/pending' && call.params.type === 'counselor' }), '导生管理员不得请求 counselor 审核队列')
-  assert(approvalCalls.some(function(call) { return call.url === '/reservation/pending-count' && call.params.type === 'admin' }), '待审核数量应明确请求 admin 队列')
+  assert(approvalCalls.some(function(call) { return call.url === '/stats/dashboard' }), '首页统计应只读取统一仪表盘接口')
   assert(homePage.data.queueType === 'admin' && homePage.data.queueLabel === '普通预约审核', '普通审核入口应显示普通队列标签')
   assert(homePage.data.pendingList.length === 1 && homePage.data.pendingList[0].id === 101, '审核列表应处理 list/total/page/pageSize 响应')
   assert(approvalCalls.filter(function(call) { return call.url === '/audit/pending' }).length === 1, '首页首次 onLoad + onShow 只能产生一轮列表请求')
@@ -879,7 +907,7 @@ async function main() {
   await flushPromises()
   assert(approvalCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/101/approve' }), '批准应 POST /audit/101/approve')
   assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/audit/pending' }), '批准成功后应从服务端重载审核列表')
-  assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation/pending-count' }), '批准成功后应从服务端重载统计')
+  assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/stats/dashboard' }), '批准成功后应从服务端重载统计')
 
   approvalCalls.length = 0
   modalResponse = { confirm: true, content: '时间冲突' }
@@ -891,6 +919,7 @@ async function main() {
   storage.userInfo.role = 'counselor'
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, {})
+  assert(homePage.data.queueType === 'counselor', '辅导员首页默认应是重点队列')
   homePage.onShow.call(homePage)
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
@@ -900,11 +929,22 @@ async function main() {
   approvalCalls.length = 0
   storage.userInfo.role = 'super_admin'
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  assert(typeof homePage.onQueueChange === 'function', '超级管理员首页应支持页内切换队列')
   homePage.onLoad.call(homePage, { queueType: 'admin' })
   homePage.onShow.call(homePage)
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'admin', '超级管理员应消费明确的普通队列参数')
+  approvalCalls.length = 0
+  homePage.onQueueChange.call(homePage, { currentTarget: { dataset: { type: 'counselor' } } })
+  await flushPromises()
+  assert(homePage.data.queueType === 'counselor', '超级管理员应可在当前页切换到重点队列')
+  assert(!navCalls.some(function(call) { return call.url && call.url.indexOf('/pages/admin-home/admin-home?') === 0 }), '队列切换不得重复导航当前首页')
+  approvalCalls.length = 0
+  homePage.onQueueChange.call(homePage, { currentTarget: { dataset: { type: 'counselor' } } })
+  assert(approvalCalls.length === 0, '选择当前队列时不应重复请求')
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  assert(!approvalCalls.some(function(call) { return call.method === 'POST' }), '重点队列不得直接快捷审批')
   approvalCalls.length = 0
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, { queueType: 'counselor' })
@@ -912,6 +952,27 @@ async function main() {
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'counselor', '超级管理员应消费明确的辅导员队列参数')
+  assert(homePage.data.queueType === 'counselor', '超级管理员首页默认应是重点队列')
+
+  const failedPendingPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  storage.userInfo.role = 'admin'
+  failedPendingPage.onLoad.call(failedPendingPage, {})
+  request.get = function(url) {
+    if (url === '/audit/pending') return Promise.reject(new Error('network unavailable'))
+    return Promise.resolve({})
+  }
+  await failedPendingPage.loadPendingList.call(failedPendingPage)
+  assert(failedPendingPage.data.listStatus === 'error', '审核列表请求失败后必须进入错误状态')
+  assert(failedPendingPage.data.pendingList.length === 0 && failedPendingPage.data.listStatus !== 'empty', '请求失败不得伪装成空列表')
+  request.get = approvalGet
+
+  storage.userInfo.role = 'counselor'
+  const cachedRolePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  cachedRolePage.onLoad.call(cachedRolePage, {})
+  storage.userInfo.role = 'admin'
+  cachedRolePage.onShow.call(cachedRolePage)
+  await flushPromises()
+  assert(cachedRolePage.data.queueType === 'admin' && !cachedRolePage.data.canSwitchQueue, '缓存页面遇到角色切换时必须恢复当前角色的默认授权队列')
 
   approvalCalls.length = 0
   storage.userInfo.role = 'admin'
@@ -943,6 +1004,7 @@ async function main() {
 
   modalResponse = { confirm: true, content: '重复提交检查' }
   approvalCalls.length = 0
+  homePage.setData({ queueType: 'admin' })
   const homeApproval = deferred()
   const homePendingRefresh = deferred()
   const homeStatsRefresh = deferred()
@@ -967,7 +1029,7 @@ async function main() {
   homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
   assert(approvalCalls.filter(function(call) { return call.url === '/audit/101/approve' }).length === 1, '首页刷新未完成时再次点击不得重复提交')
   homePendingRefresh.resolve({ list: [], total: 0, page: 1, pageSize: 10 })
-  homeStatsRefresh.resolve({ count: 0, activeRooms: 6, todayReservations: 2, total: 0 })
+  homeStatsRefresh.resolve({ ordinaryPendingCount: 0, counselorPendingCount: 0, actionablePendingCount: 0, activeRoomCount: 6, todayReservations: 2, inUseCount: 0 })
   await flushPromises()
   await flushPromises()
   assert(!homePage.data.processingById[101], '首页列表和统计刷新完成后应恢复该预约操作状态')
@@ -1028,21 +1090,20 @@ async function main() {
   await flushPromises()
   assert(homePage.data.pendingList[0].id === 202, '首页旧列表响应不得覆盖较新的列表结果')
 
-  const pendingCountRequests = [deferred(), deferred()]
-  let pendingCountRequestIndex = 0
+  const dashboardRequests = [deferred(), deferred()]
+  let dashboardRequestIndex = 0
   request.get = function(url) {
-    if (url === '/reservation/pending-count') return pendingCountRequests[pendingCountRequestIndex++].promise
-    if (url === '/room/stats') return Promise.resolve({ activeRooms: 6, todayReservations: 2 })
+    if (url === '/stats/dashboard') return dashboardRequests[dashboardRequestIndex++].promise
     if (url === '/feedback') return Promise.resolve({ total: 3 })
     return Promise.resolve({})
   }
   homePage.loadStats.call(homePage)
   homePage.loadStats.call(homePage)
-  pendingCountRequests[1].resolve({ count: 9 })
+  dashboardRequests[1].resolve({ ordinaryPendingCount: 9, counselorPendingCount: 4, actionablePendingCount: 13, activeRoomCount: 0, todayReservations: 2, inUseCount: 1 })
   await flushPromises()
-  pendingCountRequests[0].resolve({ count: 2 })
+  dashboardRequests[0].resolve({ ordinaryPendingCount: 2, counselorPendingCount: 1, actionablePendingCount: 3, activeRoomCount: 6, todayReservations: 2, inUseCount: 1 })
   await flushPromises()
-  assert(homePage.data.pendingCount === 9, '首页较旧的待审核数量响应不得覆盖最新统计')
+  assert(homePage.data.ordinaryPendingCount === 9 && homePage.data.activeRoomCount === 0, '首页较旧的仪表盘响应不得覆盖最新统计，合法 0 必须保留')
 
   const reservationRequests = [deferred(), deferred()]
   let reservationRequestIndex = 0
