@@ -24,6 +24,22 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+function assertDashboardContract(payload, label) {
+  assert(Number.isInteger(payload.ordinaryPendingCount), label + ' 缺少普通待审数')
+  assert(Number.isInteger(payload.counselorPendingCount), label + ' 缺少重点待审数')
+  assert(Number.isInteger(payload.actionablePendingCount), label + ' 缺少可处理待审总数')
+  assert(Number.isInteger(payload.activeRoomCount), label + ' 缺少开放房间数')
+}
+
+function assertUsageContract(rows, label) {
+  assert(Array.isArray(rows), label + ' 使用排行应为数组')
+  rows.forEach(function(row) {
+    assert(row.room_id && row.room_name, label + ' 排行缺少房间标识或名称')
+    assert(Number.isInteger(row.reservation_count), label + ' 预约次数必须为整数')
+    assert(Number.isInteger(row.used_days), label + ' 使用天数必须为整数')
+  })
+}
+
 function assertApprovalQueue(responseJson, expectedStatus, queueName, expectedPageSize) {
   const data = responseJson && responseJson.data
   assert(data && !Array.isArray(data) && Array.isArray(data.list), queueName + ' 应返回 data.list 分页列表')
@@ -97,6 +113,12 @@ async function main() {
   })
   assert(adminLogin.json.code === 200, '管理员登录应成功')
   assert(adminLogin.json.data.userInfo.role !== 'student', '管理员角色不应被识别为学生')
+  const buildingAdminLogin = await api('/auth/login/admin-miniapp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'building_admin', password: 'admin123' })
+  })
+  assert(buildingAdminLogin.json.code === 200, '楼栋导生管理员登录应成功')
   const adminProfileLeak = await api('/user/profile', {
     headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
   })
@@ -124,6 +146,35 @@ async function main() {
     body: JSON.stringify({ username: 'counselor', password: 'counselor123' })
   })
   assert(counselorLogin.json.code === 200, '辅导员登录应成功')
+  const superAdminLogin = await api('/auth/login/admin-miniapp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'superadmin', password: 'super123' })
+  })
+  assert(superAdminLogin.json.code === 200, '超级管理员登录应成功')
+
+  const scopedStatsRoles = [
+    { label: '楼栋导生管理员', token: buildingAdminLogin.json.data.token },
+    { label: '辅导员', token: counselorLogin.json.data.token },
+    { label: '超级管理员', token: superAdminLogin.json.data.token }
+  ]
+  const scopedStatsResults = []
+  for (const role of scopedStatsRoles) {
+    const roleDashboard = await api('/stats/dashboard', {
+      headers: { Authorization: 'Bearer ' + role.token }
+    })
+    assert(roleDashboard.json.code === 200 && roleDashboard.json.data, role.label + ' 仪表盘接口应可用')
+    assertDashboardContract(roleDashboard.json.data, role.label)
+    const roleUsage = await api('/stats/usage-rate', {
+      headers: { Authorization: 'Bearer ' + role.token }
+    })
+    assert(roleUsage.json.code === 200, role.label + ' 使用排行接口应可用')
+    assertUsageContract(roleUsage.json.data, role.label)
+    scopedStatsResults.push({ dashboard: roleDashboard.json.data, usage: roleUsage.json.data })
+  }
+  assert(scopedStatsResults[0].dashboard.activeRoomCount < scopedStatsResults[2].dashboard.activeRoomCount, '楼栋导生管理员开放房间数应小于全院超级管理员')
+  assert(scopedStatsResults[0].dashboard.counselorPendingCount === 0, '楼栋导生管理员不应看到重点待审数')
+
   const counselorBlacklist = await api('/credit/blacklist', {
     headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }
   })

@@ -301,6 +301,24 @@ for (const [name, source] of [['rooms', mobileRoomsSource], ['users', mobileUser
 }
 assert.ok(navigationCalls.some(url => /\/pages\/admin-credit\/admin-credit\?tab=violations$/.test(url)), 'the mobile violations entry must remain explicit')
 
+const [scopedStatsController, webStatsFormatter, mobileStatsPage, mobileStatsTemplate] = await Promise.all([
+  read('../server/src/controllers/scopedStatsController.js'),
+  read('../admin/src/utils/statsFormatters.js'),
+  read('../miniapp/pages/admin-stats/admin-stats.js'),
+  read('../miniapp/pages/admin-stats/admin-stats.wxml')
+])
+for (const field of ['ordinaryPendingCount', 'counselorPendingCount', 'actionablePendingCount', 'activeRoomCount']) {
+  assert.match(scopedStatsController, new RegExp(`\\b${field}\\b`), `scoped dashboard must expose ${field}`)
+}
+for (const field of ['room_id', 'room_name', 'room_type', 'reservation_count', 'used_days']) {
+  assert.match(scopedStatsController, new RegExp(`\\b${field}\\b`), `scoped usage ranking must expose ${field}`)
+}
+for (const source of [webStatsFormatter, mobileStatsPage + mobileStatsTemplate]) {
+  assert.match(source, /room_name/, 'both admin clients must consume the shared room_name usage field')
+  assert.match(source, /reservation_count/, 'both admin clients must consume the shared reservation_count usage field')
+}
+assert.match(mobileStatsPage + mobileStatsTemplate, /used_days/, 'mobile stats must consume the shared used_days usage field')
+
 assert.equal(packageJson.scripts['check:admin-cross-client'], 'node scripts/admin-cross-client-contract-check.mjs', 'root package must expose the cross-client admin contract check')
 assert.match(packageJson.scripts['check:all'], /check:admin-miniapp\s*&&\s*npm run check:admin-cross-client/, 'check:all must run the cross-client check immediately after admin-miniapp')
 

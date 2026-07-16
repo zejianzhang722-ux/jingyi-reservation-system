@@ -45,6 +45,12 @@ const buildMockDashboard = function(req) {
   const users = new Map((tables.users || []).map(function(user) { return [Number(user.id), user]; }));
   const roomById = new Map(rooms.map(function(room) { return [Number(room.id), room]; }));
   const activeStatuses = ['approved', 'checked_in', 'completed'];
+  const ordinaryPendingCount = reservations.filter(function(row) { return row.status === 'pending'; }).length;
+  const rawCounselorPendingCount = reservations.filter(function(row) { return row.status === 'counselor_pending'; }).length;
+  const canReviewCounselorPending = req.adminScope && ['counselor', 'super_admin'].includes(req.adminScope.role);
+  const counselorPendingCount = canReviewCounselorPending ? rawCounselorPendingCount : 0;
+  const actionablePendingCount = ordinaryPendingCount + counselorPendingCount;
+  const activeRoomCount = rooms.filter(function(room) { return room.status === 'open'; }).length;
 
   const dates = [];
   const trendReservations = [];
@@ -88,7 +94,11 @@ const buildMockDashboard = function(req) {
 
   return {
     todayReservations: reservations.filter(function(row) { return row.date === today; }).length,
-    pendingCount: reservations.filter(function(row) { return row.status === 'pending' || row.status === 'counselor_pending'; }).length,
+    ordinaryPendingCount,
+    counselorPendingCount,
+    actionablePendingCount,
+    activeRoomCount,
+    pendingCount: actionablePendingCount,
     usingCount: reservations.filter(function(row) { return row.status === 'checked_in'; }).length,
     noshowCount: reservations.filter(function(row) { return row.status === 'noshow' && row.date === today; }).length,
     trend: { dates: dates, reservations: trendReservations, used: trendUsed, noshow: trendNoshow },
@@ -118,7 +128,16 @@ const dashboard = async function(req, res) {
       return Number(rows[0].count || 0);
     };
     const todayReservations = await count('r.date = ?', [today]);
-    const pendingCount = await count("r.status IN ('pending','counselor_pending')", []);
+    const ordinaryPendingCount = await count("r.status = 'pending'", []);
+    const rawCounselorPendingCount = await count("r.status = 'counselor_pending'", []);
+    const canReviewCounselorPending = req.adminScope && ['counselor', 'super_admin'].includes(req.adminScope.role);
+    const counselorPendingCount = canReviewCounselorPending ? rawCounselorPendingCount : 0;
+    const actionablePendingCount = ordinaryPendingCount + counselorPendingCount;
+    const [activeRoomRows] = await db.query(
+      "SELECT COUNT(*) AS count FROM rooms rm WHERE rm.status = 'open'" + scope.sql,
+      scope.params
+    );
+    const activeRoomCount = Number(activeRoomRows[0].count || 0);
     const usingCount = await count("r.status = 'checked_in'", []);
     const noshowCount = await count("r.status = 'noshow' AND r.date = ?", [today]);
 
@@ -159,7 +178,11 @@ const dashboard = async function(req, res) {
 
     return response.success(res, {
       todayReservations,
-      pendingCount,
+      ordinaryPendingCount,
+      counselorPendingCount,
+      actionablePendingCount,
+      activeRoomCount,
+      pendingCount: actionablePendingCount,
       usingCount,
       noshowCount,
       trend: { dates, reservations, used, noshow },
@@ -209,8 +232,37 @@ const reservationStats = async function(req, res) {
 const usageRate = async function(req, res) {
   try {
     const range = dateRange(req);
+    if (db.isMock()) {
+      const tables = require('../config/mock-db').__tables;
+      const isGlobal = req.adminScope && req.adminScope.isGlobal;
+      const buildingId = req.adminScope ? Number(req.adminScope.buildingId) : null;
+      const requestedRoomId = req.query.roomId ? Number(req.query.roomId) : null;
+      const activeStatuses = ['approved', 'checked_in', 'completed'];
+      const rows = (tables.rooms || []).filter(function(room) {
+        if (!isGlobal && Number(room.building_id) !== buildingId) return false;
+        return requestedRoomId === null || Number(room.id) === requestedRoomId;
+      }).map(function(room) {
+        const roomReservations = (tables.reservations || []).filter(function(row) {
+          return Number(row.room_id) === Number(room.id) &&
+            row.date >= range.start && row.date <= range.end &&
+            activeStatuses.includes(row.status);
+        });
+        return {
+          room_id: Number(room.id),
+          room_name: room.name,
+          room_type: room.type,
+          reservation_count: roomReservations.length,
+          used_days: new Set(roomReservations.map(function(row) { return row.date; })).size
+        };
+      }).filter(function(row) {
+        return row.reservation_count > 0;
+      }).sort(function(a, b) {
+        return b.reservation_count - a.reservation_count || String(a.room_name).localeCompare(String(b.room_name));
+      });
+      return response.success(res, rows);
+    }
     const scope = buildingFilter(req, 'rm');
-    let sql = "SELECT rm.id AS room_id, rm.name AS room_name, rm.type, COUNT(r.id) AS reservation_count, COUNT(DISTINCT r.date) AS used_days " +
+    let sql = "SELECT rm.id AS room_id, rm.name AS room_name, rm.type AS room_type, COUNT(r.id) AS reservation_count, COUNT(DISTINCT r.date) AS used_days " +
       "FROM rooms rm LEFT JOIN reservations r ON r.room_id = rm.id AND r.date BETWEEN ? AND ? " +
       "AND r.status IN ('approved','checked_in','completed') WHERE 1=1" + scope.sql;
     const params = [range.start, range.end].concat(scope.params);
@@ -218,9 +270,17 @@ const usageRate = async function(req, res) {
       sql += ' AND rm.id = ?';
       params.push(Number(req.query.roomId));
     }
-    sql += ' GROUP BY rm.id, rm.name, rm.type ORDER BY reservation_count DESC';
+    sql += ' GROUP BY rm.id, rm.name, rm.type HAVING COUNT(r.id) > 0 ORDER BY reservation_count DESC, room_name ASC';
     const [rows] = await db.query(sql, params);
-    return response.success(res, rows);
+    return response.success(res, rows.map(function(row) {
+      return {
+        room_id: Number(row.room_id),
+        room_name: row.room_name,
+        room_type: row.room_type,
+        reservation_count: Number(row.reservation_count || 0),
+        used_days: Number(row.used_days || 0)
+      };
+    }));
   } catch (err) {
     logger.error('获取楼栋范围内使用率失败:', err);
     return response.error(res, err.message || '获取使用率失败', 500);
