@@ -188,8 +188,21 @@ async function main() {
     headers: { Authorization: 'Bearer ' + buildingAdminLogin.json.data.token }
   })
   assert(buildingAdminRooms.json.code === 200 && Array.isArray(buildingAdminRooms.json.data), '楼栋导生管理员房间列表应可用')
-  const buildingAdminRoomIds = new Set(buildingAdminRooms.json.data.map(function(room) { return Number(room.id) }))
-  assert(scopedStatsResults[0].usage.every(function(row) { return buildingAdminRoomIds.has(Number(row.room_id)) }), '楼栋导生管理员使用排行不得包含范围外房间')
+  const buildingAdminInfo = buildingAdminLogin.json.data.userInfo || {}
+  const buildingAdminScope = buildingAdminInfo.scope || buildingAdminInfo.adminScope || {}
+  const buildingAdminId = Number(
+    buildingAdminInfo.buildingId !== undefined ? buildingAdminInfo.buildingId :
+      (buildingAdminInfo.building_id !== undefined ? buildingAdminInfo.building_id :
+        (buildingAdminScope.buildingId !== undefined ? buildingAdminScope.buildingId : buildingAdminScope.building_id))
+  )
+  assert(Number.isInteger(buildingAdminId) && buildingAdminId > 0, '楼栋导生管理员登录响应应包含有效楼栋范围')
+  const buildingAdminRoomMap = new Map(buildingAdminRooms.json.data.map(function(room) { return [Number(room.id), room] }))
+  scopedStatsResults[0].usage.forEach(function(row) {
+    const room = buildingAdminRoomMap.get(Number(row.room_id))
+    assert(room, '楼栋导生管理员使用排行房间必须能映射到房间元数据')
+    const roomBuildingId = Number(room.building_id !== undefined ? room.building_id : room.buildingId)
+    assert(roomBuildingId === buildingAdminId, '楼栋导生管理员使用排行不得包含范围外房间')
+  })
   assert(scopedStatsResults[0].dashboard.activeRoomCount < scopedStatsResults[2].dashboard.activeRoomCount, '楼栋导生管理员开放房间数应小于全院超级管理员')
   assert(scopedStatsResults[0].dashboard.counselorPendingCount === 0, '楼栋导生管理员不应看到重点待审数')
   assert(scopedStatsResults[0].dashboard.pendingItems.every(function(item) { return item.tag !== '辅导员审核' }), '楼栋导生管理员待审明细不得包含重点待审')
