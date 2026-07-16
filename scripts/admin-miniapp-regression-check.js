@@ -215,6 +215,9 @@ async function main() {
   assert(ordinaryCard.purpose === '用途未填写' && ordinaryCard.participants === 2, '审批卡应兼容驼峰人数并补齐用途')
   assert(ordinaryCard.status === 'pending' && !ordinaryCard.isPriority && ordinaryCard.queueLabel === '普通待审', '普通预约应有普通待审标签')
 
+  const snakeCaseTimeSlotCard = approvalPresenter.toCard({ time_slot: '18:00-20:00' })
+  assert(snakeCaseTimeSlotCard.timeSlot === '18:00-20:00', '审批卡应兼容蛇形时间段字段')
+
   const fallbackCard = approvalPresenter.toCard({})
   assert(fallbackCard.userName === '姓名未提供' && fallbackCard.studentId === '学号未提供', '审批卡应补齐姓名和学号缺省值')
   assert(fallbackCard.roomName === '房间未提供' && fallbackCard.roomTypeLabel === '其他空间' && fallbackCard.buildingLabel === '全院', '审批卡应补齐空间缺省值')

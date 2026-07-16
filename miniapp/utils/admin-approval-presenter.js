@@ -37,7 +37,7 @@ function toCard(row) {
     roomTypeLabel: ROOM_TYPE_LABELS[valueOf(row, ['roomType', 'room_type'])] || '其他空间',
     buildingLabel: BUILDING_LABELS[buildingId] || '全院',
     date: valueOf(row, ['date']),
-    timeSlot: startTime && endTime ? startTime + '-' + endTime : valueOf(row, ['timeSlot']),
+    timeSlot: startTime && endTime ? startTime + '-' + endTime : valueOf(row, ['timeSlot', 'time_slot']),
     purpose: valueOf(row, ['purpose']) || '用途未填写',
     participants: Number(valueOf(row, ['participants', 'participantCount', 'participant_count'])) || 0,
     status: status,
