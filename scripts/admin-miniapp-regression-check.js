@@ -166,6 +166,60 @@ async function main() {
   assert(adminPolicy.queueType('admin', 'counselor') === 'admin', '导生管理员不能切换到辅导员审批队列')
   assert(adminPolicy.queueType('counselor', 'counselor') === 'counselor', '辅导员可进入重点审核队列')
   assert(adminPolicy.queueType('super_admin', 'counselor') === 'counselor', '超级管理员可进入重点审核队列')
+  assert(adminPolicy.defaultQueueType('admin') === 'admin', '导生管理员默认进入普通审核')
+  assert(adminPolicy.defaultQueueType('counselor') === 'counselor', '辅导员默认进入重点审核')
+  assert(adminPolicy.defaultQueueType('super_admin') === 'counselor', '超级管理员默认优先进入重点审核')
+  assert(adminPolicy.canQuickApprove('admin', 'pending'), '导生管理员可快速处理普通待审')
+  assert(!adminPolicy.canQuickApprove('counselor', 'counselor_pending'), '重点待审不得在卡片直接通过')
+
+  const approvalPresenter = require('../miniapp/utils/admin-approval-presenter')
+  const priorityCard = approvalPresenter.toCard({
+    id: 5,
+    user_name: '李四',
+    student_id: '2024001002',
+    room_name: 'C128影音室',
+    room_type: 'media_room',
+    building_id: 2,
+    date: '2026-07-17',
+    start_time: '14:00',
+    end_time: '17:00',
+    purpose: '观影活动',
+    participants: 20,
+    status: 'counselor_pending'
+  })
+  assert(priorityCard.id === 5, '审批卡应保留预约编号')
+  assert(priorityCard.userName === '李四' && priorityCard.studentId === '2024001002', '审批卡应统一姓名和学号')
+  assert(priorityCard.roomName === 'C128影音室', '审批卡应统一房间名称')
+  assert(priorityCard.roomTypeLabel === '影音室' && priorityCard.buildingLabel === 'C座', '审批卡应显示空间类型和楼栋')
+  assert(priorityCard.date === '2026-07-17' && priorityCard.timeSlot === '14:00-17:00', '审批卡应统一日期和时间段')
+  assert(priorityCard.purpose === '观影活动' && priorityCard.participants === 20, '审批卡应统一用途和参与人数')
+  assert(priorityCard.status === 'counselor_pending', '审批卡应保留审核状态')
+  assert(priorityCard.queueLabel === '重点待审' && priorityCard.isPriority, '重点预约应有文字标签')
+
+  const ordinaryCard = approvalPresenter.toCard({
+    id: '6',
+    userName: '王五',
+    studentId: '2024001003',
+    roomName: 'B228自习室',
+    roomType: 'study_room',
+    buildingId: 1,
+    date: '2026-07-18',
+    startTime: '09:00',
+    endTime: '10:00',
+    participantCount: '2',
+    status: 'pending'
+  })
+  assert(ordinaryCard.id === 6 && ordinaryCard.userName === '王五' && ordinaryCard.studentId === '2024001003', '审批卡应兼容驼峰字段')
+  assert(ordinaryCard.roomName === 'B228自习室' && ordinaryCard.roomTypeLabel === '自习室' && ordinaryCard.buildingLabel === 'B座', '审批卡应兼容驼峰空间字段')
+  assert(ordinaryCard.date === '2026-07-18' && ordinaryCard.timeSlot === '09:00-10:00', '审批卡应兼容驼峰时间字段')
+  assert(ordinaryCard.purpose === '用途未填写' && ordinaryCard.participants === 2, '审批卡应兼容驼峰人数并补齐用途')
+  assert(ordinaryCard.status === 'pending' && !ordinaryCard.isPriority && ordinaryCard.queueLabel === '普通待审', '普通预约应有普通待审标签')
+
+  const fallbackCard = approvalPresenter.toCard({})
+  assert(fallbackCard.userName === '姓名未提供' && fallbackCard.studentId === '学号未提供', '审批卡应补齐姓名和学号缺省值')
+  assert(fallbackCard.roomName === '房间未提供' && fallbackCard.roomTypeLabel === '其他空间' && fallbackCard.buildingLabel === '全院', '审批卡应补齐空间缺省值')
+  assert(fallbackCard.purpose === '用途未填写' && fallbackCard.participants === 0, '审批卡应补齐用途和人数缺省值')
+  assert(fallbackCard.queueLabel === '普通待审' && !fallbackCard.isPriority, '缺省状态应按普通待审展示')
 
   const originalPost = request.post
   const originalPut = request.put

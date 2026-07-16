@@ -46,8 +46,18 @@ function queueType(role, preferred) {
   return 'admin'
 }
 
+function defaultQueueType(role) {
+  return role === 'counselor' || role === 'super_admin' ? 'counselor' : 'admin'
+}
+
+function canQuickApprove(role, status) {
+  return status === 'pending' && can(role, 'ordinaryApproval')
+}
+
 module.exports = {
   ROLE_CAPABILITIES: ROLE_CAPABILITIES,
   can: can,
-  queueType: queueType
+  queueType: queueType,
+  defaultQueueType: defaultQueueType,
+  canQuickApprove: canQuickApprove
 }
