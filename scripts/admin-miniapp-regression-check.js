@@ -196,6 +196,13 @@ async function main() {
   assert(priorityCard.status === 'counselor_pending', '审批卡应保留审核状态')
   assert(priorityCard.queueLabel === '重点待审' && priorityCard.isPriority, '重点预约应有文字标签')
 
+  const detailAppJson = require('../miniapp/app.json')
+  assert(detailAppJson.pages.indexOf('pages/admin-reservation-detail/admin-reservation-detail') !== -1, 'app.json 应注册管理员预约详情页')
+  const adminReservationDetailWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxml'), 'utf8')
+  assert(adminReservationDetailWxml.indexOf('信用分') !== -1, '管理员预约详情页应展示申请人信用分')
+  assert(adminReservationDetailWxml.indexOf('我的预约') === -1, '管理员预约详情页不得出现学生端“我的预约”入口')
+  assert(adminReservationDetailWxml.indexOf('取消预约') === -1, '管理员预约详情页不得出现学生端取消预约动作')
+
   const ordinaryCard = approvalPresenter.toCard({
     id: '6',
     userName: '王五',
@@ -1093,7 +1100,7 @@ async function main() {
   assert(reservationWxml.indexOf('queueLabel') === -1 && reservationWxml.indexOf('普通预约审核') === -1 && reservationWxml.indexOf('辅导员重点审核') === -1, '全部预约页不应显示审核队列标签')
   assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation' }), '全部预约页仍应读取 /reservation')
   assert(approvalCalls.filter(function(call) { return call.url === '/reservation' }).length === 1, '全部预约页首次 onLoad + onShow 只能产生一轮列表请求')
-  assert(reservationPage.data.list[0].canAudit === true && reservationPage.data.list[1].canAudit === false, '导生管理员只能操作 pending 状态')
+  assert(reservationPage.data.list[0].canQuickAudit === true && reservationPage.data.list[1].canQuickAudit === false, '导生管理员只能快捷操作 pending 状态')
   modalResponse = { confirm: true, content: '材料不全' }
   approvalCalls.length = 0
   reservationPage.onReject.call(reservationPage, { currentTarget: { dataset: { id: 101 } } })
@@ -1177,6 +1184,7 @@ async function main() {
 
   const failedApproval = deferred()
   request.post = function() { return failedApproval.promise }
+  reservationPage.setData({ list: [{ id: 102, status: 'pending', canQuickAudit: true }] })
   reservationPage.onApprove.call(reservationPage, { currentTarget: { dataset: { id: 102 } } })
   failedApproval.reject(new Error('expected failure'))
   await flushPromises()
@@ -1234,7 +1242,107 @@ async function main() {
   counselorReservationPage.onLoad.call(counselorReservationPage, { queueType: 'counselor' })
   counselorReservationPage.onShow.call(counselorReservationPage)
   await flushPromises()
-  assert(counselorReservationPage.data.list.every(function(item) { return item.canAudit }), '辅导员可操作 pending 和 counselor_pending 状态')
+  assert(counselorReservationPage.data.list.find(function(item) { return item.status === 'pending' }).canQuickAudit, '辅导员可快捷处理普通 pending 预约')
+  assert(!counselorReservationPage.data.list.find(function(item) { return item.status === 'counselor_pending' }).canQuickAudit, '重点预约只能进入详情页审核')
+  navCalls.length = 0
+  counselorReservationPage.onViewDetail.call(counselorReservationPage, { currentTarget: { dataset: { id: 102 } } })
+  assert(navCalls[0] && navCalls[0].url === '/pages/admin-reservation-detail/admin-reservation-detail?id=102', '全部预约详情应统一进入管理员预约详情页')
+
+  const detailCalls = []
+  var detailFixture = {
+    id: 501, status: 'pending', user_name: '测试申请人', student_id: '2024001999',
+    credit_score: 88, user_status: 'active', room_name: 'B228自习室', room_type: 'study_room', building_id: 1,
+    date: '2026-07-20', start_time: '09:00', end_time: '10:00', purpose: '课程讨论', participants: 3
+  }
+  request.get = function(url, params, options) {
+    detailCalls.push({ method: 'GET', url: url, params: params || {}, options: options || {} })
+    return Promise.resolve(Object.assign({}, detailFixture))
+  }
+  request.post = function(url, body, options) {
+    detailCalls.push({ method: 'POST', url: url, body: body || {}, options: options || {} })
+    return Promise.resolve({})
+  }
+
+  storage.userInfo.role = 'admin'
+  var detailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  assert(detailPage.data.reservation === null && detailPage.data.pageStatus === 'loading', '管理员详情初始不得构造备用预约')
+  assert(detailPage.data.errorMessage === '' && !detailPage.data.canApprove && !detailPage.data.canReject && !detailPage.data.processing, '管理员详情初始操作状态应安全关闭')
+  detailPage.onLoad.call(detailPage, { id: 501 })
+  await flushPromises()
+  assert(detailCalls[0] && detailCalls[0].url === '/reservation/501' && detailCalls[0].options.silent === true, '管理员详情应静默读取指定预约')
+  assert(detailPage.data.pageStatus === 'ready' && detailPage.data.reservation.credit_score === 88 && detailPage.data.reservation.user_status === 'active', '详情转换后必须保留信用分和账号状态')
+  assert(detailPage.data.canApprove && detailPage.data.canReject, '导生管理员可审核普通待审预约')
+
+  detailFixture.status = 'counselor_pending'
+  await detailPage.loadDetail.call(detailPage)
+  assert(!detailPage.data.canApprove && !detailPage.data.canReject, '导生管理员可看重点预约但不可审批')
+  storage.userInfo.role = 'counselor'
+  await detailPage.loadDetail.call(detailPage)
+  assert(detailPage.data.canApprove && detailPage.data.canReject, '辅导员可审核重点预约')
+  storage.userInfo.role = 'super_admin'
+  await detailPage.loadDetail.call(detailPage)
+  assert(detailPage.data.canApprove && detailPage.data.canReject, '超级管理员可审核重点预约')
+  detailFixture.status = 'pending'
+  await detailPage.loadDetail.call(detailPage)
+  assert(detailPage.data.canApprove && detailPage.data.canReject, '超级管理员可审核普通预约')
+  detailFixture.status = 'approved'
+  await detailPage.loadDetail.call(detailPage)
+  assert(!detailPage.data.canApprove && !detailPage.data.canReject, '终态预约不得显示审批操作')
+
+  storage.userInfo.role = 'student'
+  detailCalls.length = 0
+  toastCalls.length = 0
+  navCalls.length = 0
+  var deniedDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  deniedDetailPage.onLoad.call(deniedDetailPage, { id: 501 })
+  assert(!detailCalls.some(function(call) { return call.method === 'GET' }), '学生直接进入管理员详情页不得请求预约详情')
+  assert(toastCalls.length === 1 && navCalls.some(function(call) { return call.type === 'reLaunch' && call.url === '/pages/login/login' }), '无管理员权限时应清楚提示并返回登录页')
+
+  storage.userInfo.role = 'admin'
+  request.get = function() { return Promise.reject(new Error('详情暂不可用')) }
+  var failedDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  failedDetailPage.onLoad.call(failedDetailPage, { id: 501 })
+  await flushPromises()
+  assert(failedDetailPage.data.pageStatus === 'error' && failedDetailPage.data.reservation === null, '详情接口失败应进入错误状态且不得使用备用预约')
+  assert(failedDetailPage.data.errorMessage.indexOf('详情暂不可用') !== -1, '详情错误状态应保留具体原因')
+
+  detailFixture.status = 'pending'
+  request.get = function() { return Promise.resolve(Object.assign({}, detailFixture)) }
+  var duplicateDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  duplicateDetailPage.onLoad.call(duplicateDetailPage, { id: 501 })
+  await flushPromises()
+  const detailApproval = deferred()
+  detailCalls.length = 0
+  toastCalls.length = 0
+  request.post = function(url, body, options) {
+    detailCalls.push({ method: 'POST', url: url, body: body || {}, options: options || {} })
+    return detailApproval.promise
+  }
+  modalResponse = { confirm: true, content: '' }
+  duplicateDetailPage.onApprove.call(duplicateDetailPage)
+  duplicateDetailPage.onApprove.call(duplicateDetailPage)
+  assert(detailCalls.filter(function(call) { return call.url === '/audit/501/approve' }).length === 1, '详情审批处理中不得重复提交')
+  assert(detailCalls[0].options.silent === true && duplicateDetailPage.data.processing, '详情审批应静默请求且提交期间锁定操作')
+  detailApproval.reject({ message: '预约状态已变化' })
+  await flushPromises()
+  assert(!duplicateDetailPage.data.processing, '详情审批失败后必须释放操作锁')
+  assert(toastCalls.length === 1 && toastCalls[0].title === '预约状态已变化', '详情审批失败只提示一次服务端具体原因')
+
+  detailCalls.length = 0
+  toastCalls.length = 0
+  modalResponse = { confirm: true, content: '   ' }
+  duplicateDetailPage.onReject.call(duplicateDetailPage)
+  assert(!detailCalls.some(function(call) { return call.method === 'POST' }), '详情拒绝理由为空时不得提交')
+  assert(toastCalls.length === 1, '详情拒绝理由为空时应给出明确提示')
+
+  const detailSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.js'), 'utf8')
+  const detailWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxml'), 'utf8')
+  const detailWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxss'), 'utf8')
+  assert(detailSource.indexOf('approvalPresenter.toCard') !== -1 && detailSource.indexOf('adminPolicy.can') !== -1, '管理员详情应复用审批展示转换并按能力判断操作')
+  assert(detailWxml.indexOf('重新加载') !== -1 && detailWxml.indexOf('重点审批说明') !== -1, '管理员详情应包含错误重试和重点审批说明')
+  assert(detailWxml.indexOf('aria-label="通过预约"') !== -1 && detailWxml.indexOf('aria-label="拒绝预约"') !== -1, '详情审批关键操作应有无障碍名称')
+  assert(/\.action-button\s*\{[^}]*min-height:\s*88rpx/.test(detailWxss), '详情审批触控高度应不小于 88rpx')
+  assert(detailWxss.indexOf('safe-area-inset-bottom') !== -1, '详情底部操作区不得遮挡系统安全区')
 
   request.get = originalGet
   request.post = originalPost

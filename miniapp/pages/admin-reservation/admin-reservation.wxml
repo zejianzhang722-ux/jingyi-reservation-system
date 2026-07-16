@@ -24,7 +24,8 @@
         <text class="info-row">日期: {{item.date || '-'}}</text>
         <text class="info-row">时间: {{item.startTime || item.start_time || '-'}} - {{item.endTime || item.end_time || '-'}}</text>
       </view>
-      <view class="item-actions" wx:if="{{item.canAudit}}" catchtap="">
+      <view class="detail-hint" wx:if="{{item.status === 'counselor_pending'}}">查看并审核</view>
+      <view class="item-actions" wx:if="{{item.canQuickAudit}}" catchtap="">
         <text wx:if="{{processingById[item.id]}}">处理中</text>
         <block wx:else>
           <view class="btn-approve" data-id="{{item.id}}" catchtap="onApprove">通过</view>

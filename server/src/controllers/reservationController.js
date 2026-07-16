@@ -1,4 +1,4 @@
-﻿const db = require('../config/database');
+const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const reservationService = require('../services/reservationService');
@@ -87,8 +87,11 @@ const list = async function(req, res) {
 const detail = async function(req, res) {
   try {
     const [reservations] = await db.query(
-      'SELECT r.*, rm.name AS room_name, rm.type AS room_type, rm.location, rm.building_id, ' +
-      'rm.open_start_time, rm.open_end_time, u.nickname, u.real_name, u.student_id, u.phone, ' +
+      'SELECT r.id, r.user_id, r.room_id, r.seat_id, r.date, r.start_time, r.end_time, ' +
+      'r.purpose, r.participants, r.status, r.reservation_code, r.reject_reason, r.audited_at, r.created_at, ' +
+      'rm.name AS room_name, rm.type AS room_type, rm.location, rm.building_id, ' +
+      'rm.open_start_time, rm.open_end_time, u.nickname, u.real_name, u.student_id, u.student_no, u.phone, ' +
+      'u.credit_score, u.status AS user_status, ' +
       's.id AS joined_seat_id, s.seat_number AS joined_seat_number, s.row_num AS joined_seat_row, ' +
       's.col_num AS joined_seat_col, s.status AS joined_seat_status ' +
       'FROM reservations r JOIN rooms rm ON r.room_id = rm.id ' +

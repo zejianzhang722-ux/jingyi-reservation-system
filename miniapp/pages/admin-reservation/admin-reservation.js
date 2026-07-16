@@ -33,11 +33,15 @@ Page({
     this.loadData()
     wx.stopPullDownRefresh()
   },
-  canAuditStatus: function (status) {
-    var role = auth.getUserRole()
-    if (role === 'admin') return status === 'pending'
-    if (role === 'counselor' || role === 'super_admin') return status === 'pending' || status === 'counselor_pending'
-    return false
+  canQuickAudit: function (status) {
+    return adminPolicy.canQuickApprove(auth.getUserRole(), status)
+  },
+  findReservation: function (id) {
+    return (this.data.list || []).find(function (item) { return Number(item.id) === Number(id) })
+  },
+  canQuickAuditItem: function (id) {
+    var item = this.findReservation(id)
+    return !!item && this.canQuickAudit(item.status)
   },
   isProcessing: function (id) {
     return !!this.data.processingById[id]
@@ -66,7 +70,7 @@ Page({
         })
       }
       list = list.map(function (item) {
-        return Object.assign({}, item, { canAudit: that.canAuditStatus(item.status) })
+        return Object.assign({}, item, { canQuickAudit: that.canQuickAudit(item.status) })
       })
       that.setData({ list: list, hasMore: list.length >= 20 })
     }).catch(function () {
@@ -85,19 +89,19 @@ Page({
   onApprove: function (e) {
     var that = this
     var id = e.currentTarget.dataset.id
-    if (this.isProcessing(id)) return
+    if (!this.canQuickAuditItem(id) || this.isProcessing(id)) return
     wx.showModal({
       title: '确认审批',
       content: '确定通过该预约？',
       success: function (res) {
         if (!res.confirm) return
-        if (that.isProcessing(id)) return
+        if (!that.canQuickAuditItem(id) || that.isProcessing(id)) return
         that.setProcessing(id, true)
-        request.post('/audit/' + id + '/approve', {}).then(function () {
+        request.post('/audit/' + id + '/approve', {}, { silent: true }).then(function () {
           wx.showToast({ title: '已通过', icon: 'success' })
           return that.loadData()
-        }, function () {
-          wx.showToast({ title: '操作失败', icon: 'none' })
+        }, function (err) {
+          wx.showToast({ title: err && err.message ? err.message : '操作失败', icon: 'none' })
         }).then(function () {
           that.setProcessing(id, false)
         }, function () {
@@ -109,7 +113,7 @@ Page({
   onReject: function (e) {
     var that = this
     var id = e.currentTarget.dataset.id
-    if (this.isProcessing(id)) return
+    if (!this.canQuickAuditItem(id) || this.isProcessing(id)) return
     wx.showModal({
       title: '拒绝预约',
       content: '请输入拒绝理由',
@@ -122,13 +126,13 @@ Page({
           wx.showToast({ title: '请填写拒绝理由', icon: 'none' })
           return
         }
-        if (that.isProcessing(id)) return
+        if (!that.canQuickAuditItem(id) || that.isProcessing(id)) return
         that.setProcessing(id, true)
-        request.post('/audit/' + id + '/reject', { reason: reason }).then(function () {
+        request.post('/audit/' + id + '/reject', { reason: reason }, { silent: true }).then(function () {
           wx.showToast({ title: '已拒绝', icon: 'success' })
           return that.loadData()
-        }, function () {
-          wx.showToast({ title: '操作失败', icon: 'none' })
+        }, function (err) {
+          wx.showToast({ title: err && err.message ? err.message : '操作失败', icon: 'none' })
         }).then(function () {
           that.setProcessing(id, false)
         }, function () {
@@ -138,7 +142,7 @@ Page({
     })
   },
   onViewDetail: function (e) {
-    wx.navigateTo({ url: '/pages/reservation-detail/reservation-detail?id=' + e.currentTarget.dataset.id })
+    wx.navigateTo({ url: '/pages/admin-reservation-detail/admin-reservation-detail?id=' + e.currentTarget.dataset.id })
   },
   onLoadMore: function () {
     if (!this.data.hasMore) return

@@ -241,6 +241,46 @@ async function main() {
 
   assertApprovalQueue(counselorAudit.json, 'counselor_pending', '辅导员重点审核队列', 10)
 
+  const scopedGuideOrdinaryAudit = await api('/audit/pending?type=admin&page=1&pageSize=100', {
+    headers: { Authorization: 'Bearer ' + buildingAdminLogin.json.data.token }
+  })
+  assert(scopedGuideOrdinaryAudit.json.code === 200, '楼栋导生管理员应能读取范围内普通预约审核队列')
+  assert(scopedGuideOrdinaryAudit.json.data.list.length > 0, '楼栋导生管理员范围内应有普通待审预约')
+  const scopedGuideDetail = await api('/reservation/' + scopedGuideOrdinaryAudit.json.data.list[0].id, {
+    headers: { Authorization: 'Bearer ' + buildingAdminLogin.json.data.token }
+  })
+  assert(scopedGuideDetail.json.code === 200, '楼栋导生管理员应能读取范围内普通预约详情')
+  assert(scopedGuideDetail.json.data.credit_score !== undefined, '管理员预约详情应返回申请人信用分')
+  assert(String(scopedGuideDetail.json.data.user_status || '').trim(), '管理员预约详情应返回申请人账号状态')
+
+  const boundaryReservations = await api('/reservation?page=1&pageSize=100', {
+    headers: { Authorization: 'Bearer ' + superAdminLogin.json.data.token }
+  })
+  assert(boundaryReservations.json.code === 200, '超级管理员应能读取边界测试预约列表')
+  const outsideBuildingReservation = boundaryReservations.json.data.list.find(function(item) {
+    return Number(item.building_id || item.buildingId) !== buildingAdminId
+  })
+  assert(outsideBuildingReservation, '应存在楼栋导生管理员范围外的预约')
+  const outsideBuildingDetail = await api('/reservation/' + outsideBuildingReservation.id, {
+    headers: { Authorization: 'Bearer ' + buildingAdminLogin.json.data.token }
+  })
+  assert(outsideBuildingDetail.status === 403 && outsideBuildingDetail.json.code === 403, '楼栋导生管理员读取范围外预约详情应返回 403')
+  const otherStudentReservation = boundaryReservations.json.data.list.find(function(item) {
+    return Number(item.user_id || item.userId) !== Number(login.json.data.userInfo.id)
+  })
+  assert(otherStudentReservation, '应存在其他学生的预约用于本人边界测试')
+  const otherStudentDetail = await api('/reservation/' + otherStudentReservation.id, {
+    headers: { Authorization: 'Bearer ' + login.json.data.token }
+  })
+  assert(otherStudentDetail.status === 403 && otherStudentDetail.json.code === 403, '学生读取他人预约详情应返回 403')
+
+  const counselorDetail = await api('/reservation/' + counselorAudit.json.data.list[0].id, {
+    headers: { Authorization: 'Bearer ' + counselorLogin.json.data.token }
+  })
+  assert(counselorDetail.json.code === 200, '辅导员应能读取重点预约详情')
+  assert(counselorDetail.json.data.credit_score !== undefined, '重点预约详情应返回申请人信用分')
+  assert(String(counselorDetail.json.data.user_status || '').trim(), '重点预约详情应返回申请人账号状态')
+
   const expiredAccessToken = jwt.sign({
     id: login.json.data.userInfo.id,
     openid: login.json.data.userInfo.openid,

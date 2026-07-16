@@ -28,6 +28,7 @@
     "pages/admin-poster/admin-poster",
     "pages/admin-feedback/admin-feedback",
     "pages/admin-reservation/admin-reservation",
+    "pages/admin-reservation-detail/admin-reservation-detail",
     "pages/admin-users/admin-users",
     "pages/admin-credit/admin-credit",
     "pages/admin-stats/admin-stats",
