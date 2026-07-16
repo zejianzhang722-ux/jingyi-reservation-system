@@ -7,7 +7,7 @@ var STATUS_LABELS = {
   pending: '普通待审', counselor_pending: '重点待审', approved: '已通过', rejected: '已拒绝',
   cancelled: '已取消', checked_in: '使用中', completed: '已完成', noshow: '未到场'
 }
-var USER_STATUS_LABELS = { active: '正常', restricted: '受限', disabled: '停用', blocked: '冻结' }
+var USER_STATUS_LABELS = { active: '正常', restricted: '受限', disabled: '停用', banned: '已封禁', blocked: '冻结' }
 
 Page({
   data: {
@@ -37,7 +37,7 @@ Page({
   onLoad: function (options) {
     if (!this.ensureAccess()) return
     this._reservationId = Number(options && options.id)
-    if (!this._reservationId) {
+    if (!Number.isInteger(this._reservationId) || this._reservationId <= 0) {
       this.setData({ pageStatus: 'error', errorMessage: '预约编号无效', reservation: null })
       return
     }

@@ -132,6 +132,10 @@ const detail = async function(req, res) {
     delete reservation.joined_seat_status;
     delete reservation.room_number;
     delete reservation.roomNumber;
+    if (['admin', 'super_admin', 'counselor'].includes(role)) {
+      delete reservation.phone;
+      delete reservation.reservation_code;
+    }
     return response.success(res, reservation);
   } catch (err) {
     logger.error('获取预约详情异常:', err);

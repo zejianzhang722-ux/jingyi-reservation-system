@@ -1306,6 +1306,43 @@ async function main() {
   assert(failedDetailPage.data.pageStatus === 'error' && failedDetailPage.data.reservation === null, '详情接口失败应进入错误状态且不得使用备用预约')
   assert(failedDetailPage.data.errorMessage.indexOf('详情暂不可用') !== -1, '详情错误状态应保留具体原因')
 
+  const invalidDetailCalls = []
+  request.get = function(url) { invalidDetailCalls.push(url); return Promise.resolve(Object.assign({}, detailFixture)) }
+  ;[undefined, 0, -1, 1.5, Infinity, 'Infinity', 'not-a-number'].forEach(function(id) {
+    var invalidDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+    invalidDetailPage.onLoad.call(invalidDetailPage, id === undefined ? {} : { id: id })
+    assert(invalidDetailPage.data.pageStatus === 'error' && invalidDetailPage.data.errorMessage === '预约编号无效', '非正整数预约编号应本地进入统一错误状态：' + String(id))
+  })
+  assert(invalidDetailCalls.length === 0, '非正整数预约编号不得发起详情请求')
+
+  const raceDetailReads = [deferred(), deferred()]
+  let raceDetailReadIndex = 0
+  request.get = function() { return raceDetailReads[raceDetailReadIndex++].promise }
+  var raceDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  raceDetailPage.onLoad.call(raceDetailPage, { id: 501 })
+  raceDetailPage.loadDetail.call(raceDetailPage)
+  raceDetailReads[1].resolve(Object.assign({}, detailFixture, { user_name: '最新申请人', status: 'pending' }))
+  await flushPromises()
+  raceDetailReads[0].resolve(Object.assign({}, detailFixture, { user_name: '过期申请人', status: 'approved' }))
+  await flushPromises()
+  assert(raceDetailPage.data.reservation.userName === '最新申请人' && raceDetailPage.data.reservation.status === 'pending', '旧详情响应晚到不得覆盖较新的详情结果')
+
+  storage.userInfo.role = 'counselor'
+  const downgradedDetailRead = deferred()
+  request.get = function() { return downgradedDetailRead.promise }
+  var downgradedDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  downgradedDetailPage.onLoad.call(downgradedDetailPage, { id: 501 })
+  storage.userInfo.role = 'admin'
+  downgradedDetailRead.resolve(Object.assign({}, detailFixture, { status: 'counselor_pending' }))
+  await flushPromises()
+  assert(downgradedDetailPage.data.pageStatus === 'ready' && !downgradedDetailPage.data.canApprove && !downgradedDetailPage.data.canReject, '详情请求期间角色降级后重点预约不得显示审批按钮')
+
+  request.get = function() { return Promise.resolve(Object.assign({}, detailFixture, { status: 'approved', user_status: 'banned' })) }
+  var bannedApplicantPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  bannedApplicantPage.onLoad.call(bannedApplicantPage, { id: 501 })
+  await flushPromises()
+  assert(bannedApplicantPage.data.reservation.userStatusLabel === '已封禁', '已封禁账号应显示中文状态')
+
   detailFixture.status = 'pending'
   request.get = function() { return Promise.resolve(Object.assign({}, detailFixture)) }
   var duplicateDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
@@ -1334,6 +1371,38 @@ async function main() {
   duplicateDetailPage.onReject.call(duplicateDetailPage)
   assert(!detailCalls.some(function(call) { return call.method === 'POST' }), '详情拒绝理由为空时不得提交')
   assert(toastCalls.length === 1, '详情拒绝理由为空时应给出明确提示')
+
+  storage.userInfo.role = 'admin'
+  detailFixture.status = 'pending'
+  const successfulDetailCalls = []
+  request.get = function(url, params, options) {
+    successfulDetailCalls.push({ method: 'GET', url: url, options: options || {} })
+    return Promise.resolve(Object.assign({}, detailFixture))
+  }
+  request.post = function(url, body, options) {
+    successfulDetailCalls.push({ method: 'POST', url: url, body: body || {}, options: options || {} })
+    return Promise.resolve({})
+  }
+  const emittedDetailEvents = []
+  var successfulDetailPage = loadPage('miniapp/pages/admin-reservation-detail/admin-reservation-detail.js')
+  successfulDetailPage.getOpenerEventChannel = function() {
+    return { emit: function(name, payload) { emittedDetailEvents.push({ name: name, payload: payload }) } }
+  }
+  successfulDetailPage.onLoad.call(successfulDetailPage, { id: 501 })
+  await flushPromises()
+  modalResponse = { confirm: true, content: '' }
+  successfulDetailPage.onApprove.call(successfulDetailPage)
+  await flushPromises()
+  await flushPromises()
+  assert(successfulDetailCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/501/approve' && call.options.silent === true }), '详情通过成功路径应调用静默审核接口')
+  assert(successfulDetailCalls.filter(function(call) { return call.method === 'GET' && call.url === '/reservation/501' }).length === 2, '详情通过成功后应重新读取最新详情')
+  assert(emittedDetailEvents.some(function(event) { return event.name === 'reservationUpdated' && event.payload.id === 501 }), '详情通过成功后应通知来源页刷新')
+  modalResponse = { confirm: true, content: '材料不符合要求' }
+  successfulDetailPage.onReject.call(successfulDetailPage)
+  await flushPromises()
+  await flushPromises()
+  assert(successfulDetailCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/501/reject' && call.body.reason === '材料不符合要求' && call.options.silent === true }), '详情拒绝成功路径应提交必填理由')
+  assert(successfulDetailCalls.filter(function(call) { return call.method === 'GET' && call.url === '/reservation/501' }).length === 3, '详情拒绝成功后也应重新读取最新详情')
 
   const detailSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.js'), 'utf8')
   const detailWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxml'), 'utf8')

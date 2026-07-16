@@ -252,6 +252,8 @@ async function main() {
   assert(scopedGuideDetail.json.code === 200, '楼栋导生管理员应能读取范围内普通预约详情')
   assert(scopedGuideDetail.json.data.credit_score !== undefined, '管理员预约详情应返回申请人信用分')
   assert(String(scopedGuideDetail.json.data.user_status || '').trim(), '管理员预约详情应返回申请人账号状态')
+  assert(!Object.prototype.hasOwnProperty.call(scopedGuideDetail.json.data, 'phone'), '管理员预约详情不得返回申请人手机号')
+  assert(!Object.prototype.hasOwnProperty.call(scopedGuideDetail.json.data, 'reservation_code'), '管理员预约详情不得返回学生签到凭证码')
 
   const boundaryReservations = await api('/reservation?page=1&pageSize=100', {
     headers: { Authorization: 'Bearer ' + superAdminLogin.json.data.token }
@@ -280,6 +282,8 @@ async function main() {
   assert(counselorDetail.json.code === 200, '辅导员应能读取重点预约详情')
   assert(counselorDetail.json.data.credit_score !== undefined, '重点预约详情应返回申请人信用分')
   assert(String(counselorDetail.json.data.user_status || '').trim(), '重点预约详情应返回申请人账号状态')
+  assert(!Object.prototype.hasOwnProperty.call(counselorDetail.json.data, 'phone'), '辅导员重点预约详情不得返回申请人手机号')
+  assert(!Object.prototype.hasOwnProperty.call(counselorDetail.json.data, 'reservation_code'), '辅导员重点预约详情不得返回学生签到凭证码')
 
   const expiredAccessToken = jwt.sign({
     id: login.json.data.userInfo.id,
@@ -309,6 +313,8 @@ async function main() {
   assert(detail.json.code === 200, '预约详情应可读取')
   assert(detail.json.data.room_name && detail.json.data.room_name.indexOf('C110') !== -1, '预约详情应返回 C110 功能房')
   assert(!detail.json.data.room_number, '预约详情不应把宿舍号 B301 当成功能房房号返回')
+  assert(Object.prototype.hasOwnProperty.call(detail.json.data, 'phone'), '学生本人预约详情应保留联系信息契约')
+  assert(Object.prototype.hasOwnProperty.call(detail.json.data, 'reservation_code'), '学生本人预约详情应保留签到凭证契约')
 
   const qr = await api('/reservation/12/qrcode', {
     headers: { Authorization: 'Bearer ' + refresh.json.data.token }
