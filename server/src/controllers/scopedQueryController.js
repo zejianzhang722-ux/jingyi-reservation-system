@@ -63,7 +63,7 @@ const loadPendingRows = async function(req, limit, offset) {
     return { rows, query, total };
   }
 
-  let sql = 'SELECT r.*, rm.name AS room_name, rm.name AS roomName, rm.building_id, ' +
+  let sql = 'SELECT r.*, rm.name AS room_name, rm.name AS roomName, rm.type AS room_type, rm.type AS roomType, rm.building_id, ' +
     'u.real_name AS user_name, u.real_name AS userName, u.student_id, u.student_no ' +
     'FROM reservations r JOIN rooms rm ON rm.id = r.room_id JOIN users u ON u.id = r.user_id' +
     query.where + ' ORDER BY r.created_at ASC, r.id ASC';

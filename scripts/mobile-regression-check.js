@@ -68,6 +68,9 @@ async function main() {
     assertApprovalQueue({ data: { list: [{ status: 'approved' }], total: 1, page: 1, pageSize: 10 } }, 'pending', '错误状态', 10)
   }, '审核队列包含错误状态时检查必须失败')
 
+  const scopedQuerySource = fs.readFileSync(path.join(__dirname, '../server/src/controllers/scopedQueryController.js'), 'utf8')
+  assert(scopedQuerySource.includes('rm.type AS room_type, rm.type AS roomType'), '统一待审查询应显式返回 room_type 和 roomType')
+
   const localData = require('../miniapp/utils/local-data')
   assert(localData.resolveRoomId('B228') === 1, 'B228 应解析为功能房 1')
   assert(localData.resolveRoomId('B228自习室') === 1, 'B228自习室 应解析为功能房 1')
@@ -131,6 +134,10 @@ async function main() {
   })
   assert(guideOrdinaryAudit.json.code === 200, '导生管理员应能读取普通预约审核队列')
   assertApprovalQueue(guideOrdinaryAudit.json, 'pending', '导生管理员普通审核队列', 10)
+  assert(guideOrdinaryAudit.json.data.list.every(function(item) {
+    const room = localData.getRoomById(item.room_id || item.roomId)
+    return room && item.room_type === room.type
+  }), '导生管理员普通审核队列应返回与房间一致的 room_type')
   const guideCounselorAudit = await api('/audit/pending?type=counselor&page=1&pageSize=10', {
     headers: { Authorization: 'Bearer ' + adminLogin.json.data.token }
   })
