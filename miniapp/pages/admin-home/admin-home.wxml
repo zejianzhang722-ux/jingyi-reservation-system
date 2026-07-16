@@ -56,7 +56,7 @@
       <text class="stat-unavailable" wx:elif="{{feedbackStatus === 'error'}}">暂不可用</text>
       <text class="stat-unavailable" wx:else>加载中</text>
       <text class="stat-label">待处理反馈</text>
-      <view class="feedback-retry" wx:if="{{feedbackStatus === 'error'}}" bindtap="onRetryStats">重新加载</view>
+      <view class="feedback-retry" wx:if="{{feedbackStatus === 'error'}}" bindtap="onRetryStats" aria-role="button" aria-label="重新加载反馈统计">重新加载</view>
     </view>
   </view>
   <view class="stats-message" wx:if="{{statsStatus === 'loading' && !hasTrustedStats}}">统计加载中，暂不显示未经确认的数字</view>

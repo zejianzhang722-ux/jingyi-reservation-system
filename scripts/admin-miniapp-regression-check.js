@@ -852,6 +852,7 @@ async function main() {
   assert(homeSource.indexOf('adminPolicy.canQuickApprove') !== -1, '快捷审批处理函数必须再次按角色和状态校验权限')
   assert(homeWxml.indexOf('aria-label="切换到普通待审队列"') !== -1 && homeWxml.indexOf('aria-label="切换到重点待审队列"') !== -1, '审批队列切换应提供无障碍名称')
   assert(homeWxml.indexOf('aria-label="扫码签到"') !== -1 && homeWxml.indexOf('aria-label="查看预约详情"') !== -1, '扫码和查看操作应提供无障碍名称')
+  assert(homeWxml.indexOf('aria-label="重新加载反馈统计"') !== -1 && /\.retry-button\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss), '反馈重试应有无障碍名称且列表重试触控高度应不小于 88rpx')
   assert(homeWxml.indexOf('aria-label="通过预约"') !== -1 && homeWxml.indexOf('aria-label="拒绝预约"') !== -1, '快捷审批操作应提供无障碍名称')
   assert(/\.queue-tab\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss) && /\.scan-checkin-card\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss), '队列和扫码主要触控区高度应不小于 88rpx')
   assert(homeWxml.indexOf('<navigator class="queue-tab') === -1, '队列切换应在当前页面完成，不应重复导航首页')
