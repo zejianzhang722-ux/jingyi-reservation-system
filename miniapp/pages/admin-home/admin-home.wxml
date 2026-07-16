@@ -8,8 +8,8 @@
   </view>
 
   <view class="queue-tabs">
-    <view class="queue-tab {{queueType === 'admin' ? 'active' : ''}}" data-type="admin" bindtap="onQueueChange">普通待审</view>
-    <view wx:if="{{canSwitchQueue}}" class="queue-tab {{queueType === 'counselor' ? 'active' : ''}}" data-type="counselor" bindtap="onQueueChange">重点待审</view>
+    <view class="queue-tab {{queueType === 'admin' ? 'active' : ''}}" data-type="admin" bindtap="onQueueChange" aria-role="button" aria-label="切换到普通待审队列">普通待审</view>
+    <view wx:if="{{canSwitchQueue}}" class="queue-tab {{queueType === 'counselor' ? 'active' : ''}}" data-type="counselor" bindtap="onQueueChange" aria-role="button" aria-label="切换到重点待审队列">重点待审</view>
   </view>
 
   <view class="priority-note" wx:if="{{queueType === 'counselor'}}">
@@ -17,7 +17,7 @@
     <text class="priority-note-text">此队列需查看完整申请后审核，不提供快捷通过。</text>
   </view>
 
-  <view class="scan-checkin-card" bindtap="onScanCheckin">
+  <view class="scan-checkin-card" bindtap="onScanCheckin" aria-role="button" aria-label="扫码签到">
     <view class="scan-checkin-icon"></view>
     <view class="scan-checkin-content">
       <text class="scan-checkin-title">扫码签到</text>
@@ -28,35 +28,43 @@
 
   <view class="stats-grid">
     <view class="stat-card">
-      <text class="stat-value">{{ordinaryPendingCount}}</text>
+      <text class="stat-value">{{hasTrustedStats ? ordinaryPendingCount : '--'}}</text>
       <text class="stat-label">普通待审</text>
     </view>
     <view class="stat-card" wx:if="{{canSwitchQueue}}">
-      <text class="stat-value">{{counselorPendingCount}}</text>
+      <text class="stat-value">{{hasTrustedStats ? counselorPendingCount : '--'}}</text>
       <text class="stat-label">重点待审</text>
     </view>
     <view class="stat-card">
-      <text class="stat-value">{{actionablePendingCount}}</text>
+      <text class="stat-value">{{hasTrustedStats ? actionablePendingCount : '--'}}</text>
       <text class="stat-label">可处理待审</text>
     </view>
     <view class="stat-card">
-      <text class="stat-value">{{todayReservations}}</text>
+      <text class="stat-value">{{hasTrustedStats ? todayReservations : '--'}}</text>
       <text class="stat-label">今日预约</text>
     </view>
     <view class="stat-card">
-      <text class="stat-value">{{inUseCount}}</text>
+      <text class="stat-value">{{hasTrustedStats ? inUseCount : '--'}}</text>
       <text class="stat-label">使用中</text>
     </view>
     <view class="stat-card">
-      <text class="stat-value">{{activeRoomCount}}</text>
+      <text class="stat-value">{{hasTrustedStats ? activeRoomCount : '--'}}</text>
       <text class="stat-label">开放房间</text>
     </view>
     <view class="stat-card" wx:if="{{canManageFeedback}}">
-      <text class="stat-value">{{feedbackCount}}</text>
+      <text class="stat-value" wx:if="{{feedbackStatus === 'ready'}}">{{feedbackCount}}</text>
+      <text class="stat-unavailable" wx:elif="{{feedbackStatus === 'error'}}">暂不可用</text>
+      <text class="stat-unavailable" wx:else>加载中</text>
       <text class="stat-label">待处理反馈</text>
+      <view class="feedback-retry" wx:if="{{feedbackStatus === 'error'}}" bindtap="onRetryStats">重新加载</view>
     </view>
   </view>
-  <view class="stats-message" wx:if="{{statsStatus === 'error'}}">{{statsError}}</view>
+  <view class="stats-message" wx:if="{{statsStatus === 'loading' && !hasTrustedStats}}">统计加载中，暂不显示未经确认的数字</view>
+  <view class="stats-message" wx:elif="{{statsStatus === 'error'}}">
+    <text>{{statsError}}</text>
+    <view class="stats-retry" bindtap="onRetryStats" aria-role="button" aria-label="重新加载统计">重新加载统计</view>
+    <text class="trusted-empty" wx:if="{{!hasTrustedStats}}">暂无可信统计数据</text>
+  </view>
 
   <view class="section-heading">
     <text class="section-title">{{queueLabel}}</text>
@@ -70,7 +78,7 @@
   <view class="state-card" wx:elif="{{listStatus === 'error'}}">
     <text class="state-title">加载失败</text>
     <text class="state-desc">{{listError}}</text>
-    <view class="retry-button" bindtap="onRetryList">重新加载</view>
+    <view class="retry-button" bindtap="onRetryList" aria-role="button" aria-label="重新加载审批队列">重新加载</view>
   </view>
   <view class="state-card" wx:elif="{{listStatus === 'empty'}}">
     <text class="state-title">当前没有待审预约</text>
@@ -105,11 +113,11 @@
       <view class="pending-actions">
         <text class="processing-text" wx:if="{{processingById[item.id]}}">正在处理，请稍候</text>
         <block wx:else>
-          <view wx:if="{{queueType === 'counselor'}}" class="btn-detail primary" data-id="{{item.id}}" bindtap="onViewDetail">查看并审核</view>
-          <block wx:if="{{queueType === 'admin'}}">
-            <view class="btn-detail" data-id="{{item.id}}" bindtap="onViewDetail">查看详情</view>
-            <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove">通过</view>
-            <view class="btn-reject" data-id="{{item.id}}" bindtap="onReject">拒绝</view>
+          <view wx:if="{{queueType === 'counselor'}}" class="btn-detail primary" data-id="{{item.id}}" bindtap="onViewDetail" aria-role="button" aria-label="查看预约详情并审核">查看并审核</view>
+          <block wx:if="{{queueType === 'admin' && item.status === 'pending'}}">
+            <view class="btn-detail" data-id="{{item.id}}" bindtap="onViewDetail" aria-role="button" aria-label="查看预约详情">查看详情</view>
+            <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove" aria-role="button" aria-label="通过预约">通过</view>
+            <view class="btn-reject" data-id="{{item.id}}" bindtap="onReject" aria-role="button" aria-label="拒绝预约">拒绝</view>
           </block>
         </block>
       </view>

@@ -25,8 +25,10 @@ Page({
     todayReservations: 0,
     inUseCount: 0,
     feedbackCount: 0,
+    feedbackStatus: 'idle',
     statsStatus: 'loading',
     statsError: '',
+    hasTrustedStats: false,
     listStatus: 'loading',
     listError: '',
     pendingList: [],
@@ -94,25 +96,38 @@ Page({
         actionablePendingCount: numberOrZero(data.actionablePendingCount),
         activeRoomCount: numberOrZero(data.activeRoomCount),
         todayReservations: numberOrZero(data.todayReservations),
-        inUseCount: numberOrZero(data.inUseCount),
+        inUseCount: numberOrZero(data.usingCount !== undefined ? data.usingCount : data.inUseCount),
         statsStatus: 'ready',
-        statsError: ''
+        statsError: '',
+        hasTrustedStats: true
       })
     }).catch(function () {
       if (requestVersion !== that._statsRequestVersion) return
-      that.setData({ statsStatus: 'error', statsError: '统计数据暂时无法更新，当前显示最近一次可信结果' })
+      that.setData({
+        statsStatus: 'error',
+        statsError: that.data.hasTrustedStats
+          ? '统计更新失败，当前显示上次结果'
+          : '暂无可信统计数据，请重新加载'
+      })
     })
 
     var feedbackRequest = Promise.resolve()
     if (adminPolicy.can(role, 'feedbackManage')) {
+      this.setData({ feedbackStatus: 'loading' })
       feedbackRequest = request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
         if (requestVersion !== that._statsRequestVersion) return
-        that.setData({ feedbackCount: numberOrZero(data && data.total) })
-      }).catch(function () {})
+        that.setData({ feedbackCount: numberOrZero(data && data.total), feedbackStatus: 'ready' })
+      }).catch(function () {
+        if (requestVersion !== that._statsRequestVersion) return
+        that.setData({ feedbackStatus: 'error' })
+      })
     } else {
-      this.setData({ feedbackCount: 0 })
+      this.setData({ feedbackCount: 0, feedbackStatus: 'idle' })
     }
     return Promise.all([dashboardRequest, feedbackRequest])
+  },
+  onRetryStats: function () {
+    return this.loadStats()
   },
   loadPendingList: function () {
     var that = this
@@ -166,6 +181,10 @@ Page({
   isProcessing: function (id) {
     return !!this.data.processingById[id]
   },
+  canQuickApproveItem: function (id) {
+    var item = (this.data.pendingList || []).find(function (candidate) { return Number(candidate.id) === Number(id) })
+    return !!item && this.data.queueType === 'admin' && adminPolicy.canQuickApprove(auth.getUserRole(), item.status)
+  },
   setProcessing: function (id, processing) {
     var next = Object.assign({}, this.data.processingById)
     if (processing) next[id] = true
@@ -211,18 +230,18 @@ Page({
   onApprove: function (event) {
     var that = this
     var id = event.currentTarget.dataset.id
-    if (this.data.queueType !== 'admin' || this.isProcessing(id)) return
+    if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
     wx.showModal({
       title: '确认审批',
       content: '确定通过该预约申请？',
       success: function (result) {
         if (!result.confirm || that.isProcessing(id)) return
         that.setProcessing(id, true)
-        request.post('/audit/' + id + '/approve', {}).then(function () {
+        request.post('/audit/' + id + '/approve', {}, { silent: true }).then(function () {
           wx.showToast({ title: '已通过', icon: 'success' })
           return Promise.all([that.loadPendingList(), that.loadStats()])
-        }, function () {
-          wx.showToast({ title: '操作失败', icon: 'none' })
+        }, function (err) {
+          wx.showToast({ title: err && err.message ? err.message : '操作失败', icon: 'none' })
         }).then(function () {
           that.setProcessing(id, false)
         }, function () {
@@ -234,7 +253,7 @@ Page({
   onReject: function (event) {
     var that = this
     var id = event.currentTarget.dataset.id
-    if (this.data.queueType !== 'admin' || this.isProcessing(id)) return
+    if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
     wx.showModal({
       title: '拒绝预约',
       content: '请输入拒绝理由',
@@ -249,11 +268,11 @@ Page({
         }
         if (that.isProcessing(id)) return
         that.setProcessing(id, true)
-        request.post('/audit/' + id + '/reject', { reason: reason }).then(function () {
+        request.post('/audit/' + id + '/reject', { reason: reason }, { silent: true }).then(function () {
           wx.showToast({ title: '已拒绝', icon: 'success' })
           return Promise.all([that.loadPendingList(), that.loadStats()])
-        }, function () {
-          wx.showToast({ title: '操作失败', icon: 'none' })
+        }, function (err) {
+          wx.showToast({ title: err && err.message ? err.message : '操作失败', icon: 'none' })
         }).then(function () {
           that.setProcessing(id, false)
         }, function () {

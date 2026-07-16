@@ -841,9 +841,19 @@ async function main() {
   const approvalCalls = []
   const homeSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.js'), 'utf8')
   const homeWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.wxml'), 'utf8')
+  const homeWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.wxss'), 'utf8')
   assert(homeWxml.indexOf('加载失败') !== -1 && homeWxml.indexOf('重新加载') !== -1, '审批工作台应提供明确的加载失败和重新加载状态')
   assert(homeWxml.indexOf('item.purpose') !== -1 && homeWxml.indexOf('item.participants') !== -1, '审批卡片应展示用途和人数')
+  assert(homeWxml.indexOf('统计加载中') !== -1 && homeWxml.indexOf('暂无可信统计数据') !== -1, '首次统计加载和失败应明确说明数据尚不可信')
+  assert(homeWxml.indexOf('onRetryStats') !== -1 && homeWxml.indexOf('重新加载统计') !== -1, '统计失败应提供重新加载入口')
+  assert(homeWxml.indexOf('feedbackStatus') !== -1 && homeWxml.indexOf('暂不可用') !== -1, '反馈指标失败时应显示不可用状态而不是可信 0')
   assert(homeWxml.indexOf("queueType === 'admin'") !== -1, '只有普通队列应显示快捷审批操作')
+  assert(homeWxml.indexOf("item.status === 'pending'") !== -1, '普通队列也只能为 pending 卡片渲染快捷审批')
+  assert(homeSource.indexOf('adminPolicy.canQuickApprove') !== -1, '快捷审批处理函数必须再次按角色和状态校验权限')
+  assert(homeWxml.indexOf('aria-label="切换到普通待审队列"') !== -1 && homeWxml.indexOf('aria-label="切换到重点待审队列"') !== -1, '审批队列切换应提供无障碍名称')
+  assert(homeWxml.indexOf('aria-label="扫码签到"') !== -1 && homeWxml.indexOf('aria-label="查看预约详情"') !== -1, '扫码和查看操作应提供无障碍名称')
+  assert(homeWxml.indexOf('aria-label="通过预约"') !== -1 && homeWxml.indexOf('aria-label="拒绝预约"') !== -1, '快捷审批操作应提供无障碍名称')
+  assert(/\.queue-tab\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss) && /\.scan-checkin-card\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss), '队列和扫码主要触控区高度应不小于 88rpx')
   assert(homeWxml.indexOf('<navigator class="queue-tab') === -1, '队列切换应在当前页面完成，不应重复导航首页')
   assert(homeSource.indexOf('data.activeRooms || 12') === -1, '合法的开放房间数 0 不得被固定数字覆盖')
   assert(homeSource.indexOf('/room/stats') === -1 && homeSource.indexOf('activeRooms: 12') === -1, '首页统计不得请求旧房间统计或伪造开放房间数')
@@ -861,7 +871,7 @@ async function main() {
       actionablePendingCount: 3,
       activeRoomCount: 0,
       todayReservations: 2,
-      inUseCount: 1
+      usingCount: 7
     })
     if (url === '/feedback') return Promise.resolve({ total: 3 })
     return Promise.resolve([])
@@ -898,6 +908,7 @@ async function main() {
   assert(!approvalCalls.some(function(call) { return call.url === '/audit/pending' && call.params.type === 'counselor' }), '导生管理员不得请求 counselor 审核队列')
   assert(approvalCalls.some(function(call) { return call.url === '/stats/dashboard' }), '首页统计应只读取统一仪表盘接口')
   assert(homePage.data.queueType === 'admin' && homePage.data.queueLabel === '普通预约审核', '普通审核入口应显示普通队列标签')
+  assert(homePage.data.inUseCount === 7, '首页使用中数量应读取仪表盘真实 usingCount 字段')
   assert(homePage.data.pendingList.length === 1 && homePage.data.pendingList[0].id === 101, '审核列表应处理 list/total/page/pageSize 响应')
   assert(approvalCalls.filter(function(call) { return call.url === '/audit/pending' }).length === 1, '首页首次 onLoad + onShow 只能产生一轮列表请求')
   assert(!approvalCalls.some(function(call) { return call.url === '/feedback' }), '导生管理员不应请求反馈管理数据')
@@ -914,6 +925,27 @@ async function main() {
   homePage.onReject.call(homePage, { currentTarget: { dataset: { id: 101 } } })
   await flushPromises()
   assert(approvalCalls.some(function(call) { return call.method === 'POST' && call.url === '/audit/101/reject' && call.body.reason === '时间冲突' }), '拒绝应 POST /audit/101/reject 并传递理由')
+
+  const approvalErrorCalls = []
+  toastCalls.length = 0
+  request.post = function(url, body, options) {
+    approvalErrorCalls.push({ url: url, body: body || {}, options: options || {} })
+    return Promise.reject({ message: '排期已失效' })
+  }
+  homePage.setData({ queueType: 'admin', pendingList: [{ id: 103, status: 'pending' }] })
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 103 } } })
+  await flushPromises()
+  assert(approvalErrorCalls[0] && approvalErrorCalls[0].options.silent === true, '快捷审批请求应静默请求层的重复错误提示')
+  assert(toastCalls.length === 1 && toastCalls[0].title === '排期已失效', '快捷审批失败应只提示一次并保留服务端具体原因')
+  approvalErrorCalls.length = 0
+  toastCalls.length = 0
+  modalResponse = { confirm: true, content: '材料不足' }
+  homePage.onReject.call(homePage, { currentTarget: { dataset: { id: 103 } } })
+  await flushPromises()
+  assert(approvalErrorCalls[0] && approvalErrorCalls[0].options.silent === true, '快捷拒绝请求也应静默请求层的重复错误提示')
+  assert(toastCalls.length === 1 && toastCalls[0].title === '排期已失效', '快捷拒绝失败应只提示一次并保留服务端具体原因')
+  request.post = approvalPost
+  modalResponse = { confirm: true, content: '时间冲突' }
 
   approvalCalls.length = 0
   storage.userInfo.role = 'counselor'
@@ -945,6 +977,10 @@ async function main() {
   assert(approvalCalls.length === 0, '选择当前队列时不应重复请求')
   homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
   assert(!approvalCalls.some(function(call) { return call.method === 'POST' }), '重点队列不得直接快捷审批')
+  homePage.setData({ queueType: 'admin', pendingList: [{ id: 101, status: 'counselor_pending' }] })
+  homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  homePage.onReject.call(homePage, { currentTarget: { dataset: { id: 101 } } })
+  assert(!approvalCalls.some(function(call) { return call.method === 'POST' }), '普通队列混入 counselor_pending 数据时也不得快捷审批')
   approvalCalls.length = 0
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, { queueType: 'counselor' })
@@ -953,6 +989,22 @@ async function main() {
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'counselor', '超级管理员应消费明确的辅导员队列参数')
   assert(homePage.data.queueType === 'counselor', '超级管理员首页默认应是重点队列')
+
+  const ordinaryQueueRead = deferred()
+  const counselorQueueRead = deferred()
+  request.get = function(url, params) {
+    if (url === '/audit/pending') return params.type === 'counselor' ? counselorQueueRead.promise : ordinaryQueueRead.promise
+    return Promise.resolve({})
+  }
+  homePage.setData({ queueType: 'admin', queueLabel: '普通预约审核', pendingList: [] })
+  homePage.loadPendingList.call(homePage)
+  homePage.onQueueChange.call(homePage, { currentTarget: { dataset: { type: 'counselor' } } })
+  counselorQueueRead.resolve({ list: [{ id: 202, status: 'counselor_pending' }] })
+  await flushPromises()
+  ordinaryQueueRead.resolve({ list: [{ id: 201, status: 'pending' }] })
+  await flushPromises()
+  assert(homePage.data.queueType === 'counselor' && homePage.data.pendingList.length === 1 && homePage.data.pendingList[0].id === 202, '旧普通队列响应晚到时不得覆盖已切换的重点队列')
+  request.get = approvalGet
 
   const failedPendingPage = loadPage('miniapp/pages/admin-home/admin-home.js')
   storage.userInfo.role = 'admin'
@@ -973,6 +1025,58 @@ async function main() {
   cachedRolePage.onShow.call(cachedRolePage)
   await flushPromises()
   assert(cachedRolePage.data.queueType === 'admin' && !cachedRolePage.data.canSwitchQueue, '缓存页面遇到角色切换时必须恢复当前角色的默认授权队列')
+
+  const statsStatePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  statsStatePage.onLoad.call(statsStatePage, {})
+  assert(statsStatePage.data.statsStatus === 'loading' && statsStatePage.data.hasTrustedStats === false, '首次统计加载时不应把初始 0 当作可信结果')
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return Promise.reject(new Error('dashboard unavailable'))
+    return Promise.resolve({})
+  }
+  await statsStatePage.loadStats.call(statsStatePage)
+  assert(statsStatePage.data.statsStatus === 'error' && statsStatePage.data.hasTrustedStats === false, '首次统计失败后必须保持无可信数据状态')
+  assert(statsStatePage.data.statsError.indexOf('暂无可信统计数据') !== -1, '首次统计失败应说明暂无可信统计数据')
+  assert(typeof statsStatePage.onRetryStats === 'function', '统计失败后应可重新加载')
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return Promise.resolve({ ordinaryPendingCount: 5, counselorPendingCount: 2, actionablePendingCount: 7, activeRoomCount: 4, todayReservations: 8, usingCount: 3 })
+    return Promise.resolve({})
+  }
+  await statsStatePage.onRetryStats.call(statsStatePage)
+  assert(statsStatePage.data.statsStatus === 'ready' && statsStatePage.data.hasTrustedStats === true, '统计成功后应标记已有可信结果')
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return Promise.reject(new Error('refresh unavailable'))
+    return Promise.resolve({})
+  }
+  await statsStatePage.loadStats.call(statsStatePage)
+  assert(statsStatePage.data.hasTrustedStats === true && statsStatePage.data.ordinaryPendingCount === 5, '已有可信结果时刷新失败应保留旧值')
+  assert(statsStatePage.data.statsError.indexOf('显示上次结果') !== -1, '已有可信结果刷新失败应明确说明显示上次结果')
+  request.get = approvalGet
+
+  storage.userInfo.role = 'counselor'
+  const feedbackStatePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  feedbackStatePage.onLoad.call(feedbackStatePage, {})
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return Promise.resolve({})
+    if (url === '/feedback') return Promise.reject(new Error('feedback unavailable'))
+    return Promise.resolve({})
+  }
+  await feedbackStatePage.loadStats.call(feedbackStatePage)
+  assert(feedbackStatePage.data.feedbackStatus === 'error', '反馈数量首次失败应进入不可用状态')
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return Promise.resolve({})
+    if (url === '/feedback') return Promise.resolve({ total: 6 })
+    return Promise.resolve({})
+  }
+  await feedbackStatePage.onRetryStats.call(feedbackStatePage)
+  assert(feedbackStatePage.data.feedbackStatus === 'ready' && feedbackStatePage.data.feedbackCount === 6, '反馈数量成功后应成为可信结果')
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return Promise.resolve({})
+    if (url === '/feedback') return Promise.reject(new Error('feedback refresh unavailable'))
+    return Promise.resolve({})
+  }
+  await feedbackStatePage.loadStats.call(feedbackStatePage)
+  assert(feedbackStatePage.data.feedbackStatus === 'error' && feedbackStatePage.data.feedbackCount === 6, '反馈刷新失败应保留旧值但标记不可用')
+  request.get = approvalGet
 
   approvalCalls.length = 0
   storage.userInfo.role = 'admin'
@@ -1004,7 +1108,7 @@ async function main() {
 
   modalResponse = { confirm: true, content: '重复提交检查' }
   approvalCalls.length = 0
-  homePage.setData({ queueType: 'admin' })
+  homePage.setData({ queueType: 'admin', pendingList: [{ id: 101, status: 'pending' }, { id: 102, status: 'pending' }] })
   const homeApproval = deferred()
   const homePendingRefresh = deferred()
   const homeStatsRefresh = deferred()
@@ -1036,6 +1140,7 @@ async function main() {
 
   const failedHomeApproval = deferred()
   request.post = function() { return failedHomeApproval.promise }
+  homePage.setData({ pendingList: [{ id: 102, status: 'pending' }] })
   homePage.onApprove.call(homePage, { currentTarget: { dataset: { id: 102 } } })
   failedHomeApproval.reject(new Error('expected failure'))
   await flushPromises()
