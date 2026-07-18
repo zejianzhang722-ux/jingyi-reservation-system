@@ -1597,7 +1597,7 @@ async function main() {
   const manageWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.wxml'), 'utf8')
   const manageWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.wxss'), 'utf8')
   assert(manageSource.indexOf("name: '普通预约审核'") !== -1 && manageSource.indexOf('共享空间等普通待审预约') !== -1, '普通审核入口应使用管理员能理解的名称和范围说明')
-  assert(manageSource.indexOf("name: '重点预约审核'") !== -1 && manageSource.indexOf('辅导员特殊空间') !== -1, '重点审核入口应说明辅导员特殊空间范围')
+  assert(manageSource.indexOf("name: '重点预约审核'") !== -1 && manageSource.indexOf('处理需辅导员把关的特殊空间预约') !== -1, '重点审核入口应准确说明需辅导员把关的特殊空间预约')
   assert(manageWxml.indexOf('entry.badge') !== -1, '管理页审核入口应能展示待办徽标')
   assert(/padding:[^;]*calc\(180rpx \+ env\(safe-area-inset-bottom\)\)/.test(manageWxss), '管理页底部应为固定导航和安全区留足空间')
   assert(manageWxss.indexOf('#667085') !== -1, '管理页说明文字颜色不应过浅')

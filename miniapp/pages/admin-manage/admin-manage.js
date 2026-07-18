@@ -7,7 +7,7 @@ var CATALOG = [
     title: '工作台与统计',
     items: [
       { key: 'pending', name: '普通预约审核', desc: '处理共享空间等普通待审预约', icon: 'approve', tone: 'gold', capability: 'ordinaryApproval' },
-      { key: 'counselorPending', name: '重点预约审核', desc: '处理辅导员特殊空间等重点待审预约', icon: 'approve', tone: 'red', capability: 'counselorApproval' },
+      { key: 'counselorPending', name: '重点预约审核', desc: '处理需辅导员把关的特殊空间预约', icon: 'approve', tone: 'red', capability: 'counselorApproval' },
       { key: 'stats', name: '数据统计', desc: '查看预约、使用、爽约和信用概览', icon: 'chart', tone: 'blue', capability: 'statsView' }
     ]
   },
