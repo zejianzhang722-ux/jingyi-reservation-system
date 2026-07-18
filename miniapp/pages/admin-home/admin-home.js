@@ -86,7 +86,9 @@ Page({
       this.ensureAdmin()
       return false
     }
-    if (role === expectedRole && this.data.queueType === expectedQueue && adminPolicy.queueType(role, expectedQueue) === expectedQueue) {
+    if (role === expectedRole && (expectedQueue === undefined || (
+      this.data.queueType === expectedQueue && adminPolicy.queueType(role, expectedQueue) === expectedQueue
+    ))) {
       return true
     }
     if (this._loadedRole !== role) {
@@ -119,13 +121,12 @@ Page({
   loadStats: function () {
     var that = this
     var role = auth.getUserRole()
-    var queueType = this.data.queueType
     this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
     var requestVersion = this._statsRequestVersion
     this.setData({ statsStatus: 'loading', statsError: '' })
 
     var dashboardRequest = request.get('/stats/dashboard', {}, { silent: true }).then(function (data) {
-      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
+      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
       data = data || {}
       that.setData({
         ordinaryPendingCount: numberOrZero(data.ordinaryPendingCount),
@@ -139,7 +140,7 @@ Page({
         hasTrustedStats: true
       })
     }).catch(function () {
-      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
+      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
       that.setData({
         statsStatus: 'error',
         statsError: that.data.hasTrustedStats
@@ -152,10 +153,10 @@ Page({
     if (adminPolicy.can(role, 'feedbackManage')) {
       this.setData({ feedbackStatus: 'loading' })
       feedbackRequest = request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
-        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
+        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
         that.setData({ feedbackCount: numberOrZero(data && data.total), feedbackStatus: 'ready' })
       }).catch(function () {
-        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
+        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
         that.setData({ feedbackStatus: 'error' })
       })
     } else {

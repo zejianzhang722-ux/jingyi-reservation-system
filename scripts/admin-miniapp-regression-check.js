@@ -1322,6 +1322,26 @@ async function main() {
   await flushPromises()
   assert(homePage.data.ordinaryPendingCount === 9 && homePage.data.activeRoomCount === 0, '首页较旧的仪表盘响应不得覆盖最新统计，合法 0 必须保留')
   storage.userInfo.role = 'counselor'
+  const queueSwitchStatsPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  queueSwitchStatsPage.onLoad.call(queueSwitchStatsPage, { queueType: 'counselor' })
+  const queueSwitchDashboard = deferred()
+  const queueSwitchFeedback = deferred()
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return queueSwitchDashboard.promise
+    if (url === '/feedback') return queueSwitchFeedback.promise
+    if (url === '/audit/pending') return Promise.resolve({ list: [], total: 0 })
+    return Promise.resolve({})
+  }
+  queueSwitchStatsPage.loadStats.call(queueSwitchStatsPage)
+  queueSwitchStatsPage.onQueueChange.call(queueSwitchStatsPage, { currentTarget: { dataset: { type: 'admin' } } })
+  queueSwitchDashboard.resolve({ ordinaryPendingCount: 4, counselorPendingCount: 5, actionablePendingCount: 9, activeRoomCount: 7, todayReservations: 6, usingCount: 2 })
+  queueSwitchFeedback.resolve({ total: 3 })
+  await flushPromises()
+  await flushPromises()
+  assert(queueSwitchStatsPage.data.queueType === 'admin', '同一角色应可在统计请求期间切换审批队列')
+  assert(queueSwitchStatsPage.data.statsStatus === 'ready' && queueSwitchStatsPage.data.ordinaryPendingCount === 4 && queueSwitchStatsPage.data.counselorPendingCount === 5, '切换审批队列后原统计响应仍应完成，不能永久停留在加载中')
+  assert(queueSwitchStatsPage.data.feedbackStatus === 'ready' && queueSwitchStatsPage.data.feedbackCount === 3, '切换审批队列后反馈统计也应正常完成')
+  storage.userInfo.role = 'counselor'
   const changedRoleListPage = loadPage('miniapp/pages/admin-home/admin-home.js')
   changedRoleListPage.onLoad.call(changedRoleListPage, { queueType: 'counselor' })
   const oldCounselorList = deferred()
