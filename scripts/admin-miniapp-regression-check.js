@@ -1235,20 +1235,27 @@ async function main() {
   await flushPromises()
   assert(!reservationPage.data.processingById[102], '全部预约页审批失败后也应恢复该预约操作状态')
 
+  storage.userInfo.role = 'admin'
+  homePage.applyRole.call(homePage, 'admin', 'admin')
+  homePage.setData({ queueType: 'admin', queueLabel: '普通预约审核', pendingList: [], listStatus: 'loading' })
   const homeRequests = [deferred(), deferred()]
+  const homeRequestParams = []
   let homeRequestIndex = 0
-  request.get = function(url) {
-    if (url === '/audit/pending') return homeRequests[homeRequestIndex++].promise
+  request.get = function(url, params) {
+    if (url === '/audit/pending') {
+      homeRequestParams.push(params || {})
+      return homeRequests[homeRequestIndex++].promise
+    }
     return Promise.resolve({})
   }
   homePage.loadPendingList.call(homePage)
   homePage.loadPendingList.call(homePage)
-  homeRequests[1].resolve({ list: [{ id: 202 }], total: 1, page: 1, pageSize: 10 })
+  assert(homeRequestParams.length === 2 && homeRequestParams.every(function(params) { return params.type === 'admin' }), '同一普通队列连续刷新必须发起两次 admin 队列请求')
+  homeRequests[1].resolve({ list: [{ id: 202, status: 'pending' }], total: 1, page: 1, pageSize: 10 })
   await flushPromises()
-  homeRequests[0].resolve({ list: [{ id: 201 }], total: 1, page: 1, pageSize: 10 })
+  homeRequests[0].resolve({ list: [{ id: 201, status: 'pending' }], total: 1, page: 1, pageSize: 10 })
   await flushPromises()
-  assert(homePage.data.pendingList[0].id === 202, '首页旧列表响应不得覆盖较新的列表结果')
-
+  assert(homePage.data.queueType === 'admin' && homePage.data.pendingList[0].id === 202, '同一普通队列中第一次请求晚到时不得覆盖第二次刷新结果')
   const dashboardRequests = [deferred(), deferred()]
   let dashboardRequestIndex = 0
   request.get = function(url) {
