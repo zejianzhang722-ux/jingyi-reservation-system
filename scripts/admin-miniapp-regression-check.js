@@ -1175,6 +1175,57 @@ async function main() {
   failedHomeApproval.reject(new Error('expected failure'))
   await flushPromises()
   assert(!homePage.data.processingById[102], '首页审批失败后也应恢复该预约操作状态')
+
+  const modalStateCalls = []
+  request.get = function(url, params) {
+    modalStateCalls.push({ method: 'GET', url: url, params: params || {} })
+    if (url === '/audit/pending') return Promise.resolve({ list: [], total: 0, page: 1, pageSize: 10 })
+    if (url === '/stats/dashboard') return Promise.resolve({ ordinaryPendingCount: 0, counselorPendingCount: 0, actionablePendingCount: 0, activeRoomCount: 1 })
+    return Promise.resolve({})
+  }
+  request.post = function(url, body) {
+    modalStateCalls.push({ method: 'POST', url: url, body: body || {} })
+    return Promise.resolve({})
+  }
+  storage.userInfo.role = 'counselor'
+  var modalRolePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  modalRolePage.onLoad.call(modalRolePage, { queueType: 'admin' })
+  modalRolePage.setData({ pendingList: [{ id: 106, status: 'pending' }] })
+  holdModal = true
+  pendingModalSuccess = null
+  modalRolePage.onApprove.call(modalRolePage, { currentTarget: { dataset: { id: 106 } } })
+  assert(typeof pendingModalSuccess === 'function', '首页批准弹窗应等待用户确认')
+  storage.userInfo.role = 'admin'
+  pendingModalSuccess({ confirm: true, content: '' })
+  await flushPromises()
+  assert(!modalStateCalls.some(function(call) { return call.method === 'POST' }), '批准弹窗打开期间管理员角色变化后不得提交旧操作')
+  assert(modalRolePage.data.queueType === 'admin' && !modalRolePage.data.canSwitchQueue, '角色变化后首页应恢复当前角色授权队列')
+
+  modalStateCalls.length = 0
+  storage.userInfo.role = 'counselor'
+  modalRolePage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  modalRolePage.onLoad.call(modalRolePage, { queueType: 'admin' })
+  modalRolePage.setData({ pendingList: [{ id: 107, status: 'pending' }] })
+  pendingModalSuccess = null
+  modalRolePage.onApprove.call(modalRolePage, { currentTarget: { dataset: { id: 107 } } })
+  storage.userInfo.role = 'student'
+  pendingModalSuccess({ confirm: true, content: '' })
+  await flushPromises()
+  assert(!modalStateCalls.some(function(call) { return call.method === 'POST' }), '批准弹窗打开期间退出管理员角色后不得提交审批')
+
+  modalStateCalls.length = 0
+  storage.userInfo.role = 'admin'
+  var modalStatusPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  modalStatusPage.onLoad.call(modalStatusPage, { queueType: 'admin' })
+  modalStatusPage.setData({ pendingList: [{ id: 108, status: 'pending' }] })
+  pendingModalSuccess = null
+  modalStatusPage.onReject.call(modalStatusPage, { currentTarget: { dataset: { id: 108 } } })
+  modalStatusPage.setData({ pendingList: [{ id: 108, status: 'approved' }] })
+  pendingModalSuccess({ confirm: true, content: '状态已经变化' })
+  await flushPromises()
+  assert(!modalStateCalls.some(function(call) { return call.method === 'POST' }), '拒绝弹窗打开期间预约状态变化后不得提交旧操作')
+  holdModal = false
+  pendingModalSuccess = null
   approvalCalls.length = 0
   storage.userInfo.role = 'counselor'
   const roleChangedApprovalPage = loadPage('miniapp/pages/admin-home/admin-home.js')
@@ -1270,6 +1321,78 @@ async function main() {
   dashboardRequests[0].resolve({ ordinaryPendingCount: 2, counselorPendingCount: 1, actionablePendingCount: 3, activeRoomCount: 6, todayReservations: 2, inUseCount: 1 })
   await flushPromises()
   assert(homePage.data.ordinaryPendingCount === 9 && homePage.data.activeRoomCount === 0, '首页较旧的仪表盘响应不得覆盖最新统计，合法 0 必须保留')
+  storage.userInfo.role = 'counselor'
+  const changedRoleListPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  changedRoleListPage.onLoad.call(changedRoleListPage, { queueType: 'counselor' })
+  const oldCounselorList = deferred()
+  request.get = function(url, params) {
+    if (url === '/audit/pending' && params.type === 'counselor') return oldCounselorList.promise
+    if (url === '/audit/pending') return Promise.resolve({ list: [{ id: 702, status: 'pending' }], total: 1 })
+    if (url === '/stats/dashboard') return Promise.resolve({ ordinaryPendingCount: 1, counselorPendingCount: 0, actionablePendingCount: 1, activeRoomCount: 2 })
+    return Promise.resolve({})
+  }
+  changedRoleListPage.loadPendingList.call(changedRoleListPage)
+  storage.userInfo.role = 'admin'
+  oldCounselorList.resolve({ list: [{ id: 701, status: 'counselor_pending' }], total: 1 })
+  await flushPromises()
+  await flushPromises()
+  assert(changedRoleListPage.data.queueType === 'admin' && !changedRoleListPage.data.pendingList.some(function(item) { return item.id === 701 }), '重点列表请求期间降级后不得写入旧重点数据')
+
+  storage.userInfo.role = 'counselor'
+  const changedRoleStatsPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  changedRoleStatsPage.onLoad.call(changedRoleStatsPage, { queueType: 'counselor' })
+  const oldCounselorDashboard = deferred()
+  const oldCounselorFeedback = deferred()
+  request.get = function(url) {
+    if (url === '/stats/dashboard' && storage.userInfo.role === 'counselor') return oldCounselorDashboard.promise
+    if (url === '/feedback') return oldCounselorFeedback.promise
+    if (url === '/stats/dashboard') return Promise.resolve({ ordinaryPendingCount: 3, counselorPendingCount: 0, actionablePendingCount: 3, activeRoomCount: 4 })
+    if (url === '/audit/pending') return Promise.resolve({ list: [], total: 0 })
+    return Promise.resolve({})
+  }
+  changedRoleStatsPage.loadStats.call(changedRoleStatsPage)
+  storage.userInfo.role = 'admin'
+  oldCounselorDashboard.resolve({ ordinaryPendingCount: 8, counselorPendingCount: 9, actionablePendingCount: 17, activeRoomCount: 6 })
+  oldCounselorFeedback.resolve({ total: 12 })
+  await flushPromises()
+  await flushPromises()
+  assert(changedRoleStatsPage.data.ordinaryPendingCount !== 8 && changedRoleStatsPage.data.counselorPendingCount !== 9, '统计请求期间降级后不得写入旧角色仪表盘数据')
+  assert(changedRoleStatsPage.data.feedbackCount === 0 && changedRoleStatsPage.data.feedbackStatus === 'idle', '统计请求期间降级后不得写入辅导员反馈数据')
+
+  storage.userInfo.role = 'counselor'
+  const loggedOutListPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  loggedOutListPage.onLoad.call(loggedOutListPage, { queueType: 'counselor' })
+  const loggedOutList = deferred()
+  request.get = function(url) {
+    if (url === '/audit/pending') return loggedOutList.promise
+    return Promise.resolve({})
+  }
+  loggedOutListPage.loadPendingList.call(loggedOutListPage)
+  delete storage.token
+  loggedOutList.resolve({ list: [{ id: 703, status: 'counselor_pending' }], total: 1 })
+  await flushPromises()
+  assert(!loggedOutListPage.data.pendingList.some(function(item) { return item.id === 703 }), '列表请求期间退出登录后不得写入旧审批数据')
+
+  storage.token = 'admin-token'
+  storage.userInfo.role = 'counselor'
+  const loggedOutStatsPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  loggedOutStatsPage.onLoad.call(loggedOutStatsPage, { queueType: 'counselor' })
+  const loggedOutDashboard = deferred()
+  const loggedOutFeedback = deferred()
+  request.get = function(url) {
+    if (url === '/stats/dashboard') return loggedOutDashboard.promise
+    if (url === '/feedback') return loggedOutFeedback.promise
+    return Promise.resolve({})
+  }
+  loggedOutStatsPage.loadStats.call(loggedOutStatsPage)
+  delete storage.token
+  loggedOutDashboard.resolve({ ordinaryPendingCount: 11, counselorPendingCount: 12, actionablePendingCount: 23, activeRoomCount: 5 })
+  loggedOutFeedback.resolve({ total: 14 })
+  await flushPromises()
+  assert(loggedOutStatsPage.data.ordinaryPendingCount !== 11 && loggedOutStatsPage.data.counselorPendingCount !== 12, '统计请求期间退出登录后不得写入旧仪表盘数据')
+  assert(loggedOutStatsPage.data.feedbackCount === 0 && loggedOutStatsPage.data.feedbackStatus === 'idle', '统计请求期间退出登录后不得写入旧反馈数据')
+  storage.token = 'admin-token'
+  storage.userInfo.role = 'admin'
 
   const reservationRequests = [deferred(), deferred()]
   let reservationRequestIndex = 0
@@ -1304,7 +1427,8 @@ async function main() {
   var detailFixture = {
     id: 501, status: 'pending', user_name: '测试申请人', student_id: '2024001999',
     credit_score: 88, user_status: 'active', room_name: 'B228自习室', room_type: 'study_room', building_id: 1,
-    date: '2026-07-20', start_time: '09:00', end_time: '10:00', purpose: '课程讨论', participants: 3
+    date: '2026-07-20', start_time: '09:00', end_time: '10:00', purpose: '课程讨论', participants: 3,
+    created_at: '2026-07-18 10:30:00', reject_reason: '材料不完整'
   }
   request.get = function(url, params, options) {
     detailCalls.push({ method: 'GET', url: url, params: params || {}, options: options || {} })
@@ -1323,6 +1447,7 @@ async function main() {
   await flushPromises()
   assert(detailCalls[0] && detailCalls[0].url === '/reservation/501' && detailCalls[0].options.silent === true, '管理员详情应静默读取指定预约')
   assert(detailPage.data.pageStatus === 'ready' && detailPage.data.reservation.credit_score === 88 && detailPage.data.reservation.user_status === 'active', '详情转换后必须保留信用分和账号状态')
+  assert(detailPage.data.reservation.createdAt === '2026-07-18 10:30:00' && detailPage.data.reservation.rejectReason === '材料不完整', '详情转换后必须统一提交时间和拒绝原因字段')
   assert(detailPage.data.canApprove && detailPage.data.canReject, '导生管理员可审核普通待审预约')
 
   detailFixture.status = 'counselor_pending'
@@ -1460,7 +1585,9 @@ async function main() {
   const detailWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxml'), 'utf8')
   const detailWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxss'), 'utf8')
   assert(detailSource.indexOf('approvalPresenter.toCard') !== -1 && detailSource.indexOf('adminPolicy.can') !== -1, '管理员详情应复用审批展示转换并按能力判断操作')
-  assert(detailWxml.indexOf('重新加载') !== -1 && detailWxml.indexOf('重点审批说明') !== -1, '管理员详情应包含错误重试和重点审批说明')
+  assert(detailWxml.indexOf('重新加载') !== -1 && detailWxml.indexOf('重点审批说明') !== -1 && detailWxml.indexOf('普通待审说明') !== -1, '管理员详情应包含错误重试和两类审批说明')
+  assert(detailWxml.indexOf('提交时间') !== -1 && detailWxml.indexOf('reservation.createdAt') !== -1, '管理员详情应展示预约提交时间')
+  assert(detailWxml.indexOf('拒绝原因') !== -1 && detailWxml.indexOf('reservation.rejectReason') !== -1, '管理员详情在有拒绝原因时应展示原因')
   assert(detailWxml.indexOf('aria-label="通过预约"') !== -1 && detailWxml.indexOf('aria-label="拒绝预约"') !== -1, '详情审批关键操作应有无障碍名称')
   assert(/\.action-button\s*\{[^}]*min-height:\s*88rpx/.test(detailWxss), '详情审批触控高度应不小于 88rpx')
   assert(detailWxss.indexOf('safe-area-inset-bottom') !== -1, '详情底部操作区不得遮挡系统安全区')

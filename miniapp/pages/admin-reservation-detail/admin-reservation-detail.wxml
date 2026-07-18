@@ -10,6 +10,7 @@
     <view class="summary-card">
       <view class="summary-top"><view><text class="eyebrow">预约 #{{reservation.id}}</text><text class="room-name">{{reservation.roomName}}</text></view><text class="status-tag {{reservation.isPriority ? 'priority' : ''}}">{{reservation.statusLabel}}</text></view>
       <view class="priority-note" wx:if="{{reservation.isPriority}}"><text class="priority-title">重点审批说明</text><text class="priority-text">该预约需由辅导员或超级管理员在详情页完成审核。</text></view>
+      <view class="priority-note ordinary-note" wx:elif="{{reservation.status === 'pending'}}"><text class="priority-title">普通待审说明</text><text class="priority-text">请核对预约时段、用途和人数，确认无冲突后再完成审核。</text></view>
     </view>
     <view class="detail-card">
       <text class="section-title">申请人</text>
@@ -26,6 +27,8 @@
       <view class="detail-row"><text class="label">空间类型</text><text class="value">{{reservation.roomTypeLabel}}</text></view>
       <view class="detail-row"><text class="label">日期</text><text class="value">{{reservation.date}}</text></view>
       <view class="detail-row"><text class="label">时间</text><text class="value">{{reservation.timeSlot}}</text></view>
+      <view class="detail-row" wx:if="{{reservation.createdAt}}"><text class="label">提交时间</text><text class="value">{{reservation.createdAt}}</text></view>
+      <view class="detail-row" wx:if="{{reservation.rejectReason}}"><text class="label">拒绝原因</text><text class="value">{{reservation.rejectReason}}</text></view>
     </view>
   </block>
   <view class="action-bar" wx:if="{{pageStatus === 'ready' && reservation && (canApprove || canReject)}}">

@@ -61,6 +61,42 @@ Page({
       canManageFeedback: adminPolicy.can(role, 'feedbackManage')
     })
   },
+  invalidateHomeRequests: function () {
+    this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
+    this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
+  },
+  scheduleRoleReload: function () {
+    var that = this
+    if (this._roleReloadPromise) return this._roleReloadPromise
+    this._roleReloadPromise = Promise.resolve().then(function () {
+      if (!that.ensureAdmin()) return
+      return Promise.all([that.loadStats(), that.loadPendingList()])
+    }).then(function () {
+      that._roleReloadPromise = null
+    }, function () {
+      that._roleReloadPromise = null
+    })
+    return this._roleReloadPromise
+  },
+  isRequestContextCurrent: function (expectedRole, expectedQueue) {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'ordinaryApproval')) {
+      this.invalidateHomeRequests()
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '', feedbackCount: 0, feedbackStatus: 'idle' })
+      this.ensureAdmin()
+      return false
+    }
+    if (role === expectedRole && this.data.queueType === expectedQueue && adminPolicy.queueType(role, expectedQueue) === expectedQueue) {
+      return true
+    }
+    if (this._loadedRole !== role) {
+      this.invalidateHomeRequests()
+      this.applyRole(role)
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '', feedbackCount: 0, feedbackStatus: 'idle' })
+      this.scheduleRoleReload()
+    }
+    return false
+  },
   onLoad: function (options) {
     if (!this.ensureAdmin()) return
     var requestedQueue = options && (options.type || options.queueType)
@@ -83,12 +119,13 @@ Page({
   loadStats: function () {
     var that = this
     var role = auth.getUserRole()
+    var queueType = this.data.queueType
     this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
     var requestVersion = this._statsRequestVersion
     this.setData({ statsStatus: 'loading', statsError: '' })
 
     var dashboardRequest = request.get('/stats/dashboard', {}, { silent: true }).then(function (data) {
-      if (requestVersion !== that._statsRequestVersion) return
+      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
       data = data || {}
       that.setData({
         ordinaryPendingCount: numberOrZero(data.ordinaryPendingCount),
@@ -102,7 +139,7 @@ Page({
         hasTrustedStats: true
       })
     }).catch(function () {
-      if (requestVersion !== that._statsRequestVersion) return
+      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
       that.setData({
         statsStatus: 'error',
         statsError: that.data.hasTrustedStats
@@ -115,10 +152,10 @@ Page({
     if (adminPolicy.can(role, 'feedbackManage')) {
       this.setData({ feedbackStatus: 'loading' })
       feedbackRequest = request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
-        if (requestVersion !== that._statsRequestVersion) return
+        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
         that.setData({ feedbackCount: numberOrZero(data && data.total), feedbackStatus: 'ready' })
       }).catch(function () {
-        if (requestVersion !== that._statsRequestVersion) return
+        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
         that.setData({ feedbackStatus: 'error' })
       })
     } else {
@@ -131,6 +168,8 @@ Page({
   },
   loadPendingList: function () {
     var that = this
+    var role = auth.getUserRole()
+    var queueType = this.data.queueType
     this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
     var requestVersion = this._pendingRequestVersion
     return request.get('/audit/pending', {
@@ -138,7 +177,7 @@ Page({
       page: 1,
       pageSize: 10
     }, { silent: true }).then(function (data) {
-      if (requestVersion !== that._pendingRequestVersion) return
+      if (requestVersion !== that._pendingRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
       var rows = Array.isArray(data) ? data : (data && (data.items || data.list)) || []
       var list = rows.slice(0, 10).map(approvalPresenter.toCard)
       that.setData({
@@ -147,7 +186,7 @@ Page({
         listError: ''
       })
     }).catch(function () {
-      if (requestVersion !== that._pendingRequestVersion) return
+      if (requestVersion !== that._pendingRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
       that.setData({
         pendingList: [],
         listStatus: 'error',
@@ -184,6 +223,31 @@ Page({
   canQuickApproveItem: function (id) {
     var item = (this.data.pendingList || []).find(function (candidate) { return Number(candidate.id) === Number(id) })
     return !!item && this.data.queueType === 'admin' && adminPolicy.canQuickApprove(auth.getUserRole(), item.status)
+  },
+  revalidateQuickApproval: function (id, expectedRole, expectedQueue) {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'ordinaryApproval')) {
+      this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
+      this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '' })
+      this.ensureAdmin()
+      return false
+    }
+    if (role !== expectedRole || this.data.queueType !== expectedQueue) {
+      this.applyRole(role)
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '' })
+      wx.showToast({ title: '账号权限已变化，请重新操作', icon: 'none' })
+      this.loadStats()
+      this.loadPendingList()
+      return false
+    }
+    if (!this.canQuickApproveItem(id)) {
+      wx.showToast({ title: '预约状态已变化，请刷新后重试', icon: 'none' })
+      this.loadStats()
+      this.loadPendingList()
+      return false
+    }
+    return true
   },
   setProcessing: function (id, processing) {
     var next = Object.assign({}, this.data.processingById)
@@ -231,11 +295,13 @@ Page({
     var that = this
     var id = event.currentTarget.dataset.id
     if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
+    var expectedRole = auth.getUserRole()
+    var expectedQueue = this.data.queueType
     wx.showModal({
       title: '确认审批',
       content: '确定通过该预约申请？',
       success: function (result) {
-        if (!result.confirm || that.isProcessing(id)) return
+        if (!result.confirm || that.isProcessing(id) || !that.revalidateQuickApproval(id, expectedRole, expectedQueue)) return
         that.setProcessing(id, true)
         request.post('/audit/' + id + '/approve', {}, { silent: true }).then(function () {
           wx.showToast({ title: '已通过', icon: 'success' })
@@ -254,6 +320,8 @@ Page({
     var that = this
     var id = event.currentTarget.dataset.id
     if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
+    var expectedRole = auth.getUserRole()
+    var expectedQueue = this.data.queueType
     wx.showModal({
       title: '拒绝预约',
       content: '请输入拒绝理由',
@@ -266,7 +334,7 @@ Page({
           wx.showToast({ title: '请填写拒绝理由', icon: 'none' })
           return
         }
-        if (that.isProcessing(id)) return
+        if (that.isProcessing(id) || !that.revalidateQuickApproval(id, expectedRole, expectedQueue)) return
         that.setProcessing(id, true)
         request.post('/audit/' + id + '/reject', { reason: reason }, { silent: true }).then(function () {
           wx.showToast({ title: '已拒绝', icon: 'success' })

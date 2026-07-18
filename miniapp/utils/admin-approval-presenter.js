@@ -40,6 +40,8 @@ function toCard(row) {
     timeSlot: startTime && endTime ? startTime + '-' + endTime : valueOf(row, ['timeSlot', 'time_slot']),
     purpose: valueOf(row, ['purpose']) || '用途未填写',
     participants: Number(valueOf(row, ['participants', 'participantCount', 'participant_count'])) || 0,
+    createdAt: valueOf(row, ['createdAt', 'created_at']),
+    rejectReason: valueOf(row, ['rejectReason', 'reject_reason']),
     status: status,
     isPriority: status === 'counselor_pending',
     queueLabel: status === 'counselor_pending' ? '重点待审' : '普通待审'
