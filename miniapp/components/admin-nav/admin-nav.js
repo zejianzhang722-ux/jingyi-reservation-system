@@ -12,8 +12,11 @@ Component({
   methods: {
     onTap: function (e) {
       var item = e.currentTarget.dataset.item
-      if (!item || item.key === this.data.selected) return
-      wx.redirectTo({ url: item.url })
+      if (!item || item.key === this.data.selected || this._transitioning) return
+      var self = this
+      var release = function () { self._transitioning = false }
+      this._transitioning = true
+      wx.redirectTo({ url: item.url, fail: release, complete: release })
     }
   }
 })

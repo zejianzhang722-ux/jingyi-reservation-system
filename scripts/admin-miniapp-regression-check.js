@@ -18,6 +18,7 @@ global.wx = {
   removeStorageSync: function(key) { delete storage[key] },
   navigateTo: function(options) { navCalls.push({ type: 'navigateTo', url: options.url }) },
   redirectTo: function(options) { navCalls.push({ type: 'redirectTo', url: options.url }) },
+  switchTab: function(options) { navCalls.push({ type: 'switchTab', url: options.url }) },
   reLaunch: function(options) { navCalls.push({ type: 'reLaunch', url: options.url }) },
   showToast: function(options) { toastCalls.push(options || {}) },
   showModal: function(options) {
@@ -68,6 +69,7 @@ function loadComponent(relativePath) {
   componentConfig.setData = function(next) {
     Object.keys(next).forEach(function(key) { componentConfig.data[key] = next[key] })
   }
+  Object.keys(componentConfig.methods || {}).forEach(function(key) { componentConfig[key] = componentConfig.methods[key] })
   return componentConfig
 }
 function getManageKeysForRole(role) {
@@ -151,10 +153,10 @@ async function main() {
   assert(typeof managePage.goToCreditManage === 'function', '管理页应提供信用管理入口')
   navCalls.length = 0
   managePage.onItemTap({ currentTarget: { dataset: { key: 'pending' } } })
-  assert(navCalls[0] && navCalls[0].url === '/pages/admin-home/admin-home?queueType=admin', '普通审核入口应明确携带 admin 队列参数')
+  assert(navCalls[0] && navCalls[0].type === 'redirectTo' && navCalls[0].url === '/pages/admin-home/admin-home?queueType=admin', '普通审核入口应替换当前管理页并明确携带 admin 队列参数')
   navCalls.length = 0
   managePage.onItemTap({ currentTarget: { dataset: { key: 'counselorPending' } } })
-  assert(navCalls[0] && navCalls[0].url === '/pages/admin-home/admin-home?queueType=counselor', '辅导员重点审核入口应明确携带 counselor 队列参数')
+  assert(navCalls[0] && navCalls[0].type === 'redirectTo' && navCalls[0].url === '/pages/admin-home/admin-home?queueType=counselor', '重点审核入口应替换当前管理页并明确携带 counselor 队列参数')
   navCalls.length = 0
   managePage.goToStatsOverview()
   assert(navCalls[0] && navCalls[0].url === '/pages/admin-stats/admin-stats', '数据统计应进入管理员统计页')
@@ -1559,6 +1561,17 @@ async function main() {
   assert(findManageItem(manageBadgePage, 'pending') && findManageItem(manageBadgePage, 'counselorPending'), '待办数失败时仍应保留审核入口')
   assert(findManageItem(manageBadgePage, 'pending').badge === undefined && findManageItem(manageBadgePage, 'counselorPending').badge === undefined, '待办数失败时应隐藏徽标')
 
+  var failedRoleStats = deferred()
+  request.get = function() { return failedRoleStats.promise }
+  storage.userInfo.role = 'counselor'
+  manageBadgePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
+  manageBadgePage.onShow.call(manageBadgePage)
+  storage.userInfo.role = 'admin'
+  failedRoleStats.reject(new Error('network unavailable'))
+  await flushPromises()
+  assert(findManageItem(manageBadgePage, 'pending') && !findManageItem(manageBadgePage, 'counselorPending'), '待办请求失败且角色变化时应立即按当前角色重建菜单')
+  assert(findManageItem(manageBadgePage, 'pending').badge === undefined, '待办请求失败且角色变化时应隐藏旧徽标')
+
   var staleManageStats = deferred()
   var useFreshManageStats = false
   request.get = function() {
@@ -1605,9 +1618,23 @@ async function main() {
   const navComponent = loadComponent('miniapp/components/admin-nav/admin-nav.js')
   navComponent.data.selected = 'home'
   navCalls.length = 0
-  navComponent.methods.onTap.call(navComponent, { currentTarget: { dataset: { item: navComponent.data.items[1] } } })
-  assert(navCalls.length === 1 && navCalls[0].type === 'redirectTo' && navCalls[0].url === '/pages/admin-manage/admin-manage', '管理员底栏切页应平滑替换页面，不得重启原页')
+  var originalRedirectTo = wx.redirectTo
+  var pendingRedirectOptions = null
+  wx.redirectTo = function(options) {
+    pendingRedirectOptions = options
+    navCalls.push({ type: 'redirectTo', url: options.url })
+  }
+  navComponent.onTap.call(navComponent, { currentTarget: { dataset: { item: navComponent.data.items[1] } } })
+  navComponent.onTap.call(navComponent, { currentTarget: { dataset: { item: navComponent.data.items[2] } } })
+  assert(navCalls.length === 1 && navCalls[0].url === '/pages/admin-manage/admin-manage', '管理员底栏快速连续点击只应发起一次切页')
+  pendingRedirectOptions.fail({ errMsg: 'redirectTo:fail' })
+  navComponent.onTap.call(navComponent, { currentTarget: { dataset: { item: navComponent.data.items[2] } } })
+  assert(navCalls.length === 2 && navCalls[1].url === '/pages/admin-profile/admin-profile', '管理员底栏切页失败后应释放点击锁')
+  pendingRedirectOptions.complete()
+  navComponent.onTap.call(navComponent, { currentTarget: { dataset: { item: navComponent.data.items[1] } } })
+  assert(navCalls.length === 3, '管理员底栏切页完成后应释放点击锁')
   assert(!navCalls.some(function(call) { return call.type === 'reLaunch' }), '管理员底栏切页不得使用 reLaunch')
+  wx.redirectTo = originalRedirectTo
   const navSource = fs.readFileSync(path.join(root, 'miniapp/components/admin-nav/admin-nav.js'), 'utf8')
   const navWxml = fs.readFileSync(path.join(root, 'miniapp/components/admin-nav/admin-nav.wxml'), 'utf8')
   assert(navSource.indexOf("iconPath: '/images/") !== -1 && navSource.indexOf('selectedIconPath') !== -1, '管理员底栏三项应配置真实普通和选中图标')
@@ -1621,6 +1648,12 @@ async function main() {
   const customTabSource = fs.readFileSync(path.join(root, 'miniapp/custom-tab-bar/index.js'), 'utf8')
   assert(customTabSource.indexOf('adminList') === -1 && customTabSource.indexOf('auth.isAdmin') === -1, '自定义学生底栏应删除未使用的管理员分支')
   assert(customTabSource.indexOf('studentList') !== -1 && customTabSource.indexOf('wx.switchTab') !== -1, '删除管理员分支后学生底栏逻辑必须保留')
+  const studentTab = loadComponent('miniapp/custom-tab-bar/index.js')
+  studentTab.switchTabList.call(studentTab)
+  assert(studentTab.data.list.length === 4 && studentTab.data.list[1].pagePath === '/pages/my-reservations/my-reservations', '学生底栏应继续装载四个原有入口')
+  navCalls.length = 0
+  studentTab.onTabTap.call(studentTab, { currentTarget: { dataset: { index: 1, path: '/pages/my-reservations/my-reservations' } } })
+  assert(navCalls.length === 1 && navCalls[0].type === 'switchTab' && navCalls[0].url === '/pages/my-reservations/my-reservations', '学生底栏点击预约应继续使用 switchTab 实际切页')
 
   const profileWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-profile/admin-profile.wxml'), 'utf8')
   const profileWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-profile/admin-profile.wxss'), 'utf8')

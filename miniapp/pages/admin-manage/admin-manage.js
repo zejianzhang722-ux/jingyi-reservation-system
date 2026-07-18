@@ -99,7 +99,12 @@ Page({
       }
       self.refreshGroups(stats || {})
     }).catch(function () {
-      if (version !== self._statsRequestVersion || auth.getUserRole() !== role) return
+      if (version !== self._statsRequestVersion) return
+      if (auth.getUserRole() !== role) {
+        if (!self.ensureAdmin()) return
+        self.refreshGroups()
+        return
+      }
       self.refreshGroups()
     })
   },
@@ -114,7 +119,12 @@ Page({
       violations: '/pages/admin-credit/admin-credit?tab=violations', blacklist: '/pages/admin-credit/admin-credit?tab=blacklist',
       feedback: '/pages/admin-feedback/admin-feedback', poster: '/pages/admin-poster/admin-poster'
     }
-    if (routes[key]) wx.navigateTo({ url: routes[key] })
+    if (!routes[key]) return
+    if (key === 'pending' || key === 'counselorPending') {
+      wx.redirectTo({ url: routes[key] })
+      return
+    }
+    wx.navigateTo({ url: routes[key] })
   },
 
   goToReservationList: function () { wx.navigateTo({ url: '/pages/admin-reservation/admin-reservation' }) },
