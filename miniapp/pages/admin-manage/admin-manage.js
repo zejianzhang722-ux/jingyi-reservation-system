@@ -1,12 +1,13 @@
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
+var request = require('../../utils/request')
 
 var CATALOG = [
   {
     title: '工作台与统计',
     items: [
-      { key: 'pending', name: '待审核', desc: '处理普通待审核预约', icon: 'approve', tone: 'gold', capability: 'ordinaryApproval' },
-      { key: 'counselorPending', name: '辅导员重点审核', desc: '处理需要辅导员重点审核的预约', icon: 'approve', tone: 'red', capability: 'counselorApproval' },
+      { key: 'pending', name: '普通预约审核', desc: '处理共享空间等普通待审预约', icon: 'approve', tone: 'gold', capability: 'ordinaryApproval' },
+      { key: 'counselorPending', name: '重点预约审核', desc: '处理辅导员特殊空间等重点待审预约', icon: 'approve', tone: 'red', capability: 'counselorApproval' },
       { key: 'stats', name: '数据统计', desc: '查看预约、使用、爽约和信用概览', icon: 'chart', tone: 'blue', capability: 'statsView' }
     ]
   },
@@ -34,10 +35,13 @@ var CATALOG = [
   }
 ]
 
+function positiveBadge(value) {
+  var number = Number(value)
+  return isFinite(number) && number > 0 ? Math.floor(number) : undefined
+}
+
 Page({
-  data: {
-    groups: []
-  },
+  data: { groups: [] },
 
   ensureAdmin: function () {
     if (!auth.isLoggedIn() || !auth.isAdmin()) {
@@ -55,25 +59,49 @@ Page({
   onShow: function () {
     if (!this.ensureAdmin()) return
     this.refreshGroups()
+    this.loadPendingCounts()
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().switchTabList()
       this.getTabBar().setData({ selected: 1 })
     }
   },
 
-  refreshGroups: function () {
+  refreshGroups: function (counts) {
     var role = auth.getUserRole()
     var groups = CATALOG.map(function (group) {
       return {
         title: group.title,
         items: group.items.filter(function (item) {
           return adminPolicy.can(role, item.capability)
+        }).map(function (item) {
+          var next = Object.assign({}, item)
+          if (counts && item.key === 'pending') next.badge = positiveBadge(counts.ordinaryPendingCount)
+          if (counts && item.key === 'counselorPending') next.badge = positiveBadge(counts.counselorPendingCount)
+          return next
         })
       }
-    }).filter(function (group) {
-      return group.items.length > 0
-    })
+    }).filter(function (group) { return group.items.length > 0 })
     this.setData({ groups: groups })
+  },
+
+  loadPendingCounts: function () {
+    var self = this
+    var role = auth.getUserRole()
+    var version = (this._statsRequestVersion || 0) + 1
+    this._statsRequestVersion = version
+    return request.get('/stats/dashboard', {}, { silent: true }).then(function (stats) {
+      if (version !== self._statsRequestVersion) return
+      if (auth.getUserRole() !== role) {
+        if (!self.ensureAdmin()) return
+        self.refreshGroups()
+        self.loadPendingCounts()
+        return
+      }
+      self.refreshGroups(stats || {})
+    }).catch(function () {
+      if (version !== self._statsRequestVersion || auth.getUserRole() !== role) return
+      self.refreshGroups()
+    })
   },
 
   onItemTap: function (e) {
@@ -81,18 +109,12 @@ Page({
     var routes = {
       pending: '/pages/admin-home/admin-home?queueType=' + adminPolicy.queueType(auth.getUserRole(), 'admin'),
       counselorPending: '/pages/admin-home/admin-home?queueType=' + adminPolicy.queueType(auth.getUserRole(), 'counselor'),
-      stats: '/pages/admin-stats/admin-stats',
-      reservation: '/pages/admin-reservation/admin-reservation',
-      rooms: '/pages/admin-rooms/admin-rooms',
-      users: '/pages/admin-users/admin-users',
-      violations: '/pages/admin-credit/admin-credit?tab=violations',
-      blacklist: '/pages/admin-credit/admin-credit?tab=blacklist',
-      feedback: '/pages/admin-feedback/admin-feedback',
-      poster: '/pages/admin-poster/admin-poster'
+      stats: '/pages/admin-stats/admin-stats', reservation: '/pages/admin-reservation/admin-reservation',
+      rooms: '/pages/admin-rooms/admin-rooms', users: '/pages/admin-users/admin-users',
+      violations: '/pages/admin-credit/admin-credit?tab=violations', blacklist: '/pages/admin-credit/admin-credit?tab=blacklist',
+      feedback: '/pages/admin-feedback/admin-feedback', poster: '/pages/admin-poster/admin-poster'
     }
-    if (routes[key]) {
-      wx.navigateTo({ url: routes[key] })
-    }
+    if (routes[key]) wx.navigateTo({ url: routes[key] })
   },
 
   goToReservationList: function () { wx.navigateTo({ url: '/pages/admin-reservation/admin-reservation' }) },

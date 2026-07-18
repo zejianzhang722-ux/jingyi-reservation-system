@@ -23,8 +23,8 @@
 }
 
 .admin-nav-icon {
-  font-size: 34rpx;
-  line-height: 1;
+  width: 44rpx;
+  height: 44rpx;
   margin-bottom: 6rpx;
 }
 

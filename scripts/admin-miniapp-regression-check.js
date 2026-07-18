@@ -17,6 +17,7 @@ global.wx = {
   setStorageSync: function(key, value) { storage[key] = value },
   removeStorageSync: function(key) { delete storage[key] },
   navigateTo: function(options) { navCalls.push({ type: 'navigateTo', url: options.url }) },
+  redirectTo: function(options) { navCalls.push({ type: 'redirectTo', url: options.url }) },
   reLaunch: function(options) { navCalls.push({ type: 'reLaunch', url: options.url }) },
   showToast: function(options) { toastCalls.push(options || {}) },
   showModal: function(options) {
@@ -56,6 +57,19 @@ function loadPage(relativePath) {
   return pageConfig
 }
 
+function loadComponent(relativePath) {
+  let componentConfig = null
+  global.Component = function(config) { componentConfig = config }
+  const fullPath = path.join(root, relativePath)
+  delete require.cache[require.resolve(fullPath)]
+  require(fullPath)
+  assert(componentConfig, relativePath + ' 未注册 Component')
+  componentConfig.data = JSON.parse(JSON.stringify(componentConfig.data || {}))
+  componentConfig.setData = function(next) {
+    Object.keys(next).forEach(function(key) { componentConfig.data[key] = next[key] })
+  }
+  return componentConfig
+}
 function getManageKeysForRole(role) {
   storage.userInfo.role = role
   const page = loadPage('miniapp/pages/admin-manage/admin-manage.js')
@@ -1522,6 +1536,111 @@ async function main() {
   assert(statsWxml.indexOf('加载失败') !== -1 && statsWxml.indexOf('重新加载') !== -1, '统计页应提供失败重试')
   assert(statsWxml.indexOf('近 30 天暂无已通过或已使用预约') !== -1, '统计排行空态应解释有效记录口径')
 
+  function findManageItem(page, key) {
+    var items = (page.data.groups || []).reduce(function(all, group) { return all.concat(group.items || []) }, [])
+    return items.find(function(item) { return item.key === key })
+  }
+
+  storage.userInfo.role = 'counselor'
+  request.get = function(url) {
+    assert(url === '/stats/dashboard', '管理页待办数只应请求统计概览')
+    return Promise.resolve({ ordinaryPendingCount: 4, counselorPendingCount: 7 })
+  }
+  var manageBadgePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
+  manageBadgePage.onShow.call(manageBadgePage)
+  await flushPromises()
+  assert(findManageItem(manageBadgePage, 'pending').badge === 4, '普通预约审核应显示普通待审数量')
+  assert(findManageItem(manageBadgePage, 'counselorPending').badge === 7, '重点预约审核应显示辅导员重点待审数量')
+
+  request.get = function() { return Promise.reject(new Error('network unavailable')) }
+  manageBadgePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
+  manageBadgePage.onShow.call(manageBadgePage)
+  await flushPromises()
+  assert(findManageItem(manageBadgePage, 'pending') && findManageItem(manageBadgePage, 'counselorPending'), '待办数失败时仍应保留审核入口')
+  assert(findManageItem(manageBadgePage, 'pending').badge === undefined && findManageItem(manageBadgePage, 'counselorPending').badge === undefined, '待办数失败时应隐藏徽标')
+
+  var staleManageStats = deferred()
+  var useFreshManageStats = false
+  request.get = function() {
+    if (!useFreshManageStats) return staleManageStats.promise
+    return Promise.resolve({ ordinaryPendingCount: 8, counselorPendingCount: 5 })
+  }
+  storage.userInfo.role = 'counselor'
+  manageBadgePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
+  manageBadgePage.onShow.call(manageBadgePage)
+  useFreshManageStats = true
+  manageBadgePage.onShow.call(manageBadgePage)
+  await flushPromises()
+  staleManageStats.resolve({ ordinaryPendingCount: 1, counselorPendingCount: 99 })
+  await flushPromises()
+  assert(findManageItem(manageBadgePage, 'pending').badge === 8 && findManageItem(manageBadgePage, 'counselorPending').badge === 5, '管理页旧统计响应不得覆盖较新的待办数')
+
+  var roleManageStats = deferred()
+  var roleManageCallCount = 0
+  request.get = function() {
+    roleManageCallCount += 1
+    if (roleManageCallCount === 1) return roleManageStats.promise
+    return Promise.resolve({ ordinaryPendingCount: 6, counselorPendingCount: 88 })
+  }
+  storage.userInfo.role = 'counselor'
+  manageBadgePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
+  manageBadgePage.onShow.call(manageBadgePage)
+  storage.userInfo.role = 'admin'
+  manageBadgePage.onShow.call(manageBadgePage)
+  await flushPromises()
+  roleManageStats.resolve({ ordinaryPendingCount: 1, counselorPendingCount: 99 })
+  await flushPromises()
+  assert(findManageItem(manageBadgePage, 'pending').badge === 6 && !findManageItem(manageBadgePage, 'counselorPending'), '管理页角色变化后应丢弃旧范围响应并按新角色刷新菜单')
+  request.get = originalGet
+
+  const manageSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.js'), 'utf8')
+  const manageWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.wxml'), 'utf8')
+  const manageWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.wxss'), 'utf8')
+  assert(manageSource.indexOf("name: '普通预约审核'") !== -1 && manageSource.indexOf('共享空间等普通待审预约') !== -1, '普通审核入口应使用管理员能理解的名称和范围说明')
+  assert(manageSource.indexOf("name: '重点预约审核'") !== -1 && manageSource.indexOf('辅导员特殊空间') !== -1, '重点审核入口应说明辅导员特殊空间范围')
+  assert(manageWxml.indexOf('entry.badge') !== -1, '管理页审核入口应能展示待办徽标')
+  assert(/padding:[^;]*calc\(180rpx \+ env\(safe-area-inset-bottom\)\)/.test(manageWxss), '管理页底部应为固定导航和安全区留足空间')
+  assert(manageWxss.indexOf('#667085') !== -1, '管理页说明文字颜色不应过浅')
+
+  const navComponent = loadComponent('miniapp/components/admin-nav/admin-nav.js')
+  navComponent.data.selected = 'home'
+  navCalls.length = 0
+  navComponent.methods.onTap.call(navComponent, { currentTarget: { dataset: { item: navComponent.data.items[1] } } })
+  assert(navCalls.length === 1 && navCalls[0].type === 'redirectTo' && navCalls[0].url === '/pages/admin-manage/admin-manage', '管理员底栏切页应平滑替换页面，不得重启原页')
+  assert(!navCalls.some(function(call) { return call.type === 'reLaunch' }), '管理员底栏切页不得使用 reLaunch')
+  const navSource = fs.readFileSync(path.join(root, 'miniapp/components/admin-nav/admin-nav.js'), 'utf8')
+  const navWxml = fs.readFileSync(path.join(root, 'miniapp/components/admin-nav/admin-nav.wxml'), 'utf8')
+  assert(navSource.indexOf("iconPath: '/images/") !== -1 && navSource.indexOf('selectedIconPath') !== -1, '管理员底栏三项应配置真实普通和选中图标')
+  assert(navWxml.indexOf('<image') !== -1 && navWxml.indexOf('mode="aspectFit"') !== -1, '管理员底栏应使用等比图片图标')
+  navComponent.data.items.forEach(function(item) {
+    ;[item.iconPath, item.selectedIconPath].forEach(function(iconPath) {
+      assert(iconPath && fs.existsSync(path.join(root, 'miniapp', iconPath.replace(/^\//, ''))), '管理员底栏图标文件必须真实存在: ' + iconPath)
+    })
+  })
+
+  const customTabSource = fs.readFileSync(path.join(root, 'miniapp/custom-tab-bar/index.js'), 'utf8')
+  assert(customTabSource.indexOf('adminList') === -1 && customTabSource.indexOf('auth.isAdmin') === -1, '自定义学生底栏应删除未使用的管理员分支')
+  assert(customTabSource.indexOf('studentList') !== -1 && customTabSource.indexOf('wx.switchTab') !== -1, '删除管理员分支后学生底栏逻辑必须保留')
+
+  const profileWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-profile/admin-profile.wxml'), 'utf8')
+  const profileWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-profile/admin-profile.wxss'), 'utf8')
+  assert(profileWxml.indexOf('账号与设置') !== -1, '管理员个人页标题应为账号与设置')
+  assert(/padding:[^;]*calc\(180rpx \+ env\(safe-area-inset-bottom\)\)/.test(profileWxss), '账号与设置页底部应为固定导航和安全区留足空间')
+  assert(profileWxss.indexOf('#667085') !== -1, '账号与设置页说明文字颜色不应过浅')
+
+  ;['admin', 'counselor', 'super_admin'].forEach(function(role) {
+    storage.userInfo.role = role
+    var roleProfilePage = loadPage('miniapp/pages/admin-profile/admin-profile.js')
+    roleProfilePage.onLoad.call(roleProfilePage)
+    var networkItem = roleProfilePage.data.menuList.find(function(item) { return item.key === 'network' })
+    var passwordItem = roleProfilePage.data.menuList.find(function(item) { return item.key === 'password' })
+    assert(networkItem.name === '连接检查' && networkItem.desc === '检查当前是否能正常连接预约服务', '三类管理员均应看到面向使用者的连接检查说明')
+    if (role === 'super_admin') {
+      assert(passwordItem.desc.indexOf('电脑后台') !== -1, '超级管理员账号安全说明应指向电脑后台管理')
+    } else {
+      assert(passwordItem.desc.indexOf('超级管理员') !== -1, role + ' 账号安全说明应提示联系超级管理员')
+    }
+  })
   const profilePage = loadPage('miniapp/pages/admin-profile/admin-profile.js')
   const profileKeys = (profilePage.data.menuList || []).map(function(item) { return item.key })
   ;['reservation', 'rooms', 'users', 'feedback', 'announcement', 'stats'].forEach(function(key) {
