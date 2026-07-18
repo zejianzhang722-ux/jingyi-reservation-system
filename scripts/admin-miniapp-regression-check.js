@@ -1040,6 +1040,12 @@ async function main() {
   await failedPendingPage.loadPendingList.call(failedPendingPage)
   assert(failedPendingPage.data.listStatus === 'error', '审核列表请求失败后必须进入错误状态')
   assert(failedPendingPage.data.pendingList.length === 0 && failedPendingPage.data.listStatus !== 'empty', '请求失败不得伪装成空列表')
+  request.get = function(url) {
+    if (url === '/audit/pending') return Promise.resolve({ list: [{ id: 204, status: 'pending' }], total: 1, page: 1, pageSize: 10 })
+    return Promise.resolve({})
+  }
+  await failedPendingPage.onRetryList.call(failedPendingPage)
+  assert(failedPendingPage.data.listStatus === 'ready' && failedPendingPage.data.pendingList[0].id === 204, '审核列表重新加载成功后必须恢复可用状态')
   request.get = approvalGet
 
   storage.userInfo.role = 'counselor'
@@ -1169,6 +1175,29 @@ async function main() {
   failedHomeApproval.reject(new Error('expected failure'))
   await flushPromises()
   assert(!homePage.data.processingById[102], '首页审批失败后也应恢复该预约操作状态')
+  approvalCalls.length = 0
+  storage.userInfo.role = 'counselor'
+  const roleChangedApprovalPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  roleChangedApprovalPage.onLoad.call(roleChangedApprovalPage, { queueType: 'admin' })
+  roleChangedApprovalPage.setData({ queueType: 'admin', pendingList: [{ id: 105, status: 'pending' }] })
+  const roleChangedApproval = deferred()
+  request.post = function(url, body) {
+    approvalCalls.push({ method: 'POST', url: url, body: body || {} })
+    return roleChangedApproval.promise
+  }
+  request.get = function(url, params) {
+    approvalCalls.push({ method: 'GET', url: url, params: params || {} })
+    if (url === '/audit/pending') return Promise.resolve({ list: [], total: 0, page: 1, pageSize: 10 })
+    if (url === '/stats/dashboard') return Promise.resolve({ ordinaryPendingCount: 0, counselorPendingCount: 0, actionablePendingCount: 0, activeRoomCount: 1 })
+    return Promise.resolve({})
+  }
+  roleChangedApprovalPage.onApprove.call(roleChangedApprovalPage, { currentTarget: { dataset: { id: 105 } } })
+  storage.userInfo.role = 'admin'
+  roleChangedApproval.resolve({})
+  await flushPromises()
+  await flushPromises()
+  assert(!approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/audit/pending' && call.params.type === 'counselor' }), '审批完成时角色降级后不得继续刷新重点队列')
+  assert(!approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/feedback' }), '审批完成时角色降级后不得继续刷新辅导员专属数据')
 
   approvalCalls.length = 0
   const reservationApproval = deferred()

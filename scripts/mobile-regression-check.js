@@ -203,6 +203,16 @@ async function main() {
     const roomBuildingId = Number(room.building_id !== undefined ? room.building_id : room.buildingId)
     assert(roomBuildingId === buildingAdminId, '楼栋导生管理员使用排行不得包含范围外房间')
   })
+  for (let index = 1; index < scopedStatsRoles.length; index += 1) {
+    const scopedRooms = await api('/room', {
+      headers: { Authorization: 'Bearer ' + scopedStatsRoles[index].token }
+    })
+    assert(scopedRooms.json.code === 200 && Array.isArray(scopedRooms.json.data), scopedStatsRoles[index].label + ' 房间范围应可读取')
+    const scopedRoomIds = new Set(scopedRooms.json.data.map(function(room) { return Number(room.id) }))
+    scopedStatsResults[index].usage.forEach(function(row) {
+      assert(scopedRoomIds.has(Number(row.room_id)), scopedStatsRoles[index].label + ' 使用排行不得包含其房间范围外数据')
+    })
+  }
   assert(scopedStatsResults[0].dashboard.activeRoomCount < scopedStatsResults[2].dashboard.activeRoomCount, '楼栋导生管理员开放房间数应小于全院超级管理员')
   assert(scopedStatsResults[0].dashboard.counselorPendingCount === 0, '楼栋导生管理员不应看到重点待审数')
   assert(scopedStatsResults[0].dashboard.pendingItems.every(function(item) { return item.tag !== '辅导员审核' }), '楼栋导生管理员待审明细不得包含重点待审')
@@ -284,6 +294,12 @@ async function main() {
   assert(String(counselorDetail.json.data.user_status || '').trim(), '重点预约详情应返回申请人账号状态')
   assert(!Object.prototype.hasOwnProperty.call(counselorDetail.json.data, 'phone'), '辅导员重点预约详情不得返回申请人手机号')
   assert(!Object.prototype.hasOwnProperty.call(counselorDetail.json.data, 'reservation_code'), '辅导员重点预约详情不得返回学生签到凭证码')
+  const superAdminDetail = await api('/reservation/' + counselorAudit.json.data.list[0].id, {
+    headers: { Authorization: 'Bearer ' + superAdminLogin.json.data.token }
+  })
+  assert(superAdminDetail.json.code === 200, '超级管理员应能读取重点预约详情')
+  assert(superAdminDetail.json.data.credit_score !== undefined && String(superAdminDetail.json.data.user_status || '').trim(), '超级管理员重点预约详情应包含审批所需的信用状态')
+  assert(!Object.prototype.hasOwnProperty.call(superAdminDetail.json.data, 'phone') && !Object.prototype.hasOwnProperty.call(superAdminDetail.json.data, 'reservation_code'), '超级管理员重点预约详情不得泄露手机号或签到凭证码')
 
   const expiredAccessToken = jwt.sign({
     id: login.json.data.userInfo.id,

@@ -139,10 +139,12 @@ for (const [role, allowlist] of Object.entries(mobileCapabilityAllowlist)) {
   assert.deepEqual(allowlist.filter(capability => desktopOnlyCapabilities.includes(capability)), [], `${role} must not inherit desktop-only capabilities`)
 }
 
-const [adminReservationApi, miniAdminHome, miniAdminReservation] = await Promise.all([
+const [adminReservationApi, miniAdminHome, miniAdminReservation, miniAdminReservationDetail, reservationRoutes] = await Promise.all([
   read('../admin/src/api/reservation.js'),
   read('../miniapp/pages/admin-home/admin-home.js'),
-  read('../miniapp/pages/admin-reservation/admin-reservation.js')
+  read('../miniapp/pages/admin-reservation/admin-reservation.js'),
+  read('../miniapp/pages/admin-reservation-detail/admin-reservation-detail.js'),
+  read('../server/src/routes/reservation.js')
 ])
 for (const [name, source] of [['web admin', adminReservationApi], ['mini-program admin', miniAdminHome]]) {
   assert.match(source, /['"`]\/audit\/pending['"`]/, `${name} must list the shared pending audit endpoint`)
@@ -152,6 +154,8 @@ for (const [name, source] of [['web admin', adminReservationApi], ['mini-program
 assert.match(miniAdminHome, /type:\s*this\.data\.queueType/, 'mini-program pending requests must send an explicit queue type')
 assert.match(miniAdminHome, /queueType:\s*['"]admin['"]/, 'mini-program must expose the ordinary queue')
 assert.match(miniAdminHome, /['"]counselor['"]/, 'mini-program must expose the counselor queue')
+assert.match(miniAdminReservationDetail, /request\.get\(['"]\/reservation\/['"]\s*\+\s*this\._reservationId/, 'mobile admin detail must use the shared reservation detail endpoint')
+assert.match(reservationRoutes, /router\.get\(['"]\/:id['"],[\s\S]{0,220}optionalAdminReservationScope\(['"]id['"]\)[\s\S]{0,220}reservationController\.detail/, 'shared reservation detail must retain the unified admin scope guard')
 for (const [name, source] of [['web admin', adminReservationApi], ['mini-program home', miniAdminHome], ['mini-program reservation list', miniAdminReservation]]) {
   assert.doesNotMatch(source, /\/reservation\/(?:\$\{id\}\/|['"]\s*\+\s*id\s*\+\s*['"]\/)(?:approve|reject)/, `${name} must not restore legacy reservation mutation endpoints`)
 }
@@ -256,6 +260,7 @@ const registeredPages = new Set(JSON.parse(appJson).pages)
 const navigationCalls = []
 globalThis.wx = {
   navigateTo(options) { navigationCalls.push(options.url) },
+  redirectTo(options) { navigationCalls.push(options.url) },
   reLaunch(options) { navigationCalls.push(options.url) },
   getStorageSync(key) {
     if (key === 'token') return 'contract-token'
