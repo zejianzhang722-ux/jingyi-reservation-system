@@ -16,7 +16,14 @@ global.wx = {
   getStorageSync: function(key) { return storage[key] },
   setStorageSync: function(key, value) { storage[key] = value },
   removeStorageSync: function(key) { delete storage[key] },
-  navigateTo: function(options) { navCalls.push({ type: 'navigateTo', url: options.url }) },
+  navigateTo: function(options) {
+    navCalls.push({
+      type: 'navigateTo',
+      url: options.url,
+      fail: options.fail,
+      complete: options.complete
+    })
+  },
   redirectTo: function(options) { navCalls.push({ type: 'redirectTo', url: options.url }) },
   switchTab: function(options) { navCalls.push({ type: 'switchTab', url: options.url }) },
   reLaunch: function(options) { navCalls.push({ type: 'reLaunch', url: options.url }) },
@@ -865,10 +872,24 @@ async function main() {
   const homeSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.js'), 'utf8')
   const homeWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.wxml'), 'utf8')
   const homeWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.wxss'), 'utf8')
+  const metricTargets = [
+    ['ordinary', '/pages/admin-reservation/admin-reservation?preset=ordinary'],
+    ['priority', '/pages/admin-reservation/admin-reservation?preset=priority'],
+    ['actionable', '/pages/admin-reservation/admin-reservation?preset=actionable'],
+    ['today', '/pages/admin-reservation/admin-reservation?preset=today'],
+    ['inUse', '/pages/admin-reservation/admin-reservation?preset=in_use'],
+    ['openRooms', '/pages/admin-rooms/admin-rooms?status=open'],
+    ['feedback', '/pages/admin-feedback/admin-feedback?status=pending']
+  ]
   assert(homeWxml.indexOf('加载失败') !== -1 && homeWxml.indexOf('重新加载') !== -1, '审批工作台应提供明确的加载失败和重新加载状态')
   assert(homeWxml.indexOf('item.purpose') !== -1 && homeWxml.indexOf('item.participants') !== -1, '审批卡片应展示用途和人数')
   assert(homeWxml.indexOf('统计加载中') !== -1 && homeWxml.indexOf('暂无可信统计数据') !== -1, '首次统计加载和失败应明确说明数据尚不可信')
   assert(homeWxml.indexOf('onRetryStats') !== -1 && homeWxml.indexOf('重新加载统计') !== -1, '统计失败应提供重新加载入口')
+  metricTargets.forEach(function(testCase) {
+    var metricCardPattern = new RegExp('<view\\b(?=[^>]*data-target="' + testCase[0] + '")(?=[^>]*bindtap="onMetricTap")(?=[^>]*aria-role="button")[^>]*>')
+    assert(metricCardPattern.test(homeWxml), testCase[0] + ' 指标卡应是可点击的无障碍入口')
+  })
+  assert(/<view\b(?=[^>]*class="feedback-retry")(?=[^>]*catchtap="onRetryStats")[^>]*>/.test(homeWxml), '反馈统计重试必须阻止触发指标卡导航')
   assert(homeWxml.indexOf('feedbackStatus') !== -1 && homeWxml.indexOf('暂不可用') !== -1, '反馈指标失败时应显示不可用状态而不是可信 0')
   assert(homeWxml.indexOf("queueType === 'admin'") !== -1, '只有普通队列应显示快捷审批操作')
   assert(homeWxml.indexOf("item.status === 'pending'") !== -1, '普通队列也只能为 pending 卡片渲染快捷审批')
@@ -1080,6 +1101,56 @@ async function main() {
   await statsStatePage.loadStats.call(statsStatePage)
   assert(statsStatePage.data.hasTrustedStats === true && statsStatePage.data.ordinaryPendingCount === 5, '已有可信结果时刷新失败应保留旧值')
   assert(statsStatePage.data.statsError.indexOf('显示上次结果') !== -1, '已有可信结果刷新失败应明确说明显示上次结果')
+  request.get = approvalGet
+
+  storage.userInfo.role = 'super_admin'
+  const metricPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  metricPage.onLoad.call(metricPage, {})
+  metricPage.setData({ hasTrustedStats: true, statsStatus: 'ready', feedbackStatus: 'ready' })
+  assert(typeof metricPage.onMetricTap === 'function' && typeof metricPage.onMetricNavigationComplete === 'function', '工作台应提供指标卡导航与导航锁释放处理')
+  metricTargets.forEach(function(testCase) {
+    navCalls.length = 0
+    metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: testCase[0] } } })
+    assert(navCalls[0] && navCalls[0].type === 'navigateTo' && navCalls[0].url === testCase[1], testCase[0] + ' 指标应打开正确清单')
+    assert(typeof navCalls[0].complete === 'function' && typeof navCalls[0].fail === 'function', testCase[0] + ' 导航应向微信提供成功与失败后的锁释放回调')
+    navCalls[0].complete()
+  })
+
+  navCalls.length = 0
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls[0] && typeof navCalls[0].fail === 'function', '指标导航应传入失败回调')
+  navCalls[0].fail({ errMsg: 'navigateTo:fail' })
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'openRooms' } } })
+  assert(navCalls.length === 2 && navCalls[1].url === '/pages/admin-rooms/admin-rooms?status=open', '导航失败回调应释放点击锁并允许重试')
+  navCalls[1].complete()
+
+  storage.userInfo.role = 'admin'
+  navCalls.length = 0
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'priority' } } })
+  assert(navCalls.length === 0, '导生管理员不得通过指标卡进入重点待审')
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'feedback' } } })
+  assert(navCalls.length === 0, '导生管理员不得通过指标卡进入反馈管理')
+
+  storage.userInfo.role = 'super_admin'
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'unknown' } } })
+  assert(navCalls.length === 0, '未知指标目标不得触发导航')
+
+  storage.userInfo.role = 'counselor'
+  metricPage.setData({ hasTrustedStats: true, statsStatus: 'ready', feedbackStatus: 'error' })
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'feedback' } } })
+  assert(navCalls.length === 0, '反馈统计不可用时不得进入待处理反馈清单')
+
+  metricPage.setData({ hasTrustedStats: false, statsStatus: 'loading' })
+  navCalls.length = 0
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 0, '无可信统计时不得导航')
+
+  metricPage.setData({ hasTrustedStats: true, statsStatus: 'error' })
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 1 && navCalls[0].url === '/pages/admin-reservation/admin-reservation?preset=today', '保留可信旧统计时仍可进入实时清单')
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 1, '导航未完成时重复点击不得打开第二页')
+  navCalls[0].complete()
   request.get = approvalGet
 
   storage.userInfo.role = 'counselor'
