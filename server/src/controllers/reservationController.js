@@ -15,14 +15,20 @@ const list = async function(req, res) {
     const roomId = req.query.roomId;
     const userRole = req.user.role || 'student';
     const isAdmin = ['admin', 'super_admin', 'counselor'].includes(userRole);
+    const actionableOnly = String(req.query.actionable || '') === '1';
+    const actionableStatuses = userRole === 'admin'
+      ? ['pending']
+      : ['pending', 'counselor_pending'];
 
+    if (actionableOnly && !isAdmin) return response.error(res, '无权查看管理员待处理预约', 403);
     if (isAdmin && !req.adminScope) return response.error(res, '管理员数据范围未初始化', 500);
 
     if (db.isMock()) {
       const rows = reservationPresenter.getMockReservationRows({
         adminScope: req.adminScope || { isGlobal: true, buildingId: null },
         userId: isAdmin ? null : req.user.id,
-        status: status,
+        status: actionableOnly ? null : status,
+        statuses: actionableOnly ? actionableStatuses : null,
         date: date,
         roomId: roomId,
         startDate: req.query.startDate,
@@ -45,7 +51,10 @@ const list = async function(req, res) {
       where += ' AND rm.building_id = ?';
       params.push(req.adminScope.buildingId);
     }
-    if (status) {
+    if (actionableOnly) {
+      where += ' AND r.status IN (' + actionableStatuses.map(function() { return '?'; }).join(',') + ')';
+      Array.prototype.push.apply(params, actionableStatuses);
+    } else if (status) {
       where += ' AND r.status = ?';
       params.push(status);
     }

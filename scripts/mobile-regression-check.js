@@ -61,6 +61,20 @@ function assertApprovalQueue(responseJson, expectedStatus, queueName, expectedPa
   assert(data.list.every(function(item) { return item && item.status === expectedStatus }), queueName + ' 只应包含 ' + expectedStatus + ' 状态的预约')
 }
 
+function assertActionableQueue(responseJson, allowedStatuses, queueName, expectedPageSize) {
+  const data = responseJson && responseJson.data
+  assert(data && !Array.isArray(data) && Array.isArray(data.list), queueName + ' 应返回 data.list 分页列表')
+  assert(Number.isInteger(data.total) && Number.isInteger(data.page) && Number.isInteger(data.pageSize), queueName + ' 应返回 total、page、pageSize 分页字段')
+  assert(data.page === 1, queueName + ' 应返回第 1 页')
+  assert(data.pageSize === expectedPageSize, queueName + ' pageSize 应与请求值一致')
+  assert(data.total >= data.list.length, queueName + ' total 不得小于当前列表数量')
+  assert(data.total > 0 && data.list.length > 0, queueName + ' 在已知测试数据下不应为空')
+  assert(data.list.every(function(item) {
+    return item && allowedStatuses.includes(item.status)
+  }), queueName + ' 只应包含当前角色可处理的待审状态')
+  return data
+}
+
 function assertFails(check, message) {
   var failed = false
   try {
@@ -196,6 +210,59 @@ async function main() {
         (buildingAdminScope.buildingId !== undefined ? buildingAdminScope.buildingId : buildingAdminScope.building_id))
   )
   assert(Number.isInteger(buildingAdminId) && buildingAdminId > 0, '楼栋导生管理员登录响应应包含有效楼栋范围')
+
+  const actionableRoles = [
+    {
+      label: '全院导生管理员可处理预约',
+      token: adminLogin.json.data.token,
+      statuses: ['pending']
+    },
+    {
+      label: '辅导员可处理预约',
+      token: counselorLogin.json.data.token,
+      statuses: ['pending', 'counselor_pending']
+    },
+    {
+      label: '超级管理员可处理预约',
+      token: superAdminLogin.json.data.token,
+      statuses: ['pending', 'counselor_pending']
+    },
+    {
+      label: '楼栋导生管理员可处理预约',
+      token: buildingAdminLogin.json.data.token,
+      statuses: ['pending'],
+      buildingId: buildingAdminId
+    }
+  ]
+  for (const role of actionableRoles) {
+    const actionable = await api('/reservation?actionable=1&status=rejected&page=1&pageSize=100', {
+      headers: { Authorization: 'Bearer ' + role.token }
+    })
+    assert(actionable.status === 200 && actionable.json.code === 200, role.label + ' 接口应可用')
+    const actionableData = assertActionableQueue(actionable.json, role.statuses, role.label, 100)
+    if (role.statuses.includes('counselor_pending')) {
+      assert(actionableData.list.some(function(item) { return item.status === 'pending' }), role.label + ' 应包含普通待审')
+      assert(actionableData.list.some(function(item) { return item.status === 'counselor_pending' }), role.label + ' 应包含重点待审')
+    }
+    if (role.buildingId) {
+      assert(actionableData.list.every(function(item) {
+        return Number(item.buildingId || item.building_id) === role.buildingId
+      }), role.label + ' 不得越过楼栋范围')
+    }
+
+    const firstPage = await api('/reservation?actionable=1&page=1&pageSize=1', {
+      headers: { Authorization: 'Bearer ' + role.token }
+    })
+    assert(firstPage.status === 200 && firstPage.json.code === 200, role.label + ' 小分页接口应可用')
+    const firstPageData = assertActionableQueue(firstPage.json, role.statuses, role.label + ' 小分页', 1)
+    assert(firstPageData.total === actionableData.total, role.label + ' 筛选总数必须在分页前计算')
+  }
+
+  const studentActionable = await api('/reservation?actionable=1&page=1&pageSize=100', {
+    headers: { Authorization: 'Bearer ' + login.json.data.token }
+  })
+  assert(studentActionable.status === 403 && studentActionable.json.code === 403, '宿生不得读取管理员可处理预约列表')
+
   const buildingAdminRoomMap = new Map(buildingAdminRooms.json.data.map(function(room) { return [Number(room.id), room] }))
   scopedStatsResults[0].usage.forEach(function(row) {
     const room = buildingAdminRoomMap.get(Number(row.room_id))
