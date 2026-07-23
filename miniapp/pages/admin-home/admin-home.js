@@ -9,6 +9,37 @@ var ROLE_NAMES = {
   counselor: '书院辅导员'
 }
 
+var METRIC_TARGETS = {
+  ordinary: {
+    url: '/pages/admin-reservation/admin-reservation?preset=ordinary',
+    capability: 'ordinaryApproval'
+  },
+  priority: {
+    url: '/pages/admin-reservation/admin-reservation?preset=priority',
+    capability: 'counselorApproval'
+  },
+  actionable: {
+    url: '/pages/admin-reservation/admin-reservation?preset=actionable',
+    capability: 'ordinaryApproval'
+  },
+  today: {
+    url: '/pages/admin-reservation/admin-reservation?preset=today',
+    capability: 'reservationView'
+  },
+  inUse: {
+    url: '/pages/admin-reservation/admin-reservation?preset=in_use',
+    capability: 'reservationView'
+  },
+  openRooms: {
+    url: '/pages/admin-rooms/admin-rooms?status=open',
+    capability: 'roomView'
+  },
+  feedback: {
+    url: '/pages/admin-feedback/admin-feedback?status=pending',
+    capability: 'feedbackManage'
+  }
+}
+
 function numberOrZero(value) {
   var number = Number(value)
   return Number.isFinite(number) ? number : 0
@@ -166,6 +197,60 @@ Page({
   },
   onRetryStats: function () {
     return this.loadStats()
+  },
+  refreshMetricRoleContext: function (role) {
+    this.invalidateHomeRequests()
+    this.applyRole(role)
+    this.setData({
+      ordinaryPendingCount: 0,
+      counselorPendingCount: 0,
+      actionablePendingCount: 0,
+      activeRoomCount: 0,
+      todayReservations: 0,
+      inUseCount: 0,
+      feedbackCount: 0,
+      feedbackStatus: 'idle',
+      statsStatus: 'loading',
+      statsError: '',
+      hasTrustedStats: false,
+      pendingList: [],
+      processingById: {},
+      listStatus: 'loading',
+      listError: ''
+    })
+    this.loadStats()
+    this.loadPendingList()
+  },
+  onMetricTap: function (event) {
+    var target = event && event.currentTarget && event.currentTarget.dataset.target
+    var metric = METRIC_TARGETS[target]
+    if (!metric || this._metricNavigating || !this.ensureAdmin()) return
+
+    var role = auth.getUserRole()
+    if (this._loadedRole !== role) {
+      this.refreshMetricRoleContext(role)
+      return
+    }
+    if (!adminPolicy.can(role, metric.capability)) return
+    if (!this.data.hasTrustedStats) {
+      wx.showToast({ title: '统计尚未加载，请稍后重试', icon: 'none' })
+      return
+    }
+    if (target === 'feedback' && this.data.feedbackStatus !== 'ready') return
+
+    this._metricNavigating = true
+    wx.navigateTo({
+      url: metric.url,
+      fail: this.onMetricNavigationFail.bind(this),
+      complete: this.onMetricNavigationComplete.bind(this)
+    })
+  },
+  onMetricNavigationFail: function () {
+    this._metricNavigating = false
+    wx.showToast({ title: '页面打开失败，请重试', icon: 'none' })
+  },
+  onMetricNavigationComplete: function () {
+    this._metricNavigating = false
   },
   loadPendingList: function () {
     var that = this

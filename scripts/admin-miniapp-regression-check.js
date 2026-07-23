@@ -1117,15 +1117,54 @@ async function main() {
   })
 
   navCalls.length = 0
+  toastCalls.length = 0
   metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
   assert(navCalls[0] && typeof navCalls[0].fail === 'function', '指标导航应传入失败回调')
   navCalls[0].fail({ errMsg: 'navigateTo:fail' })
+  navCalls[0].complete()
+  assert(toastCalls.length === 1 && toastCalls[0].title === '页面打开失败，请重试', '指标导航失败应只提示一次清晰的重试说明')
   metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'openRooms' } } })
   assert(navCalls.length === 2 && navCalls[1].url === '/pages/admin-rooms/admin-rooms?status=open', '导航失败回调应释放点击锁并允许重试')
   navCalls[1].complete()
 
+  const metricRoleCalls = []
+  request.get = function(url, params) {
+    metricRoleCalls.push({ url: url, params: params || {} })
+    if (url === '/stats/dashboard') return Promise.resolve({
+      ordinaryPendingCount: 4,
+      counselorPendingCount: 0,
+      actionablePendingCount: 4,
+      activeRoomCount: 2,
+      todayReservations: 3,
+      usingCount: 1
+    })
+    if (url === '/audit/pending') return Promise.resolve({ list: [], total: 0 })
+    return Promise.resolve({})
+  }
+  metricPage.setData({
+    ordinaryPendingCount: 91,
+    counselorPendingCount: 92,
+    actionablePendingCount: 93,
+    activeRoomCount: 94,
+    todayReservations: 95,
+    inUseCount: 96,
+    feedbackCount: 97,
+    hasTrustedStats: true,
+    statsStatus: 'ready',
+    feedbackStatus: 'ready'
+  })
   storage.userInfo.role = 'admin'
   navCalls.length = 0
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 0, '点击前角色变化时不得沿用旧角色统计继续跳转')
+  assert(metricPage._loadedRole === 'admin' && metricPage.data.hasTrustedStats === false, '点击前角色变化时应立即应用新角色并废弃旧统计可信状态')
+  assert(metricPage.data.todayReservations === 0 && metricPage.data.feedbackCount === 0, '点击前角色变化时应清空旧角色指标值')
+  await flushPromises()
+  assert(metricPage.data.hasTrustedStats === true && metricPage.data.todayReservations === 3, '点击前角色变化时应刷新并写入当前角色统计')
+  assert(metricRoleCalls.some(function(call) { return call.url === '/stats/dashboard' }), '点击前角色变化时应重新请求当前角色统计')
+  assert(metricRoleCalls.some(function(call) { return call.url === '/audit/pending' && call.params.type === 'admin' }), '点击前角色变化时应同步刷新当前角色审批队列')
+
+  request.get = approvalGet
   metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'priority' } } })
   assert(navCalls.length === 0, '导生管理员不得通过指标卡进入重点待审')
   metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'feedback' } } })
@@ -1136,10 +1175,19 @@ async function main() {
   assert(navCalls.length === 0, '未知指标目标不得触发导航')
 
   storage.userInfo.role = 'counselor'
-  metricPage.setData({ hasTrustedStats: true, statsStatus: 'ready', feedbackStatus: 'error' })
-  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'feedback' } } })
+  const unavailableFeedbackMetricPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  unavailableFeedbackMetricPage.onLoad.call(unavailableFeedbackMetricPage, {})
+  unavailableFeedbackMetricPage.setData({ hasTrustedStats: true, statsStatus: 'ready', feedbackStatus: 'error' })
+  navCalls.length = 0
+  assert(unavailableFeedbackMetricPage._loadedRole === 'counselor' && unavailableFeedbackMetricPage.data.canManageFeedback === true, '反馈不可用检查应在已同步且有反馈权限的角色状态下执行')
+  unavailableFeedbackMetricPage.onMetricTap.call(unavailableFeedbackMetricPage, { currentTarget: { dataset: { target: 'feedback' } } })
   assert(navCalls.length === 0, '反馈统计不可用时不得进入待处理反馈清单')
+  unavailableFeedbackMetricPage.setData({ feedbackStatus: 'ready' })
+  unavailableFeedbackMetricPage.onMetricTap.call(unavailableFeedbackMetricPage, { currentTarget: { dataset: { target: 'feedback' } } })
+  assert(navCalls.length === 1 && navCalls[0].url === '/pages/admin-feedback/admin-feedback?status=pending', '同一辅导员角色下反馈统计恢复后应可进入待处理反馈清单')
+  navCalls[0].complete()
 
+  storage.userInfo.role = 'admin'
   metricPage.setData({ hasTrustedStats: false, statsStatus: 'loading' })
   navCalls.length = 0
   metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
