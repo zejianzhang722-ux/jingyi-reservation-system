@@ -139,12 +139,13 @@ for (const [role, allowlist] of Object.entries(mobileCapabilityAllowlist)) {
   assert.deepEqual(allowlist.filter(capability => desktopOnlyCapabilities.includes(capability)), [], `${role} must not inherit desktop-only capabilities`)
 }
 
-const [adminReservationApi, miniAdminHome, miniAdminReservation, miniAdminReservationDetail, reservationRoutes] = await Promise.all([
+const [adminReservationApi, miniAdminHome, miniAdminReservation, miniAdminReservationDetail, reservationRoutes, reservationControllerSource] = await Promise.all([
   read('../admin/src/api/reservation.js'),
   read('../miniapp/pages/admin-home/admin-home.js'),
   read('../miniapp/pages/admin-reservation/admin-reservation.js'),
   read('../miniapp/pages/admin-reservation-detail/admin-reservation-detail.js'),
-  read('../server/src/routes/reservation.js')
+  read('../server/src/routes/reservation.js'),
+  read('../server/src/controllers/reservationController.js')
 ])
 for (const [name, source] of [['web admin', adminReservationApi], ['mini-program admin', miniAdminHome]]) {
   assert.match(source, /['"`]\/audit\/pending['"`]/, `${name} must list the shared pending audit endpoint`)
@@ -154,6 +155,10 @@ for (const [name, source] of [['web admin', adminReservationApi], ['mini-program
 assert.match(miniAdminHome, /type:\s*this\.data\.queueType/, 'mini-program pending requests must send an explicit queue type')
 assert.match(miniAdminHome, /queueType:\s*['"]admin['"]/, 'mini-program must expose the ordinary queue')
 assert.match(miniAdminHome, /['"]counselor['"]/, 'mini-program must expose the counselor queue')
+assert.match(miniAdminReservation, /params\.actionable\s*=\s*1/, 'mini-program actionable preset must request the authoritative server filter')
+assert.match(reservationControllerSource, /actionableOnly/, 'reservation service must recognize the actionable filter')
+assert.match(reservationControllerSource, /\[['"]pending['"]\]/, 'ordinary administrators must retain pending as their actionable status')
+assert.match(reservationControllerSource, /\[['"]pending['"],\s*['"]counselor_pending['"]\]/, 'counselors and super administrators must retain both actionable statuses')
 assert.match(miniAdminReservationDetail, /request\.get\(['"]\/reservation\/['"]\s*\+\s*this\._reservationId/, 'mobile admin detail must use the shared reservation detail endpoint')
 assert.match(reservationRoutes, /router\.get\(['"]\/:id['"],[\s\S]{0,220}optionalAdminReservationScope\(['"]id['"]\)[\s\S]{0,220}reservationController\.detail/, 'shared reservation detail must retain the unified admin scope guard')
 for (const [name, source] of [['web admin', adminReservationApi], ['mini-program home', miniAdminHome], ['mini-program reservation list', miniAdminReservation]]) {
@@ -334,6 +339,7 @@ function createControllerResponse() {
 }
 
 const scopedStatsController = require('../server/src/controllers/scopedStatsController.js')
+const reservationController = require('../server/src/controllers/reservationController.js')
 const sharedDb = require('../server/src/config/database.js')
 const originalIsMock = sharedDb.isMock
 const originalQuery = sharedDb.query
@@ -341,6 +347,27 @@ const mysqlCalls = []
 sharedDb.isMock = () => false
 sharedDb.query = async (sql, params = []) => {
   mysqlCalls.push({ sql, params: [...params] })
+  if (/^SELECT r\.\*, rm\.name AS room_name/.test(sql)) {
+    const statuses = params.filter(value => value === 'pending' || value === 'counselor_pending')
+    return [statuses.map(function(status, index) {
+      return {
+        id: index + 1,
+        status,
+        date: '2026-07-16',
+        start_time: '09:00',
+        end_time: '10:00',
+        room_id: 9,
+        room_name: 'Room 9',
+        room_type: 'study_room',
+        building_id: 7,
+        user_id: 3,
+        real_name: 'Tester'
+      }
+    })]
+  }
+  if (/^SELECT COUNT\(\*\) AS total FROM reservations r JOIN rooms rm ON rm\.id = r\.room_id/.test(sql)) {
+    return [[{ total: String(params.filter(value => value === 'pending' || value === 'counselor_pending').length) }]]
+  }
   if (/^SELECT COUNT\(\*\) AS count FROM reservations/.test(sql)) {
     if (sql.includes("r.status = 'pending'")) return [[{ count: '2' }]]
     if (sql.includes("r.status = 'counselor_pending'")) return [[{ count: '1' }]]
@@ -415,6 +442,57 @@ try {
     assert.equal(invalidRes.state.statusCode, 400, `invalid roomId ${roomId} must return 400 before MySQL`)
     assert.equal(mysqlCalls.length, 0, `invalid roomId ${roomId} must not reach MySQL`)
   }
+
+  for (const testCase of [
+    {
+      role: 'admin',
+      scope: { role: 'admin', isGlobal: false, buildingId: 7 },
+      statuses: ['pending'],
+      prefixParams: [7, 'pending']
+    },
+    {
+      role: 'counselor',
+      scope: { role: 'counselor', isGlobal: true, buildingId: null },
+      statuses: ['pending', 'counselor_pending'],
+      prefixParams: ['pending', 'counselor_pending']
+    },
+    {
+      role: 'super_admin',
+      scope: { role: 'super_admin', isGlobal: true, buildingId: null },
+      statuses: ['pending', 'counselor_pending'],
+      prefixParams: ['pending', 'counselor_pending']
+    }
+  ]) {
+    mysqlCalls.length = 0
+    const res = createControllerResponse()
+    await reservationController.list({
+      query: { actionable: '1', status: 'rejected', page: '1', pageSize: '2' },
+      user: { id: 41, role: testCase.role },
+      adminScope: testCase.scope
+    }, res)
+    assert.equal(res.state.statusCode, 200, `${testCase.role} actionable reservation list must succeed`)
+    assert.deepEqual(res.state.payload.data.list.map(row => row.status), testCase.statuses, `${testCase.role} actionable list must override a single status filter`)
+
+    const rowCall = mysqlCalls.find(call => /^SELECT r\.\*, rm\.name AS room_name/.test(call.sql))
+    const countCall = mysqlCalls.find(call => /^SELECT COUNT\(\*\) AS total FROM reservations r JOIN rooms/.test(call.sql))
+    assert.ok(rowCall && countCall, `${testCase.role} actionable list must run both row and count queries`)
+    assert.match(rowCall.sql, /r\.status IN \((?:\?,?)+\)/, `${testCase.role} actionable rows must use a parameterized status set`)
+    assert.doesNotMatch(rowCall.sql, /r\.status = \?/, `${testCase.role} actionable rows must not also apply the single status`)
+    assert.deepEqual(rowCall.params, testCase.prefixParams.concat([2, 0]), `${testCase.role} row query must bind scope and actionable statuses before pagination`)
+    assert.deepEqual(countCall.params, testCase.prefixParams, `${testCase.role} count query must reuse the same scope and actionable parameters`)
+    const rowWhere = rowCall.sql.match(/ WHERE 1=1[\s\S]+? ORDER BY/)[0].replace(/ ORDER BY$/, '')
+    const countWhere = countCall.sql.match(/ WHERE 1=1[\s\S]+$/)[0]
+    assert.equal(countWhere, rowWhere, `${testCase.role} row and count queries must use the same actionable condition`)
+  }
+
+  mysqlCalls.length = 0
+  const studentActionableRes = createControllerResponse()
+  await reservationController.list({
+    query: { actionable: '1', page: '1', pageSize: '20' },
+    user: { id: 7, role: 'student' }
+  }, studentActionableRes)
+  assert.equal(studentActionableRes.state.statusCode, 403, 'students must not access the administrator actionable filter')
+  assert.equal(mysqlCalls.length, 0, 'student actionable requests must be rejected before querying MySQL')
 } finally {
   sharedDb.isMock = originalIsMock
   sharedDb.query = originalQuery

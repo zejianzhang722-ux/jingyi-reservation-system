@@ -5,13 +5,17 @@
       <input class="search-input" placeholder="搜索用户/房间" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" />
     </view>
   </view>
+  <view class="filter-tabs" wx:if="{{filterLabel}}">
+    <text class="tab active">当前查看：{{filterLabel}}</text>
+    <view class="tab" bindtap="onClearPreset" aria-role="button" aria-label="清除当前筛选">查看全部</view>
+  </view>
   <view class="filter-tabs">
-    <view class="tab {{filterStatus === '' ? 'active' : ''}}" bindtap="onFilter" data-status="">全部</view>
-    <view class="tab {{filterStatus === 'pending' ? 'active' : ''}}" bindtap="onFilter" data-status="pending">待审批</view>
-    <view class="tab {{filterStatus === 'approved' ? 'active' : ''}}" bindtap="onFilter" data-status="approved">已通过</view>
-    <view class="tab {{filterStatus === 'rejected' ? 'active' : ''}}" bindtap="onFilter" data-status="rejected">已拒绝</view>
-    <view class="tab {{filterStatus === 'checked_in' ? 'active' : ''}}" bindtap="onFilter" data-status="checked_in">使用中</view>
-    <view class="tab {{filterStatus === 'completed' ? 'active' : ''}}" bindtap="onFilter" data-status="completed">已完成</view>
+    <view class="tab {{!filterPreset && filterStatus === '' ? 'active' : ''}}" bindtap="onFilter" data-status="">全部</view>
+    <view class="tab {{!filterPreset && filterStatus === 'pending' ? 'active' : ''}}" bindtap="onFilter" data-status="pending">待审批</view>
+    <view class="tab {{!filterPreset && filterStatus === 'approved' ? 'active' : ''}}" bindtap="onFilter" data-status="approved">已通过</view>
+    <view class="tab {{!filterPreset && filterStatus === 'rejected' ? 'active' : ''}}" bindtap="onFilter" data-status="rejected">已拒绝</view>
+    <view class="tab {{!filterPreset && filterStatus === 'checked_in' ? 'active' : ''}}" bindtap="onFilter" data-status="checked_in">使用中</view>
+    <view class="tab {{!filterPreset && filterStatus === 'completed' ? 'active' : ''}}" bindtap="onFilter" data-status="completed">已完成</view>
   </view>
   <view class="reservation-list" wx:if="{{list.length > 0}}">
     <view class="reservation-item" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="onViewDetail">

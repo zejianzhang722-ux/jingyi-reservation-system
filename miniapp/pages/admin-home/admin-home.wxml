@@ -27,36 +27,36 @@
   </view>
 
   <view class="stats-grid">
-    <view class="stat-card">
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="ordinary" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看普通待审预约">
       <text class="stat-value">{{hasTrustedStats ? ordinaryPendingCount : '--'}}</text>
       <text class="stat-label">普通待审</text>
     </view>
-    <view class="stat-card" wx:if="{{canSwitchQueue}}">
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" wx:if="{{canSwitchQueue}}" data-target="priority" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看重点待审预约">
       <text class="stat-value">{{hasTrustedStats ? counselorPendingCount : '--'}}</text>
       <text class="stat-label">重点待审</text>
     </view>
-    <view class="stat-card">
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="actionable" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看当前可处理的待审预约">
       <text class="stat-value">{{hasTrustedStats ? actionablePendingCount : '--'}}</text>
       <text class="stat-label">可处理待审</text>
     </view>
-    <view class="stat-card">
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="today" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看今日预约">
       <text class="stat-value">{{hasTrustedStats ? todayReservations : '--'}}</text>
       <text class="stat-label">今日预约</text>
     </view>
-    <view class="stat-card">
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="inUse" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看使用中的预约">
       <text class="stat-value">{{hasTrustedStats ? inUseCount : '--'}}</text>
       <text class="stat-label">使用中</text>
     </view>
-    <view class="stat-card">
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="openRooms" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看开放中的功能房">
       <text class="stat-value">{{hasTrustedStats ? activeRoomCount : '--'}}</text>
       <text class="stat-label">开放房间</text>
     </view>
-    <view class="stat-card" wx:if="{{canManageFeedback}}">
+    <view class="stat-card metric-card {{hasTrustedStats && feedbackStatus === 'ready' ? '' : 'unavailable'}}" wx:if="{{canManageFeedback}}" data-target="feedback" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看待处理反馈">
       <text class="stat-value" wx:if="{{feedbackStatus === 'ready'}}">{{feedbackCount}}</text>
       <text class="stat-unavailable" wx:elif="{{feedbackStatus === 'error'}}">暂不可用</text>
       <text class="stat-unavailable" wx:else>加载中</text>
       <text class="stat-label">待处理反馈</text>
-      <view class="feedback-retry" wx:if="{{feedbackStatus === 'error'}}" bindtap="onRetryStats" aria-role="button" aria-label="重新加载反馈统计">重新加载</view>
+      <view class="feedback-retry" wx:if="{{feedbackStatus === 'error'}}" catchtap="onRetryStats" aria-role="button" aria-label="重新加载反馈统计">重新加载</view>
     </view>
   </view>
   <view class="stats-message" wx:if="{{statsStatus === 'loading' && !hasTrustedStats}}">统计加载中，暂不显示未经确认的数字</view>

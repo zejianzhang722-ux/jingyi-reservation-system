@@ -2,10 +2,27 @@ var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
 
+var PRESETS = {
+  ordinary: { label: '普通待审', status: 'pending' },
+  priority: { label: '重点待审', status: 'counselor_pending', capability: 'counselorApproval' },
+  actionable: { label: '全部可处理', actionable: 1 },
+  today: { label: '今日预约', today: true },
+  in_use: { label: '使用中', status: 'checked_in' }
+}
+
+var STATUS_FILTERS = ['', 'pending', 'approved', 'rejected', 'checked_in', 'completed']
+
+function fingerprintValue(value) {
+  return value === undefined || value === null ? '' : String(value)
+}
+
 Page({
   data: {
     list: [],
+    filterPreset: '',
+    filterLabel: '',
     filterStatus: '',
+    filterDate: '',
     keyword: '',
     page: 1,
     hasMore: true,
@@ -20,11 +37,58 @@ Page({
     }
     return true
   },
-  onLoad: function () {
+  todayString: function () {
+    var today = new Date()
+    var month = String(today.getMonth() + 1)
+    var day = String(today.getDate())
+    if (month.length < 2) month = '0' + month
+    if (day.length < 2) day = '0' + day
+    return today.getFullYear() + '-' + month + '-' + day
+  },
+  normalizePreset: function (preset, role) {
+    if (!Object.prototype.hasOwnProperty.call(PRESETS, preset)) return ''
+    if (preset === 'priority' && !adminPolicy.can(role, PRESETS.priority.capability)) return 'ordinary'
+    return preset
+  },
+  applyPreset: function (preset, role) {
+    var normalized = this.normalizePreset(preset, role)
+    var config = normalized ? PRESETS[normalized] : null
+    this.setData({
+      filterPreset: normalized,
+      filterLabel: config ? config.label : '',
+      filterStatus: config && config.status ? config.status : '',
+      filterDate: config && config.today ? this.todayString() : '',
+      page: 1,
+      hasMore: true
+    })
+  },
+  normalizeActivePreset: function (role) {
+    if (!this.data.filterPreset) return
+    var normalized = this.normalizePreset(this.data.filterPreset, role)
+    if (normalized !== this.data.filterPreset) this.applyPreset(normalized, role)
+    else if (normalized === 'today') this.setData({ filterDate: this.todayString() })
+  },
+  requestContextFingerprint: function () {
+    var userInfo = auth.getUserInfo() || {}
+    var buildingId = userInfo.buildingId
+    var scopeType = userInfo.scopeType
+    if (buildingId === undefined) buildingId = userInfo.building_id
+    if (scopeType === undefined) scopeType = userInfo.scope_type
+    return JSON.stringify([
+      fingerprintValue(userInfo.id),
+      fingerprintValue(userInfo.username),
+      fingerprintValue(userInfo.role),
+      fingerprintValue(buildingId),
+      fingerprintValue(scopeType)
+    ])
+  },
+  onLoad: function (options) {
     if (!this.ensureAccess()) return
+    this.applyPreset(options && options.preset, auth.getUserRole())
   },
   onShow: function () {
     if (!this.ensureAccess()) return
+    this.normalizeActivePreset(auth.getUserRole())
     this.setData({ page: 1, hasMore: true })
     this.loadData()
   },
@@ -53,13 +117,24 @@ Page({
     this.setData({ processingById: next })
   },
   loadData: function () {
+    if (!this.ensureAccess()) return Promise.resolve()
+    this.normalizeActivePreset(auth.getUserRole())
+    var requestContext = this.requestContextFingerprint()
     var that = this
     this._listRequestVersion = (this._listRequestVersion || 0) + 1
     var requestVersion = this._listRequestVersion
     var params = { page: this.data.page, pageSize: 20 }
     if (this.data.filterStatus) params.status = this.data.filterStatus
+    if (this.data.filterPreset === 'actionable') params.actionable = 1
+    if (this.data.filterDate) params.date = this.data.filterDate
     return request.get('/reservation', params, { silent: true }).then(function (data) {
       if (requestVersion !== that._listRequestVersion) return
+      if (!that.ensureAccess()) return
+      if (that.requestContextFingerprint() !== requestContext) {
+        that.setData({ list: [] })
+        that.normalizeActivePreset(auth.getUserRole())
+        return that.loadData()
+      }
       var list = data
       if (!Array.isArray(list)) list = (data && (data.list || data.reservations)) || []
       if (that.data.keyword) {
@@ -79,7 +154,27 @@ Page({
     })
   },
   onFilter: function (e) {
-    this.setData({ filterStatus: e.currentTarget.dataset.status, page: 1 })
+    var status = e && e.currentTarget && e.currentTarget.dataset.status
+    if (STATUS_FILTERS.indexOf(status) === -1) status = ''
+    this.setData({
+      filterPreset: '',
+      filterLabel: '',
+      filterStatus: status,
+      filterDate: '',
+      page: 1,
+      hasMore: true
+    })
+    this.loadData()
+  },
+  onClearPreset: function () {
+    this.setData({
+      filterPreset: '',
+      filterLabel: '',
+      filterStatus: '',
+      filterDate: '',
+      page: 1,
+      hasMore: true
+    })
     this.loadData()
   },
   onSearch: function (e) {

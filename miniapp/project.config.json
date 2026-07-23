@@ -1,7 +1,7 @@
 {
   "description": "敬一书院功能房预约管理系统",
   "setting": {
-    "urlCheck": true,
+    "urlCheck": false,
     "es6": true,
     "postcss": true,
     "minified": true,

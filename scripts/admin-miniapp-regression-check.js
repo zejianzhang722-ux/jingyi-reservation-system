@@ -16,7 +16,14 @@ global.wx = {
   getStorageSync: function(key) { return storage[key] },
   setStorageSync: function(key, value) { storage[key] = value },
   removeStorageSync: function(key) { delete storage[key] },
-  navigateTo: function(options) { navCalls.push({ type: 'navigateTo', url: options.url }) },
+  navigateTo: function(options) {
+    navCalls.push({
+      type: 'navigateTo',
+      url: options.url,
+      fail: options.fail,
+      complete: options.complete
+    })
+  },
   redirectTo: function(options) { navCalls.push({ type: 'redirectTo', url: options.url }) },
   switchTab: function(options) { navCalls.push({ type: 'switchTab', url: options.url }) },
   reLaunch: function(options) { navCalls.push({ type: 'reLaunch', url: options.url }) },
@@ -254,7 +261,7 @@ async function main() {
   request.get = function(url, params) {
     capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
     if (url === '/user/list') return Promise.resolve([])
-    if (url === '/room') return Promise.resolve([])
+    if (url === '/admin/rooms') return Promise.resolve({ list: [] })
     if (url === '/feedback') return Promise.resolve({ list: [] })
     return Promise.resolve([])
   }
@@ -321,10 +328,10 @@ async function main() {
   const roomsPageReadOnly = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
   roomsPageReadOnly.onLoad.call(roomsPageReadOnly)
   assert(roomsPageReadOnly.data.canConfigureRooms === false, '移动端功能房页应为只读')
-  assert(!capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/room' }), '功能房页 onLoad 只校验权限，不应重复读取')
+  assert(!capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/admin/rooms' }), '功能房页 onLoad 只校验权限，不应重复读取')
   roomsPageReadOnly.onShow.call(roomsPageReadOnly)
-  assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/room' }), '移动端功能房页仍应读取房间列表')
-  assert(capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/room' }).length === 1, '功能房页首次 onLoad + onShow 只能读取一次')
+  assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/admin/rooms' }), '移动端功能房页应通过管理员范围接口读取房间列表')
+  assert(capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/admin/rooms' }).length === 1, '功能房页首次 onLoad + onShow 只能读取一次')
   roomsPageReadOnly.onToggleStatus.call(roomsPageReadOnly, { currentTarget: { dataset: { id: 1, status: 'open' } } })
   assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/admin/rooms/') === 0 }), '直接调用房间状态操作也不得发请求')
   assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), '房间配置操作应提示前往电脑后台')
@@ -356,6 +363,191 @@ async function main() {
     assert(capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/feedback' }).length === 1, role + ' 反馈页首次 onLoad + onShow 只能读取一次')
     assert(capabilityCalls.some(function(call) { return call.method === 'PUT' && call.url === '/feedback/2/resolve' }), role + ' 应能处理反馈')
   })
+
+  await flushPromises()
+  await flushPromises()
+  storage.userInfo = { id: 21, username: 'room-admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve([])
+  }
+  var roomPresetPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  roomPresetPage.onLoad.call(roomPresetPage, { status: 'open' })
+  assert(roomPresetPage.data.filterStatus === 'open', 'room status preset should accept open')
+  assert(roomPresetPage.data.filterStatusLabel === '开放中', 'room status preset should expose a user-facing label')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/admin/rooms' }), 'room preset onLoad should initialize without requesting')
+  await roomPresetPage.onShow.call(roomPresetPage)
+  var openRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/admin/rooms' })
+  assert(
+    openRoomCalls.length === 1 &&
+    openRoomCalls[0].params.status === 'open' &&
+    openRoomCalls[0].params.page === 1 &&
+    openRoomCalls[0].params.pageSize === 100,
+    'open room preset should request normalized open status once through the scoped admin endpoint'
+  )
+
+  ;['closed', 'maintenance'].forEach(function(status) {
+    var page = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+    page.onLoad.call(page, { status: status })
+    assert(page.data.filterStatus === status, 'room status preset should accept ' + status)
+  })
+  var unknownRoomStatusPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  unknownRoomStatusPage.onLoad.call(unknownRoomStatusPage, { status: 'deleted' })
+  capabilityCalls.length = 0
+  await unknownRoomStatusPage.onShow.call(unknownRoomStatusPage)
+  var unknownRoomStatusCall = capabilityCalls.find(function(call) { return call.url === '/admin/rooms' })
+  assert(unknownRoomStatusPage.data.filterStatus === '' && unknownRoomStatusCall && unknownRoomStatusCall.params.status === undefined, 'unknown room status preset should be ignored')
+
+  capabilityCalls.length = 0
+  roomPresetPage.setData({ filterType: 'study' })
+  await roomPresetPage.onFilterType.call(roomPresetPage, { currentTarget: { dataset: { type: 'study' } } })
+  var typedOpenRoomCall = capabilityCalls.find(function(call) { return call.url === '/admin/rooms' })
+  assert(typedOpenRoomCall && typedOpenRoomCall.params.status === 'open' && typedOpenRoomCall.params.type === 'study_room', 'room type filter should remain compatible with status preset')
+  capabilityCalls.length = 0
+  await roomPresetPage.onClearStatus.call(roomPresetPage)
+  var clearedRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/admin/rooms' })
+  assert(clearedRoomCalls.length === 1 && clearedRoomCalls[0].params.status === undefined && clearedRoomCalls[0].params.type === 'study_room', 'clearing room status should request the active type exactly once without status')
+  assert(roomPresetPage.data.filterStatus === '' && roomPresetPage.data.filterStatusLabel === '', 'clearing room status should remove the preset context')
+
+  const roomPresetWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-rooms/admin-rooms.wxml'), 'utf8')
+  assert(roomPresetWxml.indexOf('filterStatusLabel') !== -1 && roomPresetWxml.indexOf('当前查看') !== -1, 'room page should show the active status preset')
+  assert(roomPresetWxml.indexOf('bindtap="onClearStatus"') !== -1 && roomPresetWxml.indexOf('查看全部') !== -1, 'room page should provide a clear status action')
+
+  storage.userInfo = { id: 22, username: 'room-admin-a', role: 'admin', buildingId: 1, scopeType: 'building' }
+  var roomContextReads = [deferred(), deferred()]
+  var roomContextReadIndex = 0
+  var roomContextCalls = []
+  request.get = function(url, params) {
+    roomContextCalls.push({
+      url: url,
+      params: params || {},
+      userId: storage.userInfo.id,
+      buildingId: storage.userInfo.buildingId
+    })
+    return roomContextReads[roomContextReadIndex++].promise
+  }
+  var roomContextPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  roomContextPage.setData({
+    list: [{ id: 951 }],
+    filterStatus: 'open',
+    filterStatusLabel: '开放中',
+    filterType: 'study'
+  })
+  roomContextPage.loadData.call(roomContextPage)
+  storage.userInfo = { id: 23, username: 'room-admin-b', role: 'admin', buildingId: 2, scopeType: 'building' }
+  roomContextReads[0].resolve([{ id: 952, name: 'stale scoped room' }])
+  await flushPromises()
+  assert(roomContextPage.data.list.length === 0, 'room response from another account or building scope must be cleared before reload')
+  assert(
+    roomContextCalls.length === 2 &&
+    roomContextCalls[1].userId === 23 &&
+    roomContextCalls[1].buildingId === 2 &&
+    roomContextCalls[1].params.status === 'open' &&
+    roomContextCalls[1].params.type === 'study_room',
+    'room context drift should immediately request the active filters for the new account and building'
+  )
+  roomContextReads[1].resolve([{ id: 953, name: 'current scoped room' }])
+  await flushPromises()
+  assert(
+    roomContextCalls.length === 2 &&
+    roomContextPage.data.list.length === 1 &&
+    roomContextPage.data.list[0].id === 953,
+    'room context reload should stop after the current response and display only current scoped data'
+  )
+
+  storage.userInfo = { id: 24, username: 'room-admin-c', role: 'admin', buildingId: 1, scopeType: 'building' }
+  var failedRoomContextReads = [deferred(), deferred()]
+  var failedRoomContextReadIndex = 0
+  request.get = function() { return failedRoomContextReads[failedRoomContextReadIndex++].promise }
+  var failedRoomContextPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  failedRoomContextPage.loadData.call(failedRoomContextPage)
+  storage.userInfo = { id: 25, username: 'room-admin-d', role: 'admin', buildingId: 3, scopeType: 'building' }
+  failedRoomContextReads[0].reject(new Error('stale room request failed'))
+  await flushPromises()
+  assert(failedRoomContextReadIndex === 2 && failedRoomContextPage.data.list.length === 0, 'failed stale room request should also reload once for the new context')
+  failedRoomContextReads[1].resolve([{ id: 954, name: 'recovered scoped room' }])
+  await flushPromises()
+  assert(failedRoomContextPage.data.list.length === 1 && failedRoomContextPage.data.list[0].id === 954, 'room context reload after stale failure should display current data')
+
+  storage.userInfo = { id: 31, username: 'counselor-a', role: 'counselor', buildingId: 1, scopeType: 'building' }
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve({ list: [] })
+  }
+  var feedbackPresetPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  feedbackPresetPage.onLoad.call(feedbackPresetPage, { status: 'pending' })
+  assert(feedbackPresetPage.data.filterStatus === 'pending', 'feedback preset should accept pending after access validation')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/feedback' }), 'feedback preset onLoad should initialize without requesting')
+  await feedbackPresetPage.onShow.call(feedbackPresetPage)
+  var pendingFeedbackCalls = capabilityCalls.filter(function(call) { return call.url === '/feedback' })
+  assert(pendingFeedbackCalls.length === 1 && pendingFeedbackCalls[0].params.status === 'pending', 'pending feedback preset should request pending feedback once')
+
+  var resolvedFeedbackPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  resolvedFeedbackPage.onLoad.call(resolvedFeedbackPage, { status: 'resolved' })
+  assert(resolvedFeedbackPage.data.filterStatus === 'resolved', 'feedback preset should accept resolved')
+  var unknownFeedbackPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  unknownFeedbackPage.onLoad.call(unknownFeedbackPage, { status: 'deleted' })
+  assert(unknownFeedbackPage.data.filterStatus === '', 'unknown feedback status preset should be ignored')
+
+  storage.userInfo = { id: 41, username: 'denied-admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  capabilityCalls.length = 0
+  var deniedFeedbackPresetPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  deniedFeedbackPresetPage.onLoad.call(deniedFeedbackPresetPage, { status: 'pending' })
+  deniedFeedbackPresetPage.onShow.call(deniedFeedbackPresetPage)
+  assert(deniedFeedbackPresetPage.data.filterStatus === '', 'unauthorized feedback page must not accept a URL preset')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/feedback' }), 'unauthorized feedback page must not request feedback')
+
+  storage.userInfo = { id: 51, username: 'counselor-context-a', role: 'counselor', buildingId: 1, scopeType: 'building' }
+  var feedbackContextReads = [deferred(), deferred()]
+  var feedbackContextReadIndex = 0
+  var feedbackContextCalls = []
+  request.get = function(url, params) {
+    feedbackContextCalls.push({
+      url: url,
+      params: params || {},
+      userId: storage.userInfo.id,
+      buildingId: storage.userInfo.buildingId
+    })
+    return feedbackContextReads[feedbackContextReadIndex++].promise
+  }
+  var feedbackContextPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  feedbackContextPage.setData({ list: [{ id: 961 }], filterStatus: 'pending' })
+  feedbackContextPage.loadFeedback.call(feedbackContextPage)
+  storage.userInfo = { id: 52, username: 'counselor-context-b', role: 'counselor', buildingId: 2, scopeType: 'building' }
+  feedbackContextReads[0].resolve({ list: [{ id: 962, content: 'stale scoped feedback' }] })
+  await flushPromises()
+  assert(feedbackContextPage.data.list.length === 0, 'feedback response from another account or scope must be cleared before reload')
+  assert(
+    feedbackContextCalls.length === 2 &&
+    feedbackContextCalls[1].userId === 52 &&
+    feedbackContextCalls[1].buildingId === 2 &&
+    feedbackContextCalls[1].params.status === 'pending',
+    'feedback context drift should immediately request the active filter for the new account and scope'
+  )
+  feedbackContextReads[1].resolve({ list: [{ id: 963, content: 'current scoped feedback' }] })
+  await flushPromises()
+  assert(
+    feedbackContextCalls.length === 2 &&
+    feedbackContextPage.data.list.length === 1 &&
+    feedbackContextPage.data.list[0].id === 963,
+    'feedback context reload should stop after the current response and display only current scoped data'
+  )
+
+  storage.userInfo = { id: 53, username: 'counselor-context-c', role: 'counselor', buildingId: 1, scopeType: 'building' }
+  var failedFeedbackContextReads = [deferred(), deferred()]
+  var failedFeedbackContextReadIndex = 0
+  request.get = function() { return failedFeedbackContextReads[failedFeedbackContextReadIndex++].promise }
+  var failedFeedbackContextPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  failedFeedbackContextPage.loadFeedback.call(failedFeedbackContextPage)
+  storage.userInfo = { id: 54, username: 'counselor-context-d', role: 'counselor', buildingId: 3, scopeType: 'building' }
+  failedFeedbackContextReads[0].reject(new Error('stale feedback request failed'))
+  await flushPromises()
+  assert(failedFeedbackContextReadIndex === 2 && failedFeedbackContextPage.data.list.length === 0, 'failed stale feedback request should also reload once for the new context')
+  failedFeedbackContextReads[1].resolve({ list: [{ id: 964, content: 'recovered scoped feedback' }] })
+  await flushPromises()
+  assert(failedFeedbackContextPage.data.list.length === 1 && failedFeedbackContextPage.data.list[0].id === 964, 'feedback context reload after stale failure should display current data')
 
   storage.userInfo.role = 'counselor'
   capabilityCalls.length = 0
@@ -442,7 +634,7 @@ async function main() {
   const roomReads = [deferred(), deferred()]
   let roomReadIndex = 0
   request.get = function(url) {
-    if (url === '/room') return roomReads[roomReadIndex++].promise
+    if (url === '/admin/rooms') return roomReads[roomReadIndex++].promise
     return Promise.resolve([])
   }
   let roomsRacePage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
@@ -865,10 +1057,24 @@ async function main() {
   const homeSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.js'), 'utf8')
   const homeWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.wxml'), 'utf8')
   const homeWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.wxss'), 'utf8')
+  const metricTargets = [
+    ['ordinary', '/pages/admin-reservation/admin-reservation?preset=ordinary'],
+    ['priority', '/pages/admin-reservation/admin-reservation?preset=priority'],
+    ['actionable', '/pages/admin-reservation/admin-reservation?preset=actionable'],
+    ['today', '/pages/admin-reservation/admin-reservation?preset=today'],
+    ['inUse', '/pages/admin-reservation/admin-reservation?preset=in_use'],
+    ['openRooms', '/pages/admin-rooms/admin-rooms?status=open'],
+    ['feedback', '/pages/admin-feedback/admin-feedback?status=pending']
+  ]
   assert(homeWxml.indexOf('加载失败') !== -1 && homeWxml.indexOf('重新加载') !== -1, '审批工作台应提供明确的加载失败和重新加载状态')
   assert(homeWxml.indexOf('item.purpose') !== -1 && homeWxml.indexOf('item.participants') !== -1, '审批卡片应展示用途和人数')
   assert(homeWxml.indexOf('统计加载中') !== -1 && homeWxml.indexOf('暂无可信统计数据') !== -1, '首次统计加载和失败应明确说明数据尚不可信')
   assert(homeWxml.indexOf('onRetryStats') !== -1 && homeWxml.indexOf('重新加载统计') !== -1, '统计失败应提供重新加载入口')
+  metricTargets.forEach(function(testCase) {
+    var metricCardPattern = new RegExp('<view\\b(?=[^>]*data-target="' + testCase[0] + '")(?=[^>]*bindtap="onMetricTap")(?=[^>]*aria-role="button")[^>]*>')
+    assert(metricCardPattern.test(homeWxml), testCase[0] + ' 指标卡应是可点击的无障碍入口')
+  })
+  assert(/<view\b(?=[^>]*class="feedback-retry")(?=[^>]*catchtap="onRetryStats")[^>]*>/.test(homeWxml), '反馈统计重试必须阻止触发指标卡导航')
   assert(homeWxml.indexOf('feedbackStatus') !== -1 && homeWxml.indexOf('暂不可用') !== -1, '反馈指标失败时应显示不可用状态而不是可信 0')
   assert(homeWxml.indexOf("queueType === 'admin'") !== -1, '只有普通队列应显示快捷审批操作')
   assert(homeWxml.indexOf("item.status === 'pending'") !== -1, '普通队列也只能为 pending 卡片渲染快捷审批')
@@ -1082,6 +1288,104 @@ async function main() {
   assert(statsStatePage.data.statsError.indexOf('显示上次结果') !== -1, '已有可信结果刷新失败应明确说明显示上次结果')
   request.get = approvalGet
 
+  storage.userInfo.role = 'super_admin'
+  const metricPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  metricPage.onLoad.call(metricPage, {})
+  metricPage.setData({ hasTrustedStats: true, statsStatus: 'ready', feedbackStatus: 'ready' })
+  assert(typeof metricPage.onMetricTap === 'function' && typeof metricPage.onMetricNavigationComplete === 'function', '工作台应提供指标卡导航与导航锁释放处理')
+  metricTargets.forEach(function(testCase) {
+    navCalls.length = 0
+    metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: testCase[0] } } })
+    assert(navCalls[0] && navCalls[0].type === 'navigateTo' && navCalls[0].url === testCase[1], testCase[0] + ' 指标应打开正确清单')
+    assert(typeof navCalls[0].complete === 'function' && typeof navCalls[0].fail === 'function', testCase[0] + ' 导航应向微信提供成功与失败后的锁释放回调')
+    navCalls[0].complete()
+  })
+
+  navCalls.length = 0
+  toastCalls.length = 0
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls[0] && typeof navCalls[0].fail === 'function', '指标导航应传入失败回调')
+  navCalls[0].fail({ errMsg: 'navigateTo:fail' })
+  navCalls[0].complete()
+  assert(toastCalls.length === 1 && toastCalls[0].title === '页面打开失败，请重试', '指标导航失败应只提示一次清晰的重试说明')
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'openRooms' } } })
+  assert(navCalls.length === 2 && navCalls[1].url === '/pages/admin-rooms/admin-rooms?status=open', '导航失败回调应释放点击锁并允许重试')
+  navCalls[1].complete()
+
+  const metricRoleCalls = []
+  request.get = function(url, params) {
+    metricRoleCalls.push({ url: url, params: params || {} })
+    if (url === '/stats/dashboard') return Promise.resolve({
+      ordinaryPendingCount: 4,
+      counselorPendingCount: 0,
+      actionablePendingCount: 4,
+      activeRoomCount: 2,
+      todayReservations: 3,
+      usingCount: 1
+    })
+    if (url === '/audit/pending') return Promise.resolve({ list: [], total: 0 })
+    return Promise.resolve({})
+  }
+  metricPage.setData({
+    ordinaryPendingCount: 91,
+    counselorPendingCount: 92,
+    actionablePendingCount: 93,
+    activeRoomCount: 94,
+    todayReservations: 95,
+    inUseCount: 96,
+    feedbackCount: 97,
+    hasTrustedStats: true,
+    statsStatus: 'ready',
+    feedbackStatus: 'ready'
+  })
+  storage.userInfo.role = 'admin'
+  navCalls.length = 0
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 0, '点击前角色变化时不得沿用旧角色统计继续跳转')
+  assert(metricPage._loadedRole === 'admin' && metricPage.data.hasTrustedStats === false, '点击前角色变化时应立即应用新角色并废弃旧统计可信状态')
+  assert(metricPage.data.todayReservations === 0 && metricPage.data.feedbackCount === 0, '点击前角色变化时应清空旧角色指标值')
+  await flushPromises()
+  assert(metricPage.data.hasTrustedStats === true && metricPage.data.todayReservations === 3, '点击前角色变化时应刷新并写入当前角色统计')
+  assert(metricRoleCalls.some(function(call) { return call.url === '/stats/dashboard' }), '点击前角色变化时应重新请求当前角色统计')
+  assert(metricRoleCalls.some(function(call) { return call.url === '/audit/pending' && call.params.type === 'admin' }), '点击前角色变化时应同步刷新当前角色审批队列')
+
+  request.get = approvalGet
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'priority' } } })
+  assert(navCalls.length === 0, '导生管理员不得通过指标卡进入重点待审')
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'feedback' } } })
+  assert(navCalls.length === 0, '导生管理员不得通过指标卡进入反馈管理')
+
+  storage.userInfo.role = 'super_admin'
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'unknown' } } })
+  assert(navCalls.length === 0, '未知指标目标不得触发导航')
+
+  storage.userInfo.role = 'counselor'
+  const unavailableFeedbackMetricPage = loadPage('miniapp/pages/admin-home/admin-home.js')
+  unavailableFeedbackMetricPage.onLoad.call(unavailableFeedbackMetricPage, {})
+  unavailableFeedbackMetricPage.setData({ hasTrustedStats: true, statsStatus: 'ready', feedbackStatus: 'error' })
+  navCalls.length = 0
+  assert(unavailableFeedbackMetricPage._loadedRole === 'counselor' && unavailableFeedbackMetricPage.data.canManageFeedback === true, '反馈不可用检查应在已同步且有反馈权限的角色状态下执行')
+  unavailableFeedbackMetricPage.onMetricTap.call(unavailableFeedbackMetricPage, { currentTarget: { dataset: { target: 'feedback' } } })
+  assert(navCalls.length === 0, '反馈统计不可用时不得进入待处理反馈清单')
+  unavailableFeedbackMetricPage.setData({ feedbackStatus: 'ready' })
+  unavailableFeedbackMetricPage.onMetricTap.call(unavailableFeedbackMetricPage, { currentTarget: { dataset: { target: 'feedback' } } })
+  assert(navCalls.length === 1 && navCalls[0].url === '/pages/admin-feedback/admin-feedback?status=pending', '同一辅导员角色下反馈统计恢复后应可进入待处理反馈清单')
+  navCalls[0].complete()
+
+  storage.userInfo.role = 'admin'
+  metricPage.setData({ hasTrustedStats: false, statsStatus: 'loading' })
+  navCalls.length = 0
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 0, '无可信统计时不得导航')
+
+  metricPage.setData({ hasTrustedStats: true, statsStatus: 'error' })
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 1 && navCalls[0].url === '/pages/admin-reservation/admin-reservation?preset=today', '保留可信旧统计时仍可进入实时清单')
+  metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'today' } } })
+  assert(navCalls.length === 1, '导航未完成时重复点击不得打开第二页')
+  navCalls[0].complete()
+  request.get = approvalGet
+
   storage.userInfo.role = 'counselor'
   const feedbackStatePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   feedbackStatePage.onLoad.call(feedbackStatePage, {})
@@ -1106,6 +1410,143 @@ async function main() {
   }
   await feedbackStatePage.loadStats.call(feedbackStatePage)
   assert(feedbackStatePage.data.feedbackStatus === 'error' && feedbackStatePage.data.feedbackCount === 6, '反馈刷新失败应保留旧值但标记不可用')
+  request.get = approvalGet
+
+  async function loadReservationPreset(role, preset, roleBeforeShow) {
+    var presetCalls = []
+    storage.userInfo.role = role
+    request.get = function(url, params) {
+      presetCalls.push({ url: url, params: params || {} })
+      return Promise.resolve({ list: [], total: 0, page: 1, pageSize: 20 })
+    }
+    var page = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+    page.todayString = function() { return '2026-07-22' }
+    page.onLoad.call(page, { preset: preset })
+    assert(!presetCalls.some(function(call) { return call.url === '/reservation' }), '预约筛选应在 onLoad 只初始化，不应提前请求')
+    if (roleBeforeShow) storage.userInfo.role = roleBeforeShow
+    page.onShow.call(page)
+    await flushPromises()
+    var reservationCall = presetCalls.find(function(call) { return call.url === '/reservation' })
+    assert(reservationCall, '预约筛选应在 onShow 请求预约列表')
+    return { page: page, call: reservationCall, calls: presetCalls }
+  }
+
+  var ordinaryPreset = await loadReservationPreset('admin', 'ordinary')
+  assert(ordinaryPreset.page.data.filterPreset === 'ordinary' && ordinaryPreset.page.data.filterLabel === '普通待审', '普通预约入口应显示普通待审筛选')
+  assert(ordinaryPreset.call.params.status === 'pending' && ordinaryPreset.call.params.actionable === undefined && ordinaryPreset.call.params.date === undefined, '普通预约入口只应请求 pending 状态')
+
+  var priorityPreset = await loadReservationPreset('counselor', 'priority')
+  assert(priorityPreset.page.data.filterPreset === 'priority' && priorityPreset.page.data.filterLabel === '重点待审', '辅导员重点入口应显示重点待审筛选')
+  assert(priorityPreset.call.params.status === 'counselor_pending' && priorityPreset.call.params.actionable === undefined && priorityPreset.call.params.date === undefined, '辅导员重点入口只应请求 counselor_pending 状态')
+
+  var actionablePreset = await loadReservationPreset('super_admin', 'actionable')
+  assert(actionablePreset.page.data.filterPreset === 'actionable' && actionablePreset.page.data.filterLabel === '全部可处理', '全部可处理入口应显示对应筛选')
+  assert(actionablePreset.call.params.actionable === 1 && actionablePreset.call.params.status === undefined && actionablePreset.call.params.date === undefined, '全部可处理入口只应请求服务端可处理筛选')
+  actionablePreset.page.setData({ page: 3, hasMore: false })
+  actionablePreset.page.onClearPreset.call(actionablePreset.page)
+  assert(actionablePreset.page.data.filterPreset === '' && actionablePreset.page.data.filterLabel === '' && actionablePreset.page.data.filterStatus === '' && actionablePreset.page.data.filterDate === '', '查看全部应清空当前预约筛选')
+  assert(actionablePreset.page.data.page === 1 && actionablePreset.page.data.hasMore === true, '查看全部应重置预约分页状态')
+  await flushPromises()
+  var clearPresetCall = actionablePreset.calls[actionablePreset.calls.length - 1]
+  assert(actionablePreset.calls.length === 2 && clearPresetCall.url === '/reservation', '查看全部应且仅应重新请求一次预约列表')
+  assert(clearPresetCall.params.status === undefined && clearPresetCall.params.actionable === undefined && clearPresetCall.params.date === undefined, '查看全部的请求不得保留旧筛选参数')
+
+  var todayPreset = await loadReservationPreset('admin', 'today')
+  assert(todayPreset.page.data.filterPreset === 'today' && todayPreset.page.data.filterLabel === '今日预约', '今日预约入口应显示今日筛选')
+  assert(todayPreset.call.params.date === '2026-07-22' && todayPreset.call.params.status === undefined && todayPreset.call.params.actionable === undefined, '今日预约入口应按本地日期请求')
+
+  var inUsePreset = await loadReservationPreset('admin', 'in_use')
+  assert(inUsePreset.page.data.filterPreset === 'in_use' && inUsePreset.page.data.filterLabel === '使用中', '使用中入口应显示使用中筛选')
+  assert(inUsePreset.call.params.status === 'checked_in' && inUsePreset.call.params.actionable === undefined && inUsePreset.call.params.date === undefined, '使用中入口只应请求 checked_in 状态')
+
+  var unknownPreset = await loadReservationPreset('admin', 'unknown')
+  assert(unknownPreset.page.data.filterPreset === '' && unknownPreset.page.data.filterLabel === '', '未知预约筛选必须降级为全部预约')
+  assert(unknownPreset.call.params.status === undefined && unknownPreset.call.params.actionable === undefined && unknownPreset.call.params.date === undefined, '未知预约筛选不得透传任何筛选参数')
+
+  var deniedPriorityPreset = await loadReservationPreset('admin', 'priority')
+  assert(deniedPriorityPreset.page.data.filterPreset === 'ordinary' && deniedPriorityPreset.page.data.filterLabel === '普通待审', '导生管理员打开重点待审时应降级为普通待审')
+  assert(deniedPriorityPreset.call.params.status === 'pending' && deniedPriorityPreset.call.params.actionable === undefined && deniedPriorityPreset.call.params.date === undefined, '导生管理员不得请求重点待审数据')
+
+  var cachedPriorityPreset = await loadReservationPreset('counselor', 'priority', 'admin')
+  assert(cachedPriorityPreset.page.data.filterPreset === 'ordinary' && cachedPriorityPreset.page.data.filterLabel === '普通待审', '页面缓存期间角色降级后不得沿用重点待审筛选')
+  assert(cachedPriorityPreset.call.params.status === 'pending' && cachedPriorityPreset.call.params.actionable === undefined && cachedPriorityPreset.call.params.date === undefined, '角色降级后的请求必须改为普通待审')
+
+  var accountContextFirstRead = deferred()
+  var accountContextCalls = []
+  storage.userInfo = { id: 31, username: 'building-admin-a', role: 'admin', buildingId: 1, scopeType: 'building' }
+  request.get = function(url, params) {
+    accountContextCalls.push({ url: url, params: params || {} })
+    if (accountContextCalls.length === 1) return accountContextFirstRead.promise
+    return Promise.resolve({ list: [{ id: 812, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  }
+  var accountContextPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  accountContextPage.onLoad.call(accountContextPage, { preset: 'ordinary' })
+  accountContextPage.onShow.call(accountContextPage)
+  storage.userInfo = { id: 32, username: 'building-admin-b', role: 'admin', buildingId: 1, scopeType: 'building' }
+  accountContextFirstRead.resolve({ list: [{ id: 811, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  await flushPromises()
+  assert(accountContextCalls.length === 2, '同角色切换账号后旧请求完成时应按新账号重新请求')
+  assert(accountContextPage.data.list.length === 1 && accountContextPage.data.list[0].id === 812, '同角色旧账号的预约响应不得写入新账号页面')
+
+  var scopeContextFirstRead = deferred()
+  var scopeContextCalls = []
+  storage.userInfo = { id: 41, username: 'scoped-admin', role: 'admin', building_id: 1, scope_type: 'building' }
+  request.get = function(url, params) {
+    scopeContextCalls.push({ url: url, params: params || {} })
+    if (scopeContextCalls.length === 1) return scopeContextFirstRead.promise
+    return Promise.resolve({ list: [{ id: 822, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  }
+  var scopeContextPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  scopeContextPage.onLoad.call(scopeContextPage, { preset: 'ordinary' })
+  scopeContextPage.onShow.call(scopeContextPage)
+  storage.userInfo = { id: 41, username: 'scoped-admin', role: 'admin', building_id: 2, scope_type: 'building' }
+  scopeContextFirstRead.resolve({ list: [{ id: 821, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  await flushPromises()
+  assert(scopeContextCalls.length === 2, '同账号楼栋范围变化后旧请求完成时应按新范围重新请求')
+  assert(scopeContextPage.data.list.length === 1 && scopeContextPage.data.list[0].id === 822, '旧楼栋范围的预约响应不得写入新范围页面')
+
+  var tokenRefreshRead = deferred()
+  var tokenRefreshCalls = []
+  storage.token = 'admin-token-before-refresh'
+  storage.userInfo = { id: 51, username: 'stable-admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  request.get = function(url, params) {
+    tokenRefreshCalls.push({ url: url, params: params || {} })
+    return tokenRefreshRead.promise
+  }
+  var tokenRefreshPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  tokenRefreshPage.onLoad.call(tokenRefreshPage, { preset: 'ordinary' })
+  tokenRefreshPage.onShow.call(tokenRefreshPage)
+  storage.token = 'admin-token-after-refresh'
+  tokenRefreshRead.resolve({ list: [{ id: 831, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  assert(tokenRefreshCalls.length === 1 && tokenRefreshPage.data.list[0].id === 831, '仅令牌刷新时不应把同一账号误判为数据范围变化')
+
+  var todayCalls = []
+  var simulatedToday = '2026-07-22'
+  storage.userInfo = { id: 1, username: 'admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  request.get = function(url, params) {
+    todayCalls.push({ url: url, params: params || {} })
+    return Promise.resolve({ list: [], total: 0, page: 1, pageSize: 20 })
+  }
+  var midnightTodayPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  midnightTodayPage.todayString = function() { return simulatedToday }
+  midnightTodayPage.onLoad.call(midnightTodayPage, { preset: 'today' })
+  simulatedToday = '2026-07-23'
+  midnightTodayPage.onShow.call(midnightTodayPage)
+  await flushPromises()
+  assert(todayCalls[0] && todayCalls[0].params.date === '2026-07-23', '今日预约在 onShow 请求前应刷新本地日期')
+  simulatedToday = '2026-07-24'
+  await midnightTodayPage.loadData.call(midnightTodayPage)
+  assert(todayCalls[1] && todayCalls[1].params.date === '2026-07-24', '今日预约每次实际加载前都应刷新本地日期')
+
+  var presetWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation/admin-reservation.wxml'), 'utf8')
+  assert(presetWxml.indexOf('filterLabel') !== -1 && presetWxml.indexOf('当前查看') !== -1, '预约页面应显示当前筛选')
+  assert(presetWxml.indexOf('bindtap="onClearPreset"') !== -1 && presetWxml.indexOf('查看全部') !== -1, '预约页面应提供清除筛选并查看全部的操作')
+  ;['', 'pending', 'approved', 'rejected', 'checked_in', 'completed'].forEach(function(status) {
+    assert(presetWxml.indexOf("!filterPreset && filterStatus === '" + status + "'") !== -1, '存在预设筛选时状态标签不得同时高亮：' + (status || '全部'))
+  })
   request.get = approvalGet
 
   approvalCalls.length = 0

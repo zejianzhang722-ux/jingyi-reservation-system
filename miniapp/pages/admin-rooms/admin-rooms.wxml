@@ -4,6 +4,11 @@
     <text class="subtitle">查看房间状态，按分类快速筛选</text>
   </view>
 
+  <view class="filter-tabs" wx:if="{{filterStatusLabel}}">
+    <text class="tab active">当前查看：{{filterStatusLabel}}</text>
+    <view class="tab" bindtap="onClearStatus" aria-role="button" aria-label="清除房间状态筛选">查看全部</view>
+  </view>
+
   <scroll-view class="filter-tabs" scroll-x="true" show-scrollbar="false">
     <view class="tab {{filterType === '' ? 'active' : ''}}" bindtap="onFilterType" data-type="">全部</view>
     <view class="tab {{filterType === 'study' ? 'active' : ''}}" bindtap="onFilterType" data-type="study">自习室</view>

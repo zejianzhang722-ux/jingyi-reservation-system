@@ -2,6 +2,10 @@ var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
 
+function fingerprintValue(value) {
+  return value === undefined || value === null ? '' : String(value)
+}
+
 Page({
   data: { list: [], filterStatus: '', replyId: null, replyContent: '' },
   hasFeedbackAccess: function () {
@@ -25,11 +29,32 @@ Page({
     }
     return true
   },
-  onLoad: function () { this.ensureFeedbackAccess() },
+  normalizeStatus: function (status) {
+    return status === 'pending' || status === 'resolved' ? status : ''
+  },
+  requestContextFingerprint: function () {
+    var userInfo = auth.getUserInfo() || {}
+    var buildingId = userInfo.buildingId
+    var scopeType = userInfo.scopeType
+    if (buildingId === undefined) buildingId = userInfo.building_id
+    if (scopeType === undefined) scopeType = userInfo.scope_type
+    return JSON.stringify([
+      fingerprintValue(userInfo.id),
+      fingerprintValue(userInfo.username),
+      fingerprintValue(userInfo.role),
+      fingerprintValue(buildingId),
+      fingerprintValue(scopeType)
+    ])
+  },
+  onLoad: function (options) {
+    if (!this.ensureFeedbackAccess()) return
+    this.setData({ filterStatus: this.normalizeStatus(options && options.status) })
+  },
   onShow: function () { if (this.ensureFeedbackAccess()) return this.loadFeedback() },
   loadFeedback: function () {
     if (!this.ensureFeedbackAccess()) return Promise.resolve()
     var that = this
+    var requestContext = this.requestContextFingerprint()
     this._feedbackRequestVersion = (this._feedbackRequestVersion || 0) + 1
     var requestVersion = this._feedbackRequestVersion
     return request.get('/feedback', { status: this.data.filterStatus }, { silent: true }).then(function (data) {
@@ -38,6 +63,11 @@ Page({
         return
       }
       if (requestVersion !== that._feedbackRequestVersion) return
+      if (that.requestContextFingerprint() !== requestContext) {
+        that.clearFeedbackData()
+        if (that.hasFeedbackAccess()) return that.loadFeedback()
+        return
+      }
       var list = data.list || data || []
       that.setData({ list: Array.isArray(list) ? list : [] })
     }).catch(function () {
@@ -46,13 +76,18 @@ Page({
         return
       }
       if (requestVersion !== that._feedbackRequestVersion) return
+      if (that.requestContextFingerprint() !== requestContext) {
+        that.clearFeedbackData()
+        if (that.hasFeedbackAccess()) return that.loadFeedback()
+        return
+      }
       that.setData({ list: [] })
     })
   },
   onFilter: function (e) {
     if (!this.ensureFeedbackAccess()) return
-    this.setData({ filterStatus: e.currentTarget.dataset.status })
-    this.loadFeedback()
+    this.setData({ filterStatus: this.normalizeStatus(e.currentTarget.dataset.status) })
+    return this.loadFeedback()
   },
   onReplyInput: function (e) {
     this.setData({ replyContent: e.detail.value })
