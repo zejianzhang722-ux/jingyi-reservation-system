@@ -2,6 +2,7 @@ const assert = require('assert');
 const path = require('path');
 
 const miniappConfig = require('../miniapp/utils/network-config');
+const projectConfig = require('../miniapp/project.config.json');
 
 function testMiniappConfig() {
   assert.strictEqual(typeof miniappConfig.normalizeBaseUrl, 'function');
@@ -37,6 +38,15 @@ function testSourceDoesNotUsePlaceholders() {
   assert(!requestSource.includes("var LAN_IP = '"), 'miniapp request.js should not hard-code LAN IP');
 }
 
+function testDevtoolsAllowsLocalApi() {
+  assert.strictEqual(
+    projectConfig.setting && projectConfig.setting.urlCheck,
+    false,
+    'WeChat DevTools must allow the local 127.0.0.1 API during development'
+  );
+}
+
 testMiniappConfig();
 testSourceDoesNotUsePlaceholders();
+testDevtoolsAllowsLocalApi();
 console.log('network-config-check passed');
