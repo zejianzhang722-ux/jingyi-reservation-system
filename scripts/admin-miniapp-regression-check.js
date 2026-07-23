@@ -364,6 +364,185 @@ async function main() {
     assert(capabilityCalls.some(function(call) { return call.method === 'PUT' && call.url === '/feedback/2/resolve' }), role + ' 应能处理反馈')
   })
 
+  await flushPromises()
+  await flushPromises()
+  storage.userInfo = { id: 21, username: 'room-admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve([])
+  }
+  var roomPresetPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  roomPresetPage.onLoad.call(roomPresetPage, { status: 'open' })
+  assert(roomPresetPage.data.filterStatus === 'open', 'room status preset should accept open')
+  assert(roomPresetPage.data.filterStatusLabel === '开放中', 'room status preset should expose a user-facing label')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/room' }), 'room preset onLoad should initialize without requesting')
+  await roomPresetPage.onShow.call(roomPresetPage)
+  var openRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/room' })
+  assert(openRoomCalls.length === 1 && openRoomCalls[0].params.status === 'open', 'open room preset should request normalized open status once')
+
+  ;['closed', 'maintenance'].forEach(function(status) {
+    var page = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+    page.onLoad.call(page, { status: status })
+    assert(page.data.filterStatus === status, 'room status preset should accept ' + status)
+  })
+  var unknownRoomStatusPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  unknownRoomStatusPage.onLoad.call(unknownRoomStatusPage, { status: 'deleted' })
+  capabilityCalls.length = 0
+  await unknownRoomStatusPage.onShow.call(unknownRoomStatusPage)
+  var unknownRoomStatusCall = capabilityCalls.find(function(call) { return call.url === '/room' })
+  assert(unknownRoomStatusPage.data.filterStatus === '' && unknownRoomStatusCall && unknownRoomStatusCall.params.status === undefined, 'unknown room status preset should be ignored')
+
+  capabilityCalls.length = 0
+  roomPresetPage.setData({ filterType: 'study' })
+  await roomPresetPage.onFilterType.call(roomPresetPage, { currentTarget: { dataset: { type: 'study' } } })
+  var typedOpenRoomCall = capabilityCalls.find(function(call) { return call.url === '/room' })
+  assert(typedOpenRoomCall && typedOpenRoomCall.params.status === 'open' && typedOpenRoomCall.params.type === 'study_room', 'room type filter should remain compatible with status preset')
+  capabilityCalls.length = 0
+  await roomPresetPage.onClearStatus.call(roomPresetPage)
+  var clearedRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/room' })
+  assert(clearedRoomCalls.length === 1 && clearedRoomCalls[0].params.status === undefined && clearedRoomCalls[0].params.type === 'study_room', 'clearing room status should request the active type exactly once without status')
+  assert(roomPresetPage.data.filterStatus === '' && roomPresetPage.data.filterStatusLabel === '', 'clearing room status should remove the preset context')
+
+  const roomPresetWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-rooms/admin-rooms.wxml'), 'utf8')
+  assert(roomPresetWxml.indexOf('filterStatusLabel') !== -1 && roomPresetWxml.indexOf('当前查看') !== -1, 'room page should show the active status preset')
+  assert(roomPresetWxml.indexOf('bindtap="onClearStatus"') !== -1 && roomPresetWxml.indexOf('查看全部') !== -1, 'room page should provide a clear status action')
+
+  storage.userInfo = { id: 22, username: 'room-admin-a', role: 'admin', buildingId: 1, scopeType: 'building' }
+  var roomContextReads = [deferred(), deferred()]
+  var roomContextReadIndex = 0
+  var roomContextCalls = []
+  request.get = function(url, params) {
+    roomContextCalls.push({
+      url: url,
+      params: params || {},
+      userId: storage.userInfo.id,
+      buildingId: storage.userInfo.buildingId
+    })
+    return roomContextReads[roomContextReadIndex++].promise
+  }
+  var roomContextPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  roomContextPage.setData({
+    list: [{ id: 951 }],
+    filterStatus: 'open',
+    filterStatusLabel: '开放中',
+    filterType: 'study'
+  })
+  roomContextPage.loadData.call(roomContextPage)
+  storage.userInfo = { id: 23, username: 'room-admin-b', role: 'admin', buildingId: 2, scopeType: 'building' }
+  roomContextReads[0].resolve([{ id: 952, name: 'stale scoped room' }])
+  await flushPromises()
+  assert(roomContextPage.data.list.length === 0, 'room response from another account or building scope must be cleared before reload')
+  assert(
+    roomContextCalls.length === 2 &&
+    roomContextCalls[1].userId === 23 &&
+    roomContextCalls[1].buildingId === 2 &&
+    roomContextCalls[1].params.status === 'open' &&
+    roomContextCalls[1].params.type === 'study_room',
+    'room context drift should immediately request the active filters for the new account and building'
+  )
+  roomContextReads[1].resolve([{ id: 953, name: 'current scoped room' }])
+  await flushPromises()
+  assert(
+    roomContextCalls.length === 2 &&
+    roomContextPage.data.list.length === 1 &&
+    roomContextPage.data.list[0].id === 953,
+    'room context reload should stop after the current response and display only current scoped data'
+  )
+
+  storage.userInfo = { id: 24, username: 'room-admin-c', role: 'admin', buildingId: 1, scopeType: 'building' }
+  var failedRoomContextReads = [deferred(), deferred()]
+  var failedRoomContextReadIndex = 0
+  request.get = function() { return failedRoomContextReads[failedRoomContextReadIndex++].promise }
+  var failedRoomContextPage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
+  failedRoomContextPage.loadData.call(failedRoomContextPage)
+  storage.userInfo = { id: 25, username: 'room-admin-d', role: 'admin', buildingId: 3, scopeType: 'building' }
+  failedRoomContextReads[0].reject(new Error('stale room request failed'))
+  await flushPromises()
+  assert(failedRoomContextReadIndex === 2 && failedRoomContextPage.data.list.length === 0, 'failed stale room request should also reload once for the new context')
+  failedRoomContextReads[1].resolve([{ id: 954, name: 'recovered scoped room' }])
+  await flushPromises()
+  assert(failedRoomContextPage.data.list.length === 1 && failedRoomContextPage.data.list[0].id === 954, 'room context reload after stale failure should display current data')
+
+  storage.userInfo = { id: 31, username: 'counselor-a', role: 'counselor', buildingId: 1, scopeType: 'building' }
+  capabilityCalls.length = 0
+  request.get = function(url, params) {
+    capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
+    return Promise.resolve({ list: [] })
+  }
+  var feedbackPresetPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  feedbackPresetPage.onLoad.call(feedbackPresetPage, { status: 'pending' })
+  assert(feedbackPresetPage.data.filterStatus === 'pending', 'feedback preset should accept pending after access validation')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/feedback' }), 'feedback preset onLoad should initialize without requesting')
+  await feedbackPresetPage.onShow.call(feedbackPresetPage)
+  var pendingFeedbackCalls = capabilityCalls.filter(function(call) { return call.url === '/feedback' })
+  assert(pendingFeedbackCalls.length === 1 && pendingFeedbackCalls[0].params.status === 'pending', 'pending feedback preset should request pending feedback once')
+
+  var resolvedFeedbackPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  resolvedFeedbackPage.onLoad.call(resolvedFeedbackPage, { status: 'resolved' })
+  assert(resolvedFeedbackPage.data.filterStatus === 'resolved', 'feedback preset should accept resolved')
+  var unknownFeedbackPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  unknownFeedbackPage.onLoad.call(unknownFeedbackPage, { status: 'deleted' })
+  assert(unknownFeedbackPage.data.filterStatus === '', 'unknown feedback status preset should be ignored')
+
+  storage.userInfo = { id: 41, username: 'denied-admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  capabilityCalls.length = 0
+  var deniedFeedbackPresetPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  deniedFeedbackPresetPage.onLoad.call(deniedFeedbackPresetPage, { status: 'pending' })
+  deniedFeedbackPresetPage.onShow.call(deniedFeedbackPresetPage)
+  assert(deniedFeedbackPresetPage.data.filterStatus === '', 'unauthorized feedback page must not accept a URL preset')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/feedback' }), 'unauthorized feedback page must not request feedback')
+
+  storage.userInfo = { id: 51, username: 'counselor-context-a', role: 'counselor', buildingId: 1, scopeType: 'building' }
+  var feedbackContextReads = [deferred(), deferred()]
+  var feedbackContextReadIndex = 0
+  var feedbackContextCalls = []
+  request.get = function(url, params) {
+    feedbackContextCalls.push({
+      url: url,
+      params: params || {},
+      userId: storage.userInfo.id,
+      buildingId: storage.userInfo.buildingId
+    })
+    return feedbackContextReads[feedbackContextReadIndex++].promise
+  }
+  var feedbackContextPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  feedbackContextPage.setData({ list: [{ id: 961 }], filterStatus: 'pending' })
+  feedbackContextPage.loadFeedback.call(feedbackContextPage)
+  storage.userInfo = { id: 52, username: 'counselor-context-b', role: 'counselor', buildingId: 2, scopeType: 'building' }
+  feedbackContextReads[0].resolve({ list: [{ id: 962, content: 'stale scoped feedback' }] })
+  await flushPromises()
+  assert(feedbackContextPage.data.list.length === 0, 'feedback response from another account or scope must be cleared before reload')
+  assert(
+    feedbackContextCalls.length === 2 &&
+    feedbackContextCalls[1].userId === 52 &&
+    feedbackContextCalls[1].buildingId === 2 &&
+    feedbackContextCalls[1].params.status === 'pending',
+    'feedback context drift should immediately request the active filter for the new account and scope'
+  )
+  feedbackContextReads[1].resolve({ list: [{ id: 963, content: 'current scoped feedback' }] })
+  await flushPromises()
+  assert(
+    feedbackContextCalls.length === 2 &&
+    feedbackContextPage.data.list.length === 1 &&
+    feedbackContextPage.data.list[0].id === 963,
+    'feedback context reload should stop after the current response and display only current scoped data'
+  )
+
+  storage.userInfo = { id: 53, username: 'counselor-context-c', role: 'counselor', buildingId: 1, scopeType: 'building' }
+  var failedFeedbackContextReads = [deferred(), deferred()]
+  var failedFeedbackContextReadIndex = 0
+  request.get = function() { return failedFeedbackContextReads[failedFeedbackContextReadIndex++].promise }
+  var failedFeedbackContextPage = loadPage('miniapp/pages/admin-feedback/admin-feedback.js')
+  failedFeedbackContextPage.loadFeedback.call(failedFeedbackContextPage)
+  storage.userInfo = { id: 54, username: 'counselor-context-d', role: 'counselor', buildingId: 3, scopeType: 'building' }
+  failedFeedbackContextReads[0].reject(new Error('stale feedback request failed'))
+  await flushPromises()
+  assert(failedFeedbackContextReadIndex === 2 && failedFeedbackContextPage.data.list.length === 0, 'failed stale feedback request should also reload once for the new context')
+  failedFeedbackContextReads[1].resolve({ list: [{ id: 964, content: 'recovered scoped feedback' }] })
+  await flushPromises()
+  assert(failedFeedbackContextPage.data.list.length === 1 && failedFeedbackContextPage.data.list[0].id === 964, 'feedback context reload after stale failure should display current data')
+
   storage.userInfo.role = 'counselor'
   capabilityCalls.length = 0
   const staleBlacklist = deferred()

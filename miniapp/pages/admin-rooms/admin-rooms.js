@@ -14,10 +14,22 @@ var apiTypeMap = {
   multi: 'multi_purpose_hall'
 }
 
+var statusLabelMap = {
+  open: '\u5f00\u653e\u4e2d',
+  closed: '\u5df2\u5173\u95ed',
+  maintenance: '\u7ef4\u62a4\u4e2d'
+}
+
+function fingerprintValue(value) {
+  return value === undefined || value === null ? '' : String(value)
+}
+
 Page({
   data: {
     list: [],
     filterType: '',
+    filterStatus: '',
+    filterStatusLabel: '',
     canConfigureRooms: false,
     typeMap: {
       study_room: '自习室',
@@ -40,8 +52,9 @@ Page({
     statusMap: { open: '开放中', closed: '已关闭', maintenance: '维护中' }
   },
 
-  onLoad: function () {
-    this.ensureAdmin()
+  onLoad: function (options) {
+    if (!this.ensureAdmin()) return
+    this.applyStatusPreset(options && options.status)
   },
 
   onShow: function () {
@@ -50,6 +63,33 @@ Page({
 
   hasReadAccess: function () {
     return auth.isLoggedIn() && auth.isAdmin() && adminPolicy.can(auth.getUserRole(), 'roomView')
+  },
+
+  normalizeStatus: function (status) {
+    return Object.prototype.hasOwnProperty.call(statusLabelMap, status) ? status : ''
+  },
+
+  applyStatusPreset: function (status) {
+    var normalized = this.normalizeStatus(status)
+    this.setData({
+      filterStatus: normalized,
+      filterStatusLabel: normalized ? statusLabelMap[normalized] : ''
+    })
+  },
+
+  requestContextFingerprint: function () {
+    var userInfo = auth.getUserInfo() || {}
+    var buildingId = userInfo.buildingId
+    var scopeType = userInfo.scopeType
+    if (buildingId === undefined) buildingId = userInfo.building_id
+    if (scopeType === undefined) scopeType = userInfo.scope_type
+    return JSON.stringify([
+      fingerprintValue(userInfo.id),
+      fingerprintValue(userInfo.username),
+      fingerprintValue(userInfo.role),
+      fingerprintValue(buildingId),
+      fingerprintValue(scopeType)
+    ])
   },
 
   clearList: function () {
@@ -72,11 +112,13 @@ Page({
       this.clearList()
       return Promise.resolve()
     }
+    var requestContext = this.requestContextFingerprint()
     this._listRequestVersion = (this._listRequestVersion || 0) + 1
     var requestVersion = this._listRequestVersion
     var params = {}
     var apiType = apiTypeMap[this.data.filterType]
     if (apiType) params.type = apiType
+    if (this.data.filterStatus) params.status = this.data.filterStatus
 
     return request.get('/room', params, { silent: true }).then(function (data) {
       if (!that.hasReadAccess()) {
@@ -84,6 +126,11 @@ Page({
         return
       }
       if (requestVersion !== that._listRequestVersion) return
+      if (that.requestContextFingerprint() !== requestContext) {
+        that.clearList()
+        if (that.hasReadAccess()) return that.loadData()
+        return
+      }
       var list = Array.isArray(data) ? data : (data.list || data.rooms || [])
       that.setData({ list: list })
     }).catch(function () {
@@ -92,12 +139,22 @@ Page({
         return
       }
       if (requestVersion !== that._listRequestVersion) return
+      if (that.requestContextFingerprint() !== requestContext) {
+        that.clearList()
+        if (that.hasReadAccess()) return that.loadData()
+        return
+      }
       that.setData({ list: [] })
     })
   },
 
   onFilterType: function (e) {
     this.setData({ filterType: e.currentTarget.dataset.type || '' })
+    return this.loadData()
+  },
+
+  onClearStatus: function () {
+    this.applyStatusPreset('')
     return this.loadData()
   },
 
