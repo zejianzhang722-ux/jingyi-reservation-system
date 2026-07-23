@@ -261,7 +261,7 @@ async function main() {
   request.get = function(url, params) {
     capabilityCalls.push({ method: 'GET', url: url, params: params || {} })
     if (url === '/user/list') return Promise.resolve([])
-    if (url === '/room') return Promise.resolve([])
+    if (url === '/admin/rooms') return Promise.resolve({ list: [] })
     if (url === '/feedback') return Promise.resolve({ list: [] })
     return Promise.resolve([])
   }
@@ -328,10 +328,10 @@ async function main() {
   const roomsPageReadOnly = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
   roomsPageReadOnly.onLoad.call(roomsPageReadOnly)
   assert(roomsPageReadOnly.data.canConfigureRooms === false, '移动端功能房页应为只读')
-  assert(!capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/room' }), '功能房页 onLoad 只校验权限，不应重复读取')
+  assert(!capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/admin/rooms' }), '功能房页 onLoad 只校验权限，不应重复读取')
   roomsPageReadOnly.onShow.call(roomsPageReadOnly)
-  assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/room' }), '移动端功能房页仍应读取房间列表')
-  assert(capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/room' }).length === 1, '功能房页首次 onLoad + onShow 只能读取一次')
+  assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/admin/rooms' }), '移动端功能房页应通过管理员范围接口读取房间列表')
+  assert(capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/admin/rooms' }).length === 1, '功能房页首次 onLoad + onShow 只能读取一次')
   roomsPageReadOnly.onToggleStatus.call(roomsPageReadOnly, { currentTarget: { dataset: { id: 1, status: 'open' } } })
   assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/admin/rooms/') === 0 }), '直接调用房间状态操作也不得发请求')
   assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), '房间配置操作应提示前往电脑后台')
@@ -376,10 +376,16 @@ async function main() {
   roomPresetPage.onLoad.call(roomPresetPage, { status: 'open' })
   assert(roomPresetPage.data.filterStatus === 'open', 'room status preset should accept open')
   assert(roomPresetPage.data.filterStatusLabel === '开放中', 'room status preset should expose a user-facing label')
-  assert(!capabilityCalls.some(function(call) { return call.url === '/room' }), 'room preset onLoad should initialize without requesting')
+  assert(!capabilityCalls.some(function(call) { return call.url === '/admin/rooms' }), 'room preset onLoad should initialize without requesting')
   await roomPresetPage.onShow.call(roomPresetPage)
-  var openRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/room' })
-  assert(openRoomCalls.length === 1 && openRoomCalls[0].params.status === 'open', 'open room preset should request normalized open status once')
+  var openRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/admin/rooms' })
+  assert(
+    openRoomCalls.length === 1 &&
+    openRoomCalls[0].params.status === 'open' &&
+    openRoomCalls[0].params.page === 1 &&
+    openRoomCalls[0].params.pageSize === 100,
+    'open room preset should request normalized open status once through the scoped admin endpoint'
+  )
 
   ;['closed', 'maintenance'].forEach(function(status) {
     var page = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')
@@ -390,17 +396,17 @@ async function main() {
   unknownRoomStatusPage.onLoad.call(unknownRoomStatusPage, { status: 'deleted' })
   capabilityCalls.length = 0
   await unknownRoomStatusPage.onShow.call(unknownRoomStatusPage)
-  var unknownRoomStatusCall = capabilityCalls.find(function(call) { return call.url === '/room' })
+  var unknownRoomStatusCall = capabilityCalls.find(function(call) { return call.url === '/admin/rooms' })
   assert(unknownRoomStatusPage.data.filterStatus === '' && unknownRoomStatusCall && unknownRoomStatusCall.params.status === undefined, 'unknown room status preset should be ignored')
 
   capabilityCalls.length = 0
   roomPresetPage.setData({ filterType: 'study' })
   await roomPresetPage.onFilterType.call(roomPresetPage, { currentTarget: { dataset: { type: 'study' } } })
-  var typedOpenRoomCall = capabilityCalls.find(function(call) { return call.url === '/room' })
+  var typedOpenRoomCall = capabilityCalls.find(function(call) { return call.url === '/admin/rooms' })
   assert(typedOpenRoomCall && typedOpenRoomCall.params.status === 'open' && typedOpenRoomCall.params.type === 'study_room', 'room type filter should remain compatible with status preset')
   capabilityCalls.length = 0
   await roomPresetPage.onClearStatus.call(roomPresetPage)
-  var clearedRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/room' })
+  var clearedRoomCalls = capabilityCalls.filter(function(call) { return call.url === '/admin/rooms' })
   assert(clearedRoomCalls.length === 1 && clearedRoomCalls[0].params.status === undefined && clearedRoomCalls[0].params.type === 'study_room', 'clearing room status should request the active type exactly once without status')
   assert(roomPresetPage.data.filterStatus === '' && roomPresetPage.data.filterStatusLabel === '', 'clearing room status should remove the preset context')
 
@@ -628,7 +634,7 @@ async function main() {
   const roomReads = [deferred(), deferred()]
   let roomReadIndex = 0
   request.get = function(url) {
-    if (url === '/room') return roomReads[roomReadIndex++].promise
+    if (url === '/admin/rooms') return roomReads[roomReadIndex++].promise
     return Promise.resolve([])
   }
   let roomsRacePage = loadPage('miniapp/pages/admin-rooms/admin-rooms.js')

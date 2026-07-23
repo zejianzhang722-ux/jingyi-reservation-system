@@ -115,12 +115,12 @@ Page({
     var requestContext = this.requestContextFingerprint()
     this._listRequestVersion = (this._listRequestVersion || 0) + 1
     var requestVersion = this._listRequestVersion
-    var params = {}
+    var params = { page: 1, pageSize: 100 }
     var apiType = apiTypeMap[this.data.filterType]
     if (apiType) params.type = apiType
     if (this.data.filterStatus) params.status = this.data.filterStatus
 
-    return request.get('/room', params, { silent: true }).then(function (data) {
+    return request.get('/admin/rooms', params, { silent: true }).then(function (data) {
       if (!that.hasReadAccess()) {
         that.clearList()
         return
