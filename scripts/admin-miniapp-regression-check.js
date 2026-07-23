@@ -1227,6 +1227,143 @@ async function main() {
   assert(feedbackStatePage.data.feedbackStatus === 'error' && feedbackStatePage.data.feedbackCount === 6, '反馈刷新失败应保留旧值但标记不可用')
   request.get = approvalGet
 
+  async function loadReservationPreset(role, preset, roleBeforeShow) {
+    var presetCalls = []
+    storage.userInfo.role = role
+    request.get = function(url, params) {
+      presetCalls.push({ url: url, params: params || {} })
+      return Promise.resolve({ list: [], total: 0, page: 1, pageSize: 20 })
+    }
+    var page = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+    page.todayString = function() { return '2026-07-22' }
+    page.onLoad.call(page, { preset: preset })
+    assert(!presetCalls.some(function(call) { return call.url === '/reservation' }), '预约筛选应在 onLoad 只初始化，不应提前请求')
+    if (roleBeforeShow) storage.userInfo.role = roleBeforeShow
+    page.onShow.call(page)
+    await flushPromises()
+    var reservationCall = presetCalls.find(function(call) { return call.url === '/reservation' })
+    assert(reservationCall, '预约筛选应在 onShow 请求预约列表')
+    return { page: page, call: reservationCall, calls: presetCalls }
+  }
+
+  var ordinaryPreset = await loadReservationPreset('admin', 'ordinary')
+  assert(ordinaryPreset.page.data.filterPreset === 'ordinary' && ordinaryPreset.page.data.filterLabel === '普通待审', '普通预约入口应显示普通待审筛选')
+  assert(ordinaryPreset.call.params.status === 'pending' && ordinaryPreset.call.params.actionable === undefined && ordinaryPreset.call.params.date === undefined, '普通预约入口只应请求 pending 状态')
+
+  var priorityPreset = await loadReservationPreset('counselor', 'priority')
+  assert(priorityPreset.page.data.filterPreset === 'priority' && priorityPreset.page.data.filterLabel === '重点待审', '辅导员重点入口应显示重点待审筛选')
+  assert(priorityPreset.call.params.status === 'counselor_pending' && priorityPreset.call.params.actionable === undefined && priorityPreset.call.params.date === undefined, '辅导员重点入口只应请求 counselor_pending 状态')
+
+  var actionablePreset = await loadReservationPreset('super_admin', 'actionable')
+  assert(actionablePreset.page.data.filterPreset === 'actionable' && actionablePreset.page.data.filterLabel === '全部可处理', '全部可处理入口应显示对应筛选')
+  assert(actionablePreset.call.params.actionable === 1 && actionablePreset.call.params.status === undefined && actionablePreset.call.params.date === undefined, '全部可处理入口只应请求服务端可处理筛选')
+  actionablePreset.page.setData({ page: 3, hasMore: false })
+  actionablePreset.page.onClearPreset.call(actionablePreset.page)
+  assert(actionablePreset.page.data.filterPreset === '' && actionablePreset.page.data.filterLabel === '' && actionablePreset.page.data.filterStatus === '' && actionablePreset.page.data.filterDate === '', '查看全部应清空当前预约筛选')
+  assert(actionablePreset.page.data.page === 1 && actionablePreset.page.data.hasMore === true, '查看全部应重置预约分页状态')
+  await flushPromises()
+  var clearPresetCall = actionablePreset.calls[actionablePreset.calls.length - 1]
+  assert(actionablePreset.calls.length === 2 && clearPresetCall.url === '/reservation', '查看全部应且仅应重新请求一次预约列表')
+  assert(clearPresetCall.params.status === undefined && clearPresetCall.params.actionable === undefined && clearPresetCall.params.date === undefined, '查看全部的请求不得保留旧筛选参数')
+
+  var todayPreset = await loadReservationPreset('admin', 'today')
+  assert(todayPreset.page.data.filterPreset === 'today' && todayPreset.page.data.filterLabel === '今日预约', '今日预约入口应显示今日筛选')
+  assert(todayPreset.call.params.date === '2026-07-22' && todayPreset.call.params.status === undefined && todayPreset.call.params.actionable === undefined, '今日预约入口应按本地日期请求')
+
+  var inUsePreset = await loadReservationPreset('admin', 'in_use')
+  assert(inUsePreset.page.data.filterPreset === 'in_use' && inUsePreset.page.data.filterLabel === '使用中', '使用中入口应显示使用中筛选')
+  assert(inUsePreset.call.params.status === 'checked_in' && inUsePreset.call.params.actionable === undefined && inUsePreset.call.params.date === undefined, '使用中入口只应请求 checked_in 状态')
+
+  var unknownPreset = await loadReservationPreset('admin', 'unknown')
+  assert(unknownPreset.page.data.filterPreset === '' && unknownPreset.page.data.filterLabel === '', '未知预约筛选必须降级为全部预约')
+  assert(unknownPreset.call.params.status === undefined && unknownPreset.call.params.actionable === undefined && unknownPreset.call.params.date === undefined, '未知预约筛选不得透传任何筛选参数')
+
+  var deniedPriorityPreset = await loadReservationPreset('admin', 'priority')
+  assert(deniedPriorityPreset.page.data.filterPreset === 'ordinary' && deniedPriorityPreset.page.data.filterLabel === '普通待审', '导生管理员打开重点待审时应降级为普通待审')
+  assert(deniedPriorityPreset.call.params.status === 'pending' && deniedPriorityPreset.call.params.actionable === undefined && deniedPriorityPreset.call.params.date === undefined, '导生管理员不得请求重点待审数据')
+
+  var cachedPriorityPreset = await loadReservationPreset('counselor', 'priority', 'admin')
+  assert(cachedPriorityPreset.page.data.filterPreset === 'ordinary' && cachedPriorityPreset.page.data.filterLabel === '普通待审', '页面缓存期间角色降级后不得沿用重点待审筛选')
+  assert(cachedPriorityPreset.call.params.status === 'pending' && cachedPriorityPreset.call.params.actionable === undefined && cachedPriorityPreset.call.params.date === undefined, '角色降级后的请求必须改为普通待审')
+
+  var accountContextFirstRead = deferred()
+  var accountContextCalls = []
+  storage.userInfo = { id: 31, username: 'building-admin-a', role: 'admin', buildingId: 1, scopeType: 'building' }
+  request.get = function(url, params) {
+    accountContextCalls.push({ url: url, params: params || {} })
+    if (accountContextCalls.length === 1) return accountContextFirstRead.promise
+    return Promise.resolve({ list: [{ id: 812, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  }
+  var accountContextPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  accountContextPage.onLoad.call(accountContextPage, { preset: 'ordinary' })
+  accountContextPage.onShow.call(accountContextPage)
+  storage.userInfo = { id: 32, username: 'building-admin-b', role: 'admin', buildingId: 1, scopeType: 'building' }
+  accountContextFirstRead.resolve({ list: [{ id: 811, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  await flushPromises()
+  assert(accountContextCalls.length === 2, '同角色切换账号后旧请求完成时应按新账号重新请求')
+  assert(accountContextPage.data.list.length === 1 && accountContextPage.data.list[0].id === 812, '同角色旧账号的预约响应不得写入新账号页面')
+
+  var scopeContextFirstRead = deferred()
+  var scopeContextCalls = []
+  storage.userInfo = { id: 41, username: 'scoped-admin', role: 'admin', building_id: 1, scope_type: 'building' }
+  request.get = function(url, params) {
+    scopeContextCalls.push({ url: url, params: params || {} })
+    if (scopeContextCalls.length === 1) return scopeContextFirstRead.promise
+    return Promise.resolve({ list: [{ id: 822, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  }
+  var scopeContextPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  scopeContextPage.onLoad.call(scopeContextPage, { preset: 'ordinary' })
+  scopeContextPage.onShow.call(scopeContextPage)
+  storage.userInfo = { id: 41, username: 'scoped-admin', role: 'admin', building_id: 2, scope_type: 'building' }
+  scopeContextFirstRead.resolve({ list: [{ id: 821, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  await flushPromises()
+  assert(scopeContextCalls.length === 2, '同账号楼栋范围变化后旧请求完成时应按新范围重新请求')
+  assert(scopeContextPage.data.list.length === 1 && scopeContextPage.data.list[0].id === 822, '旧楼栋范围的预约响应不得写入新范围页面')
+
+  var tokenRefreshRead = deferred()
+  var tokenRefreshCalls = []
+  storage.token = 'admin-token-before-refresh'
+  storage.userInfo = { id: 51, username: 'stable-admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  request.get = function(url, params) {
+    tokenRefreshCalls.push({ url: url, params: params || {} })
+    return tokenRefreshRead.promise
+  }
+  var tokenRefreshPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  tokenRefreshPage.onLoad.call(tokenRefreshPage, { preset: 'ordinary' })
+  tokenRefreshPage.onShow.call(tokenRefreshPage)
+  storage.token = 'admin-token-after-refresh'
+  tokenRefreshRead.resolve({ list: [{ id: 831, status: 'pending' }], total: 1, page: 1, pageSize: 20 })
+  await flushPromises()
+  assert(tokenRefreshCalls.length === 1 && tokenRefreshPage.data.list[0].id === 831, '仅令牌刷新时不应把同一账号误判为数据范围变化')
+
+  var todayCalls = []
+  var simulatedToday = '2026-07-22'
+  storage.userInfo = { id: 1, username: 'admin', role: 'admin', buildingId: 1, scopeType: 'building' }
+  request.get = function(url, params) {
+    todayCalls.push({ url: url, params: params || {} })
+    return Promise.resolve({ list: [], total: 0, page: 1, pageSize: 20 })
+  }
+  var midnightTodayPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
+  midnightTodayPage.todayString = function() { return simulatedToday }
+  midnightTodayPage.onLoad.call(midnightTodayPage, { preset: 'today' })
+  simulatedToday = '2026-07-23'
+  midnightTodayPage.onShow.call(midnightTodayPage)
+  await flushPromises()
+  assert(todayCalls[0] && todayCalls[0].params.date === '2026-07-23', '今日预约在 onShow 请求前应刷新本地日期')
+  simulatedToday = '2026-07-24'
+  await midnightTodayPage.loadData.call(midnightTodayPage)
+  assert(todayCalls[1] && todayCalls[1].params.date === '2026-07-24', '今日预约每次实际加载前都应刷新本地日期')
+
+  var presetWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation/admin-reservation.wxml'), 'utf8')
+  assert(presetWxml.indexOf('filterLabel') !== -1 && presetWxml.indexOf('当前查看') !== -1, '预约页面应显示当前筛选')
+  assert(presetWxml.indexOf('bindtap="onClearPreset"') !== -1 && presetWxml.indexOf('查看全部') !== -1, '预约页面应提供清除筛选并查看全部的操作')
+  ;['', 'pending', 'approved', 'rejected', 'checked_in', 'completed'].forEach(function(status) {
+    assert(presetWxml.indexOf("!filterPreset && filterStatus === '" + status + "'") !== -1, '存在预设筛选时状态标签不得同时高亮：' + (status || '全部'))
+  })
+  request.get = approvalGet
+
   approvalCalls.length = 0
   storage.userInfo.role = 'admin'
   const reservationPage = loadPage('miniapp/pages/admin-reservation/admin-reservation.js')
