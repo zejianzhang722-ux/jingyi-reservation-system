@@ -1,22 +1,22 @@
 Component({
   properties: {
-    selected: {
-      type: String,
-      value: 'home'
-    }
+    selected: { type: String, value: 'home' }
   },
   data: {
     items: [
-      { key: 'home', text: '首页', icon: '⌂', url: '/pages/admin-home/admin-home' },
-      { key: 'manage', text: '管理', icon: '▣', url: '/pages/admin-manage/admin-manage' },
-      { key: 'profile', text: '我的', icon: '●', url: '/pages/admin-profile/admin-profile' }
+      { key: 'home', text: '审批', iconPath: '/images/tab-reservation.png', selectedIconPath: '/images/tab-reservation-active.png', url: '/pages/admin-home/admin-home' },
+      { key: 'manage', text: '管理', iconPath: '/images/tab-home.png', selectedIconPath: '/images/tab-home-active.png', url: '/pages/admin-manage/admin-manage' },
+      { key: 'profile', text: '我的', iconPath: '/images/tab-profile.png', selectedIconPath: '/images/tab-profile-active.png', url: '/pages/admin-profile/admin-profile' }
     ]
   },
   methods: {
     onTap: function (e) {
       var item = e.currentTarget.dataset.item
-      if (!item || item.key === this.data.selected) return
-      wx.reLaunch({ url: item.url })
+      if (!item || item.key === this.data.selected || this._transitioning) return
+      var self = this
+      var release = function () { self._transitioning = false }
+      this._transitioning = true
+      wx.redirectTo({ url: item.url, fail: release, complete: release })
     }
   }
 })

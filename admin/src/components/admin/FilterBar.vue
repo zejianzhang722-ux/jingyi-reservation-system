@@ -22,6 +22,12 @@ defineEmits(['search', 'reset'])
   padding: 16px;
 }
 
+.filter-bar:hover {
+  transform: none;
+  box-shadow: var(--jy-shadow-card);
+  border-color: var(--jy-border-light);
+}
+
 .filter-bar-inner {
   display: flex;
   align-items: flex-start;

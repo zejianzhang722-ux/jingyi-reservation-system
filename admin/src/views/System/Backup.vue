@@ -12,7 +12,7 @@
 
     <el-row :gutter="16">
       <el-col :xs="24" :sm="8">
-        <MetricCard label="备份记录" :value="backupList.length" caption="当前返回记录数" icon="FolderOpened" tone="primary" />
+        <MetricCard label="备份记录" :value="backupList.length" caption="最近的备份任务" icon="FolderOpened" tone="primary" />
       </el-col>
       <el-col :xs="24" :sm="8">
         <MetricCard label="成功完成" :value="successCount" caption="本页成功备份" icon="CircleCheck" tone="success" />
@@ -32,7 +32,6 @@
             </div>
           </template>
           <el-table :data="backupList" v-loading="loading" stripe>
-            <el-table-column prop="id" label="ID" width="70" />
             <el-table-column label="备份文件" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">{{ row.fileName || '-' }}</template>
             </el-table-column>
@@ -46,7 +45,7 @@
             </el-table-column>
             <el-table-column label="状态" width="100">
               <template #default="{ row }">
-                <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || row.status }}</el-tag>
+                <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="开始时间" width="180">
@@ -57,7 +56,7 @@
             </el-table-column>
             <el-table-column label="操作" width="130" fixed="right">
               <template #default="{ row }">
-                <el-button type="primary" size="small" link @click="handleVerify(row)" :disabled="row.status !== 'success' || !row.fileName">校验</el-button>
+                <el-button type="primary" size="small" link @click="handleVerify(row)" :loading="actionSubmitting" :disabled="actionSubmitting || row.status !== 'success' || !row.fileName">校验</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -66,26 +65,8 @@
 
       <el-col :xs="24" :lg="8">
         <el-card shadow="never">
-          <template #header><span class="card-title">自动备份设置</span></template>
-          <el-alert title="自动备份策略当前为本地配置展示，实际定时策略请通过后端环境变量或计划任务管理。" type="info" show-icon :closable="false" class="backup-alert" />
-          <el-form :model="autoBackupForm" label-width="100px">
-            <el-form-item label="自动备份">
-              <el-switch v-model="autoBackupForm.enabled" />
-            </el-form-item>
-            <el-form-item label="备份频率" v-if="autoBackupForm.enabled">
-              <el-select v-model="autoBackupForm.frequency" style="width: 100%">
-                <el-option label="每天" value="daily" />
-                <el-option label="每周" value="weekly" />
-                <el-option label="每月" value="monthly" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="备份时间" v-if="autoBackupForm.enabled">
-              <el-time-picker v-model="autoBackupForm.time" format="HH:mm" value-format="HH:mm" placeholder="选择时间" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="保留份数">
-              <el-input-number v-model="autoBackupForm.keepCount" :min="1" :max="30" style="width: 100%" />
-            </el-form-item>
-          </el-form>
+          <template #header><span class="card-title">备份提醒</span></template>
+          <el-alert title="定时备份设置暂未开放。如需保存当前数据，请点击页面右上角“立即备份”。" type="info" show-icon :closable="false" class="backup-alert" />
         </el-card>
 
         <el-card shadow="never" class="side-card">
@@ -108,13 +89,15 @@ import { getBackupList, createBackup, verifyBackup } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { createActionLock } from '@/utils/approvalState'
 
 const loading = ref(false)
 const backupLoading = ref(false)
 const backupList = ref([])
+const actionSubmitting = ref(false)
+const actionLock = createActionLock()
 
-const autoBackupForm = reactive({ enabled: false, frequency: 'daily', time: '03:00', keepCount: 7 })
-const storageInfo = reactive({ used: '0 MB', available: '1 GB', percentage: 0 })
+const storageInfo = reactive({ used: '-', available: '-', percentage: 0 })
 
 const statusMap = {
   success: { label: '完成', type: 'success' },
@@ -153,13 +136,16 @@ async function loadData() {
     backupList.value = Array.isArray(data) ? data.map(normalizeBackup) : (data.list || []).map(normalizeBackup)
     if (data.storage) Object.assign(storageInfo, data.storage)
   } catch (e) {
-    backupList.value = []
+    // Keep the last successful snapshot visible during a transient refresh failure.
   } finally {
     loading.value = false
   }
 }
 
 async function handleCreateBackup() {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   backupLoading.value = true
   try {
     await createBackup()
@@ -169,15 +155,23 @@ async function handleCreateBackup() {
     // handled by interceptor
   } finally {
     backupLoading.value = false
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 
 async function handleVerify(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionSubmitting.value = true
   try {
     await verifyBackup(row.fileName)
     ElMessage.success('备份完整性校验通过')
   } catch (e) {
     // handled by interceptor
+  } finally {
+    actionSubmitting.value = false
+    actionLock.release(token)
   }
 }
 

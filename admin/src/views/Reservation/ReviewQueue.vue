@@ -5,8 +5,8 @@
     description="按房间和日期筛选待处理预约，支持详情抽屉、单条处理和批量处理。"
   >
     <template #actions>
-      <el-button type="success" :disabled="!selectedIds.length" @click="handleBatch('approve')">批量通过 {{ selectedIds.length }}</el-button>
-      <el-button type="warning" :disabled="!selectedIds.length" @click="handleBatch('reject')">批量退回 {{ selectedIds.length }}</el-button>
+      <el-button type="success" :loading="actionSubmitting" :disabled="actionSubmitting || !selectedIds.length" @click="handleBatch('approve')">批量通过 {{ selectedIds.length }}</el-button>
+      <el-button type="warning" :loading="actionSubmitting" :disabled="actionSubmitting || !selectedIds.length" @click="batchReject">批量退回 {{ selectedIds.length }}</el-button>
     </template>
 
     <el-row :gutter="16">
@@ -28,10 +28,13 @@
       <el-date-picker v-model="filters.date" type="date" placeholder="预约日期" value-format="YYYY-MM-DD" style="width: 180px" />
     </FilterBar>
 
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
+      <template #default><el-button link type="primary" @click="loadData">重试</el-button></template>
+    </el-alert>
+    <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" stripe>
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="userName" label="预约人" width="110" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="roomName" label="功能房" min-width="150" />
@@ -41,8 +44,8 @@
         <el-table-column prop="createdAt" label="提交时间" width="170" />
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
-            <el-button type="success" size="small" link @click="handleApprove(row)">通过</el-button>
-            <el-button type="warning" size="small" link @click="openReturn(row)">退回</el-button>
+            <el-button type="success" size="small" link :loading="actionSubmitting" :disabled="actionSubmitting" @click="handleApprove(row)">通过</el-button>
+            <el-button type="warning" size="small" link :disabled="actionSubmitting" @click="openReturn(row)">退回</el-button>
             <el-button type="primary" size="small" link @click="openDetail(row)">详情</el-button>
           </template>
         </el-table-column>
@@ -75,8 +78,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="returnDialogVisible = false">取消</el-button>
-        <el-button type="warning" @click="confirmReturn">确认退回</el-button>
+        <el-button :disabled="actionSubmitting" @click="returnDialogVisible = false">取消</el-button>
+        <el-button type="warning" :loading="actionSubmitting" :disabled="actionSubmitting" @click="confirmReturn">确认退回</el-button>
       </template>
     </el-dialog>
 
@@ -92,8 +95,8 @@
       </el-descriptions>
       <template #footer>
         <div class="drawer-actions" v-if="currentRow">
-          <el-button type="warning" @click="openReturn(currentRow); detailVisible = false">退回</el-button>
-          <el-button type="success" @click="handleApprove(currentRow); detailVisible = false">通过</el-button>
+          <el-button type="warning" :disabled="actionSubmitting" @click="openReturn(currentRow); detailVisible = false">退回</el-button>
+          <el-button type="success" :loading="actionSubmitting" :disabled="actionSubmitting" @click="handleApprove(currentRow); detailVisible = false">通过</el-button>
         </div>
       </template>
     </el-drawer>
@@ -108,8 +111,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '@/utils/approvalState'
 
 const loading = ref(false)
+const loadError = ref('')
+const actionSubmitting = ref(false)
+const actionError = ref('')
+const actionLock = createActionLock(value => { actionSubmitting.value = value })
 const tableData = ref([])
 const selectedIds = ref([])
 const roomOptions = ref([])
@@ -120,17 +128,17 @@ const returnTemplate = ref('')
 
 const filters = reactive({ roomId: '', date: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
-const returnForm = reactive({ reason: '', id: null })
+const returnForm = reactive({ reason: '', id: null, ids: [] })
 
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
-    const res = await getPending({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+    const res = await getPending({ ...filters, type: 'admin', page: pagination.page, pageSize: pagination.pageSize })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    tableData.value = []
-    pagination.total = 0
+    loadError.value = '列表加载失败，请重试'
   } finally {
     loading.value = false
   }
@@ -157,18 +165,24 @@ function handleSelectionChange(rows) {
 }
 
 async function handleApprove(row) {
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   try {
     await ElMessageBox.confirm('确认通过该预约申请？', '提示', { type: 'success' })
     await approve(row.id)
     ElMessage.success('已通过')
-    loadData()
+    await loadData()
   } catch (e) {
-    // cancelled or handled by interceptor
+    if (!isConfirmationCancel(e)) actionError.value = '审批失败，请重试'
+  } finally {
+    actionLock.release(token)
   }
 }
 
 function openReturn(row) {
   returnForm.id = row.id
+  returnForm.ids = []
   returnForm.reason = ''
   returnTemplate.value = ''
   returnDialogVisible.value = true
@@ -179,17 +193,27 @@ function applyReturnTemplate(value) {
 }
 
 async function confirmReturn() {
-  if (!returnForm.reason) {
-    ElMessage.warning('请输入退回原因')
+  let reason
+  try {
+    reason = normalizeRejectionReason(returnForm.reason)
+  } catch (error) {
+    ElMessage.warning(error.message)
     return
   }
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   try {
-    await returnReservation(returnForm.id, { reason: returnForm.reason })
+    if (returnForm.ids.length) await batchAudit({ ids: returnForm.ids, action: 'reject', reason })
+    else await returnReservation(returnForm.id, { reason })
     ElMessage.success('已退回')
     returnDialogVisible.value = false
-    loadData()
+    if (returnForm.ids.length) selectedIds.value = []
+    await loadData()
   } catch (e) {
-    // handled by interceptor
+    actionError.value = '退回失败，请重试'
+  } finally {
+    actionLock.release(token)
   }
 }
 
@@ -199,16 +223,32 @@ function openDetail(row) {
 }
 
 async function handleBatch(action) {
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  const token = actionLock.acquire()
+  if (!token) return
+  actionError.value = ''
   const text = action === 'approve' ? '通过' : '退回'
   try {
-    await ElMessageBox.confirm(`确认批量${text}选中的 ${selectedIds.value.length} 条预约？`, '提示', { type: 'warning' })
-    await batchAudit({ ids: selectedIds.value, action, reason: action === 'reject' ? '批量退回' : '' })
+    await ElMessageBox.confirm(`确认批量${text}选中的 ${ids.length} 条预约？`, '提示', { type: 'warning' })
+    await batchAudit({ ids, action, reason: '' })
     ElMessage.success(`已批量${text}`)
     selectedIds.value = []
-    loadData()
+    await loadData()
   } catch (e) {
-    // cancelled or handled by interceptor
+    if (!isConfirmationCancel(e)) actionError.value = `批量${text}失败，请重试`
+  } finally {
+    actionLock.release(token)
   }
+}
+
+function batchReject() {
+  if (actionSubmitting.value || !selectedIds.value.length) return
+  returnForm.id = null
+  returnForm.ids = [...selectedIds.value]
+  returnForm.reason = ''
+  returnTemplate.value = ''
+  returnDialogVisible.value = true
 }
 
 onMounted(() => {

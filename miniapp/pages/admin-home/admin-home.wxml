@@ -1,10 +1,23 @@
 <view class="container">
   <view class="admin-header">
-    <text class="admin-title">管理控制台</text>
+    <view>
+      <text class="admin-title">审批工作台</text>
+      <text class="admin-subtitle">集中处理书院空间预约</text>
+    </view>
     <text class="admin-role">{{roleName}}</text>
   </view>
 
-  <view class="scan-checkin-card" bindtap="onScanCheckin">
+  <view class="queue-tabs">
+    <view class="queue-tab {{queueType === 'admin' ? 'active' : ''}}" data-type="admin" bindtap="onQueueChange" aria-role="button" aria-label="切换到普通待审队列">普通待审</view>
+    <view wx:if="{{canSwitchQueue}}" class="queue-tab {{queueType === 'counselor' ? 'active' : ''}}" data-type="counselor" bindtap="onQueueChange" aria-role="button" aria-label="切换到重点待审队列">重点待审</view>
+  </view>
+
+  <view class="priority-note" wx:if="{{queueType === 'counselor'}}">
+    <text class="priority-note-title">重点审核队列</text>
+    <text class="priority-note-text">此队列需查看完整申请后审核，不提供快捷通过。</text>
+  </view>
+
+  <view class="scan-checkin-card" bindtap="onScanCheckin" aria-role="button" aria-label="扫码签到">
     <view class="scan-checkin-icon"></view>
     <view class="scan-checkin-content">
       <text class="scan-checkin-title">扫码签到</text>
@@ -14,39 +27,101 @@
   </view>
 
   <view class="stats-grid">
-    <view class="stat-card">
-      <text class="stat-value">{{pendingCount}}</text>
-      <text class="stat-label">待审批</text>
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="ordinary" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看普通待审预约">
+      <text class="stat-value">{{hasTrustedStats ? ordinaryPendingCount : '--'}}</text>
+      <text class="stat-label">普通待审</text>
     </view>
-    <view class="stat-card">
-      <text class="stat-value">{{todayReservations}}</text>
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" wx:if="{{canSwitchQueue}}" data-target="priority" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看重点待审预约">
+      <text class="stat-value">{{hasTrustedStats ? counselorPendingCount : '--'}}</text>
+      <text class="stat-label">重点待审</text>
+    </view>
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="actionable" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看当前可处理的待审预约">
+      <text class="stat-value">{{hasTrustedStats ? actionablePendingCount : '--'}}</text>
+      <text class="stat-label">可处理待审</text>
+    </view>
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="today" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看今日预约">
+      <text class="stat-value">{{hasTrustedStats ? todayReservations : '--'}}</text>
       <text class="stat-label">今日预约</text>
     </view>
-    <view class="stat-card">
-      <text class="stat-value">{{feedbackCount}}</text>
-      <text class="stat-label">待处理反馈</text>
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="inUse" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看使用中的预约">
+      <text class="stat-value">{{hasTrustedStats ? inUseCount : '--'}}</text>
+      <text class="stat-label">使用中</text>
     </view>
-    <view class="stat-card">
-      <text class="stat-value">{{activeRooms}}</text>
-      <text class="stat-label">开放功能房</text>
+    <view class="stat-card metric-card {{hasTrustedStats ? '' : 'unavailable'}}" data-target="openRooms" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看开放中的功能房">
+      <text class="stat-value">{{hasTrustedStats ? activeRoomCount : '--'}}</text>
+      <text class="stat-label">开放房间</text>
+    </view>
+    <view class="stat-card metric-card {{hasTrustedStats && feedbackStatus === 'ready' ? '' : 'unavailable'}}" wx:if="{{canManageFeedback}}" data-target="feedback" bindtap="onMetricTap" hover-class="metric-card-pressed" aria-role="button" aria-label="查看待处理反馈">
+      <text class="stat-value" wx:if="{{feedbackStatus === 'ready'}}">{{feedbackCount}}</text>
+      <text class="stat-unavailable" wx:elif="{{feedbackStatus === 'error'}}">暂不可用</text>
+      <text class="stat-unavailable" wx:else>加载中</text>
+      <text class="stat-label">待处理反馈</text>
+      <view class="feedback-retry" wx:if="{{feedbackStatus === 'error'}}" catchtap="onRetryStats" aria-role="button" aria-label="重新加载反馈统计">重新加载</view>
     </view>
   </view>
-  <view class="section-title">待审批预约</view>
-  <view class="pending-list" wx:if="{{pendingList.length > 0}}">
+  <view class="stats-message" wx:if="{{statsStatus === 'loading' && !hasTrustedStats}}">统计加载中，暂不显示未经确认的数字</view>
+  <view class="stats-message" wx:elif="{{statsStatus === 'error'}}">
+    <text>{{statsError}}</text>
+    <view class="stats-retry" bindtap="onRetryStats" aria-role="button" aria-label="重新加载统计">重新加载统计</view>
+    <text class="trusted-empty" wx:if="{{!hasTrustedStats}}">暂无可信统计数据</text>
+  </view>
+
+  <view class="section-heading">
+    <text class="section-title">{{queueLabel}}</text>
+    <text class="section-count" wx:if="{{listStatus === 'ready'}}">{{pendingList.length}} 项</text>
+  </view>
+
+  <view class="state-card" wx:if="{{listStatus === 'loading'}}">
+    <text class="state-title">正在加载审批列表</text>
+    <text class="state-desc">请稍候</text>
+  </view>
+  <view class="state-card" wx:elif="{{listStatus === 'error'}}">
+    <text class="state-title">加载失败</text>
+    <text class="state-desc">{{listError}}</text>
+    <view class="retry-button" bindtap="onRetryList" aria-role="button" aria-label="重新加载审批队列">重新加载</view>
+  </view>
+  <view class="state-card" wx:elif="{{listStatus === 'empty'}}">
+    <text class="state-title">当前没有待审预约</text>
+    <text class="state-desc">新申请会显示在这里</text>
+  </view>
+
+  <view class="pending-list" wx:if="{{listStatus === 'ready'}}">
     <view class="pending-item" wx:for="{{pendingList}}" wx:key="id">
-      <view class="pending-info">
-        <text class="pending-name">{{item.userName || item.user_name || '未知用户'}}</text>
-        <text class="pending-room">{{item.roomName || item.room_name || '未知房间'}}</text>
-        <text class="pending-time">{{item.date}} {{item.start_time}}-{{item.end_time}}</text>
+      <view class="card-topline">
+        <view>
+          <text class="pending-name">{{item.userName}}</text>
+          <text class="pending-student">{{item.studentId}}</text>
+        </view>
+        <text class="queue-badge {{item.isPriority ? 'priority' : 'ordinary'}}">{{item.queueLabel}}</text>
+      </view>
+      <view class="room-line">
+        <text class="pending-room">{{item.roomName}}</text>
+        <text class="room-meta">{{item.buildingLabel}} · {{item.roomTypeLabel}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">预约时间</text>
+        <text class="detail-value">{{item.date}} {{item.timeSlot}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">用途</text>
+        <text class="detail-value">{{item.purpose}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">人数</text>
+        <text class="detail-value">{{item.participants}} 人</text>
       </view>
       <view class="pending-actions">
-        <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove">通过</view>
-        <view class="btn-reject" data-id="{{item.id}}" bindtap="onReject">拒绝</view>
+        <text class="processing-text" wx:if="{{processingById[item.id]}}">正在处理，请稍候</text>
+        <block wx:else>
+          <view wx:if="{{queueType === 'counselor'}}" class="btn-detail primary" data-id="{{item.id}}" bindtap="onViewDetail" aria-role="button" aria-label="查看预约详情并审核">查看并审核</view>
+          <block wx:if="{{queueType === 'admin' && item.status === 'pending'}}">
+            <view class="btn-detail" data-id="{{item.id}}" bindtap="onViewDetail" aria-role="button" aria-label="查看预约详情">查看详情</view>
+            <view class="btn-approve" data-id="{{item.id}}" bindtap="onApprove" aria-role="button" aria-label="通过预约">通过</view>
+            <view class="btn-reject" data-id="{{item.id}}" bindtap="onReject" aria-role="button" aria-label="拒绝预约">拒绝</view>
+          </block>
+        </block>
       </view>
     </view>
-  </view>
-  <view class="empty-tip" wx:else>
-    <text>暂无待审批预约</text>
   </view>
 </view>
 <admin-nav selected="home"></admin-nav>

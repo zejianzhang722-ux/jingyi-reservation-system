@@ -25,12 +25,11 @@
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="userName" label="学生姓名" width="100" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="type" label="违规类型" width="110">
           <template #default="{ row }">
-            <el-tag :type="typeMap[row.type]?.tagType || 'warning'" size="small">{{ typeMap[row.type]?.label || row.type }}</el-tag>
+            <el-tag :type="typeMap[row.type]?.tagType || 'info'" size="small">{{ typeMap[row.type]?.label || '其他违规' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />

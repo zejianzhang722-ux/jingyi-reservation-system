@@ -182,6 +182,7 @@ async function loadRules() {
 }
 
 async function handleSave() {
+  if (saveLoading.value) return
   saveLoading.value = true
   try {
     await updateRules(filters.roomId, form)

@@ -3,14 +3,15 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
+const { normalizeAdminScope } = require('../utils/adminScope');
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'counselor'];
 const STUDENT_ROLE = 'student';
 
 const allowedRolesByOperator = {
   super_admin: ['super_admin', 'admin', 'counselor', 'student'],
-  counselor: ['admin', 'student'],
-  admin: ['student']
+  counselor: [],
+  admin: []
 };
 
 function normalizeRole(role) {
@@ -83,18 +84,24 @@ function paginateRows(rows, page, pageSize) {
 }
 
 async function getAdminRows() {
-  const [admins] = await db.query('SELECT id, username, real_name, role, building_id, phone, status, last_login_at, created_at FROM admins ORDER BY id ASC');
+  const [admins] = await db.query(
+    'SELECT a.id, a.username, a.real_name, a.role, a.building_id, a.scope_type, a.phone, a.status, a.last_login_at, a.created_at, b.name AS building_name FROM admins a LEFT JOIN buildings b ON a.building_id = b.id ORDER BY a.id ASC'
+  );
   return admins.map(function(row) {
     const role = normalizeRole(row.role);
+    const isGlobal = role === 'super_admin' || role === 'counselor' || row.scope_type === 'global';
     return {
       id: accountId('admin', row.id),
       rawId: row.id,
-      accountType: 'admin',
+      accountType: 'manager',
       username: row.username,
       realName: row.real_name || row.username || '',
       name: row.real_name || row.username || '',
       role: role,
       buildingId: row.building_id,
+      buildingName: row.building_name || '',
+      scopeType: row.scope_type,
+      scopeLabel: isGlobal ? '全院' : (row.building_name || '待设置'),
       phone: row.phone || '',
       email: '',
       status: row.status || 'active',
@@ -106,7 +113,7 @@ async function getAdminRows() {
 
 async function getStudentRows() {
   const [students] = await db.query(
-    'SELECT id, student_id, student_no, card_no, name, real_name, building_id, phone, status, credit_score, created_at FROM users ORDER BY created_at DESC'
+    'SELECT u.id, u.student_id, u.student_no, u.card_no, u.name, u.real_name, u.building_id, u.phone, u.status, u.credit_score, u.created_at, b.name AS building_name FROM users u LEFT JOIN buildings b ON u.building_id = b.id ORDER BY u.created_at DESC'
   );
   return students.map(function(row) {
     const studentNo = row.student_no || row.student_id || '';
@@ -121,6 +128,7 @@ async function getStudentRows() {
       name: row.real_name || row.name || '',
       role: 'student',
       buildingId: row.building_id,
+      buildingName: row.building_name || '',
       phone: row.phone || '',
       status: row.status || 'active',
       creditScore: row.credit_score,
@@ -132,21 +140,25 @@ async function getStudentRows() {
 const getAccounts = async function(req, res) {
   try {
     const { page = 1, pageSize = 20, role, status, keyword } = req.query;
+    const requestedAccountType = req.query.accountType || 'manager';
     const operatorRole = normalizeRole(req.user && req.user.role);
+    if (operatorRole !== 'super_admin') return response.error(res, '仅超级管理员可管理账号', 403);
     const allowedRoles = allowedRolesFor(operatorRole);
     const requestedRole = role ? normalizeRole(role) : null;
+
+    if (requestedAccountType !== 'manager' && requestedAccountType !== 'student') {
+      return response.error(res, '账号类型无效', 400);
+    }
 
     if (requestedRole && allowedRoles.indexOf(requestedRole) === -1) {
       return response.paginate(res, [], 0, page, pageSize);
     }
 
     let rows = [];
-    const shouldLoadAdmins = !requestedRole
+    const shouldLoadAdmins = requestedAccountType === 'manager' && (!requestedRole
       ? allowedRoles.some(function(r) { return ADMIN_ROLES.indexOf(r) !== -1; })
-      : ADMIN_ROLES.indexOf(requestedRole) !== -1;
-    const shouldLoadStudents = !requestedRole
-      ? allowedRoles.indexOf(STUDENT_ROLE) !== -1
-      : requestedRole === STUDENT_ROLE;
+      : ADMIN_ROLES.indexOf(requestedRole) !== -1);
+    const shouldLoadStudents = requestedAccountType === 'student' && (!requestedRole || requestedRole === STUDENT_ROLE) && allowedRoles.indexOf(STUDENT_ROLE) !== -1;
 
     if (shouldLoadAdmins) rows = rows.concat(await getAdminRows());
     if (shouldLoadStudents) rows = rows.concat(await getStudentRows());
@@ -172,7 +184,14 @@ const getAccounts = async function(req, res) {
 
 const createAccount = async function(req, res) {
   try {
-    const role = normalizeRole(req.body.role || 'admin');
+    const accountType = req.body.accountType;
+    if (accountType !== 'student' && accountType !== 'manager') {
+      return response.error(res, '请选择正确的账号类型', 400);
+    }
+    const role = normalizeRole(req.body.role || (accountType === 'student' ? 'student' : 'admin'));
+    if ((accountType === 'student' && role !== 'student') || (accountType === 'manager' && role === 'student')) {
+      return response.error(res, '账号类型与角色不匹配', 400);
+    }
     const username = String(req.body.username || '').trim();
     const password = String(req.body.password || '').trim();
     const realName = String(req.body.realName || req.body.name || '').trim();
@@ -201,14 +220,15 @@ const createAccount = async function(req, res) {
 
     const [existingAdmins] = await db.query('SELECT id FROM admins WHERE username = ?', [username]);
     if (existingAdmins.length > 0) return response.error(res, '用户名已存在', 400);
-    const buildingId = req.adminScope && !req.adminScope.isGlobal ? req.adminScope.buildingId : (req.body.buildingId || null);
+    const scope = normalizeAdminScope(role, req.body.scopeType, req.body.buildingId);
+    if (!scope) return response.error(res, '导生管理员必须选择全院或一个具体楼栋', 400);
     const hashedPassword = await bcrypt.hash(password, 10);
     const [result] = await db.query(
-      'INSERT INTO admins (username, password, real_name, role, building_id, phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
-      [username, hashedPassword, realName, role, buildingId, req.body.phone || '', 'active']
+      'INSERT INTO admins (username, password, real_name, role, building_id, scope_type, phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+      [username, hashedPassword, realName, role, scope.buildingId, scope.scopeType, req.body.phone || '', 'active']
     );
     await logOperation(req.user.id, 'create_admin_account', 'admins', result.insertId, '创建管理员账号: ' + username);
-    return response.success(res, { id: accountId('admin', result.insertId), accountType: 'admin' }, '创建成功');
+    return response.success(res, { id: accountId('admin', result.insertId), accountType: 'manager' }, '创建成功');
   } catch (err) {
     logger.error('创建统一账号异常:', err);
     return response.error(res, err.message);
@@ -247,10 +267,19 @@ const updateAccount = async function(req, res) {
       return response.success(res, null, '更新成功');
     }
 
-    const [admins] = await db.query('SELECT id, role, building_id FROM admins WHERE id = ?', [account.id]);
+    if (normalizeRole(req.user.role) !== 'super_admin') return response.error(res, '仅超级管理员可修改管理账号', 403);
+    const [admins] = await db.query('SELECT id, role, building_id, scope_type FROM admins WHERE id = ?', [account.id]);
     if (!admins.length) return response.error(res, '管理员账号不存在', 404);
+    const isCurrentAdmin = Number(req.user.id) === Number(account.id);
+    const disablingSelf = isCurrentAdmin && req.body.status !== undefined && normalizeAdminStatus(req.body.status) !== 'active';
+    if (disablingSelf) return response.error(res, '不能停用当前登录账号', 409);
     const currentRole = normalizeRole(admins[0].role);
+    if (isCurrentAdmin && req.body.role !== undefined && normalizeRole(req.body.role) !== currentRole) {
+      return response.error(res, '不能修改当前登录账号的角色', 409);
+    }
     const nextRole = req.body.role ? normalizeRole(req.body.role) : currentRole;
+    const scope = normalizeAdminScope(nextRole, req.body.scopeType !== undefined ? req.body.scopeType : admins[0].scope_type, req.body.buildingId !== undefined ? req.body.buildingId : admins[0].building_id);
+    if (!scope) return response.error(res, '导生管理员必须选择全院或一个具体楼栋', 400);
     if (!canManageRole(req.user.role, currentRole) || !canManageRole(req.user.role, nextRole)) return response.error(res, '权限不足', 403);
     if (req.adminScope && !req.adminScope.isGlobal && Number(admins[0].building_id || 0) !== Number(req.adminScope.buildingId)) {
       return response.error(res, '无权操作其他楼栋管理员账号', 403);
@@ -262,7 +291,8 @@ const updateAccount = async function(req, res) {
     if (realName !== undefined) { updates.push('real_name = ?'); params.push(realName); }
     if (req.body.role !== undefined) { updates.push('role = ?'); params.push(nextRole); }
     if (req.body.status !== undefined) { updates.push('status = ?'); params.push(normalizeAdminStatus(req.body.status)); }
-    if (req.body.buildingId !== undefined) { updates.push('building_id = ?'); params.push(req.body.buildingId || null); }
+    updates.push('building_id = ?'); params.push(scope.buildingId);
+    updates.push('scope_type = ?'); params.push(scope.scopeType);
     if (req.body.phone !== undefined) { updates.push('phone = ?'); params.push(req.body.phone || ''); }
     if (req.body.password) {
       const hashedPassword = await bcrypt.hash(req.body.password, 10);
@@ -299,6 +329,7 @@ const deleteAccount = async function(req, res) {
 
     const [admins] = await db.query('SELECT role, building_id FROM admins WHERE id = ?', [account.id]);
     if (!admins.length) return response.error(res, '管理员账号不存在', 404);
+    if (Number(req.user.id) === Number(account.id)) return response.error(res, '不能停用当前登录账号', 409);
     const targetRole = normalizeRole(admins[0].role);
     if (targetRole === 'super_admin') return response.error(res, '不能删除超级管理员账号', 403);
     if (!canManageRole(req.user.role, targetRole)) return response.error(res, '权限不足', 403);

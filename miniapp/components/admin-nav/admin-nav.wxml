@@ -1,10 +1,7 @@
 <view class="admin-nav">
   <view class="admin-nav-item {{selected === item.key ? 'active' : ''}}"
-        wx:for="{{items}}"
-        wx:key="key"
-        data-item="{{item}}"
-        bindtap="onTap">
-    <text class="admin-nav-icon">{{item.icon}}</text>
+        wx:for="{{items}}" wx:key="key" data-item="{{item}}" bindtap="onTap">
+    <image class="admin-nav-icon" src="{{selected === item.key ? item.selectedIconPath : item.iconPath}}" mode="aspectFit"></image>
     <text class="admin-nav-text">{{item.text}}</text>
   </view>
 </view>

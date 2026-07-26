@@ -91,6 +91,18 @@ if (/:\s*item\.status/.test(myReservationsWxml)) {
   fail('我的预约不得把原始状态码直接显示给用户')
 }
 
+const adminNavWxss = read('miniapp/components/admin-nav/admin-nav.wxss')
+if (/#7b8794/i.test(adminNavWxss) || !/\.admin-nav-item\s*\{[^}]*color:\s*#667085/i.test(adminNavWxss)) {
+  fail('管理员底栏未选中文字应使用不浅于 #667085 的清晰颜色')
+}
+const adminHomeWxss = read('miniapp/pages/admin-home/admin-home.wxss')
+if (/#7b8494/i.test(adminHomeWxss)) {
+  fail('管理员审批工作台说明文字不得继续使用过浅的 #7b8494')
+}
+;['admin-subtitle', 'stat-label', 'section-count', 'state-desc', 'pending-student', 'room-meta', 'detail-label'].forEach(function (className) {
+  var pattern = new RegExp('\\.' + className + '\\s*\\{[^}]*color:\\s*#667085', 'i')
+  if (!pattern.test(adminHomeWxss)) fail('管理员审批工作台 ' + className + ' 说明文字应统一为 #667085')
+})
 if (errors.length > 0) {
   console.error(errors.join('\n'))
   process.exit(1)

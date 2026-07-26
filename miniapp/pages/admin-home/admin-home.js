@@ -1,33 +1,147 @@
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
+var adminPolicy = require('../../utils/admin-policy')
+var approvalPresenter = require('../../utils/admin-approval-presenter')
+
+var ROLE_NAMES = {
+  super_admin: '超级管理员',
+  admin: '导生管理员',
+  counselor: '书院辅导员'
+}
+
+var METRIC_TARGETS = {
+  ordinary: {
+    url: '/pages/admin-reservation/admin-reservation?preset=ordinary',
+    capability: 'ordinaryApproval'
+  },
+  priority: {
+    url: '/pages/admin-reservation/admin-reservation?preset=priority',
+    capability: 'counselorApproval'
+  },
+  actionable: {
+    url: '/pages/admin-reservation/admin-reservation?preset=actionable',
+    capability: 'ordinaryApproval'
+  },
+  today: {
+    url: '/pages/admin-reservation/admin-reservation?preset=today',
+    capability: 'reservationView'
+  },
+  inUse: {
+    url: '/pages/admin-reservation/admin-reservation?preset=in_use',
+    capability: 'reservationView'
+  },
+  openRooms: {
+    url: '/pages/admin-rooms/admin-rooms?status=open',
+    capability: 'roomView'
+  },
+  feedback: {
+    url: '/pages/admin-feedback/admin-feedback?status=pending',
+    capability: 'feedbackManage'
+  }
+}
+
+function numberOrZero(value) {
+  var number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
 
 Page({
   data: {
-    pendingCount: 0,
+    queueType: 'admin',
+    queueLabel: '普通预约审核',
+    ordinaryPendingCount: 0,
+    counselorPendingCount: 0,
+    actionablePendingCount: 0,
+    activeRoomCount: 0,
     todayReservations: 0,
+    inUseCount: 0,
     feedbackCount: 0,
-    activeRooms: 0,
+    feedbackStatus: 'idle',
+    statsStatus: 'loading',
+    statsError: '',
+    hasTrustedStats: false,
+    listStatus: 'loading',
+    listError: '',
     pendingList: [],
     roleName: '管理员',
+    canSwitchQueue: false,
+    canManageFeedback: false,
+    processingById: {},
     scanning: false
   },
   ensureAdmin: function () {
-    if (!auth.isLoggedIn() || !auth.isAdmin()) {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'ordinaryApproval')) {
       wx.reLaunch({ url: '/pages/login/login' })
       return false
     }
     return true
   },
-  onLoad: function () {
-    if (!this.ensureAdmin()) return
+  applyRole: function (role, requestedQueue) {
+    var defaultQueue = adminPolicy.defaultQueueType(role)
+    var queueType = defaultQueue
+    if (requestedQueue === 'admin' || requestedQueue === 'counselor') {
+      queueType = adminPolicy.queueType(role, requestedQueue)
+    }
+    this._loadedRole = role
+    this.setData({
+      roleName: ROLE_NAMES[role] || '管理员',
+      queueType: queueType,
+      queueLabel: queueType === 'counselor' ? '辅导员重点审核' : '普通预约审核',
+      canSwitchQueue: adminPolicy.can(role, 'counselorApproval'),
+      canManageFeedback: adminPolicy.can(role, 'feedbackManage')
+    })
+  },
+  invalidateHomeRequests: function () {
+    this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
+    this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
+  },
+  scheduleRoleReload: function () {
+    var that = this
+    if (this._roleReloadPromise) return this._roleReloadPromise
+    this._roleReloadPromise = Promise.resolve().then(function () {
+      if (!that.ensureAdmin()) return
+      return Promise.all([that.loadStats(), that.loadPendingList()])
+    }).then(function () {
+      that._roleReloadPromise = null
+    }, function () {
+      that._roleReloadPromise = null
+    })
+    return this._roleReloadPromise
+  },
+  isRequestContextCurrent: function (expectedRole, expectedQueue) {
     var role = auth.getUserRole()
-    var nameMap = { super_admin: '超级管理员', admin: '导生管理员', counselor: '书院辅导员' }
-    this.setData({ roleName: nameMap[role] || '管理员' })
-    this.loadStats()
-    this.loadPendingList()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'ordinaryApproval')) {
+      this.invalidateHomeRequests()
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '', feedbackCount: 0, feedbackStatus: 'idle' })
+      this.ensureAdmin()
+      return false
+    }
+    if (role === expectedRole && (expectedQueue === undefined || (
+      this.data.queueType === expectedQueue && adminPolicy.queueType(role, expectedQueue) === expectedQueue
+    ))) {
+      return true
+    }
+    if (this._loadedRole !== role) {
+      this.invalidateHomeRequests()
+      this.applyRole(role)
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '', feedbackCount: 0, feedbackStatus: 'idle' })
+      this.scheduleRoleReload()
+    }
+    return false
+  },
+  onLoad: function (options) {
+    if (!this.ensureAdmin()) return
+    var requestedQueue = options && (options.type || options.queueType)
+    this.applyRole(auth.getUserRole(), requestedQueue)
   },
   onShow: function () {
     if (!this.ensureAdmin()) return
+    var role = auth.getUserRole()
+    if (this._loadedRole !== role) {
+      this.applyRole(role)
+      this.setData({ pendingList: [], listStatus: 'loading', listError: '' })
+    }
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().switchTabList()
       this.getTabBar().setData({ selected: 0 })
@@ -37,34 +151,198 @@ Page({
   },
   loadStats: function () {
     var that = this
-    request.get('/reservation/pending-count', {}, { silent: true }).then(function (data) {
-      that.setData({ pendingCount: data.count || 0 })
-    }).catch(function () {})
-    request.get('/room/stats', {}, { silent: true }).then(function (data) {
-      that.setData({ activeRooms: data.activeRooms || 12, todayReservations: data.todayReservations || 0 })
+    var role = auth.getUserRole()
+    this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
+    var requestVersion = this._statsRequestVersion
+    this.setData({ statsStatus: 'loading', statsError: '' })
+
+    var dashboardRequest = request.get('/stats/dashboard', {}, { silent: true }).then(function (data) {
+      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
+      data = data || {}
+      that.setData({
+        ordinaryPendingCount: numberOrZero(data.ordinaryPendingCount),
+        counselorPendingCount: numberOrZero(data.counselorPendingCount),
+        actionablePendingCount: numberOrZero(data.actionablePendingCount),
+        activeRoomCount: numberOrZero(data.activeRoomCount),
+        todayReservations: numberOrZero(data.todayReservations),
+        inUseCount: numberOrZero(data.usingCount !== undefined ? data.usingCount : data.inUseCount),
+        statsStatus: 'ready',
+        statsError: '',
+        hasTrustedStats: true
+      })
     }).catch(function () {
-      that.setData({ activeRooms: 12 })
+      if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
+      that.setData({
+        statsStatus: 'error',
+        statsError: that.data.hasTrustedStats
+          ? '统计更新失败，当前显示上次结果'
+          : '暂无可信统计数据，请重新加载'
+      })
     })
-    request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
-      that.setData({ feedbackCount: data.total || 0 })
-    }).catch(function () {})
+
+    var feedbackRequest = Promise.resolve()
+    if (adminPolicy.can(role, 'feedbackManage')) {
+      this.setData({ feedbackStatus: 'loading' })
+      feedbackRequest = request.get('/feedback', { status: 'pending' }, { silent: true }).then(function (data) {
+        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
+        that.setData({ feedbackCount: numberOrZero(data && data.total), feedbackStatus: 'ready' })
+      }).catch(function () {
+        if (requestVersion !== that._statsRequestVersion || !that.isRequestContextCurrent(role)) return
+        that.setData({ feedbackStatus: 'error' })
+      })
+    } else {
+      this.setData({ feedbackCount: 0, feedbackStatus: 'idle' })
+    }
+    return Promise.all([dashboardRequest, feedbackRequest])
+  },
+  onRetryStats: function () {
+    return this.loadStats()
+  },
+  refreshMetricRoleContext: function (role) {
+    this.invalidateHomeRequests()
+    this.applyRole(role)
+    this.setData({
+      ordinaryPendingCount: 0,
+      counselorPendingCount: 0,
+      actionablePendingCount: 0,
+      activeRoomCount: 0,
+      todayReservations: 0,
+      inUseCount: 0,
+      feedbackCount: 0,
+      feedbackStatus: 'idle',
+      statsStatus: 'loading',
+      statsError: '',
+      hasTrustedStats: false,
+      pendingList: [],
+      processingById: {},
+      listStatus: 'loading',
+      listError: ''
+    })
+    this.loadStats()
+    this.loadPendingList()
+  },
+  onMetricTap: function (event) {
+    var target = event && event.currentTarget && event.currentTarget.dataset.target
+    var metric = METRIC_TARGETS[target]
+    if (!metric || this._metricNavigating || !this.ensureAdmin()) return
+
+    var role = auth.getUserRole()
+    if (this._loadedRole !== role) {
+      this.refreshMetricRoleContext(role)
+      return
+    }
+    if (!adminPolicy.can(role, metric.capability)) return
+    if (!this.data.hasTrustedStats) {
+      wx.showToast({ title: '统计尚未加载，请稍后重试', icon: 'none' })
+      return
+    }
+    if (target === 'feedback' && this.data.feedbackStatus !== 'ready') return
+
+    this._metricNavigating = true
+    wx.navigateTo({
+      url: metric.url,
+      fail: this.onMetricNavigationFail.bind(this),
+      complete: this.onMetricNavigationComplete.bind(this)
+    })
+  },
+  onMetricNavigationFail: function () {
+    this._metricNavigating = false
+    wx.showToast({ title: '页面打开失败，请重试', icon: 'none' })
+  },
+  onMetricNavigationComplete: function () {
+    this._metricNavigating = false
   },
   loadPendingList: function () {
     var that = this
-    request.get('/reservation/pending', {}, { silent: true }).then(function (data) {
-      var list = data
-      if (!Array.isArray(list)) list = []
-      that.setData({ pendingList: list.slice(0, 10) })
+    var role = auth.getUserRole()
+    var queueType = this.data.queueType
+    this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
+    var requestVersion = this._pendingRequestVersion
+    return request.get('/audit/pending', {
+      type: this.data.queueType,
+      page: 1,
+      pageSize: 10
+    }, { silent: true }).then(function (data) {
+      if (requestVersion !== that._pendingRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
+      var rows = Array.isArray(data) ? data : (data && (data.items || data.list)) || []
+      var list = rows.slice(0, 10).map(approvalPresenter.toCard)
+      that.setData({
+        pendingList: list,
+        listStatus: list.length ? 'ready' : 'empty',
+        listError: ''
+      })
     }).catch(function () {
-      that.setData({ pendingList: [] })
+      if (requestVersion !== that._pendingRequestVersion || !that.isRequestContextCurrent(role, queueType)) return
+      that.setData({
+        pendingList: [],
+        listStatus: 'error',
+        listError: '审批列表加载失败，请检查网络后重新加载'
+      })
     })
   },
-  showScanError: function (message) {
-    wx.showToast({
-      title: message || '扫码签到失败',
-      icon: 'none',
-      duration: 2500
+  onQueueChange: function (event) {
+    var role = auth.getUserRole()
+    var requestedQueue = event && event.currentTarget && event.currentTarget.dataset.type
+    var queueType = adminPolicy.queueType(role, requestedQueue)
+    if (queueType === this.data.queueType) return
+    this._loadedRole = role
+    this.setData({
+      queueType: queueType,
+      queueLabel: queueType === 'counselor' ? '辅导员重点审核' : '普通预约审核',
+      pendingList: [],
+      listStatus: 'loading',
+      listError: ''
     })
+    this.loadPendingList()
+  },
+  onRetryList: function () {
+    this.setData({ pendingList: [], listStatus: 'loading', listError: '' })
+    return this.loadPendingList()
+  },
+  onViewDetail: function (event) {
+    var id = event.currentTarget.dataset.id
+    wx.navigateTo({ url: '/pages/admin-reservation-detail/admin-reservation-detail?id=' + id })
+  },
+  isProcessing: function (id) {
+    return !!this.data.processingById[id]
+  },
+  canQuickApproveItem: function (id) {
+    var item = (this.data.pendingList || []).find(function (candidate) { return Number(candidate.id) === Number(id) })
+    return !!item && this.data.queueType === 'admin' && adminPolicy.canQuickApprove(auth.getUserRole(), item.status)
+  },
+  revalidateQuickApproval: function (id, expectedRole, expectedQueue) {
+    var role = auth.getUserRole()
+    if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'ordinaryApproval')) {
+      this._pendingRequestVersion = (this._pendingRequestVersion || 0) + 1
+      this._statsRequestVersion = (this._statsRequestVersion || 0) + 1
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '' })
+      this.ensureAdmin()
+      return false
+    }
+    if (role !== expectedRole || this.data.queueType !== expectedQueue) {
+      this.applyRole(role)
+      this.setData({ pendingList: [], processingById: {}, listStatus: 'loading', listError: '' })
+      wx.showToast({ title: '账号权限已变化，请重新操作', icon: 'none' })
+      this.loadStats()
+      this.loadPendingList()
+      return false
+    }
+    if (!this.canQuickApproveItem(id)) {
+      wx.showToast({ title: '预约状态已变化，请刷新后重试', icon: 'none' })
+      this.loadStats()
+      this.loadPendingList()
+      return false
+    }
+    return true
+  },
+  setProcessing: function (id, processing) {
+    var next = Object.assign({}, this.data.processingById)
+    if (processing) next[id] = true
+    else delete next[id]
+    this.setData({ processingById: next })
+  },
+  showScanError: function (message) {
+    wx.showToast({ title: message || '扫码签到失败', icon: 'none', duration: 2500 })
   },
   onScanCheckin: function () {
     var that = this
@@ -85,10 +363,7 @@ Page({
           that.showScanError('动态签到凭证格式无效')
           return
         }
-        request.post('/checkin', {
-          reservationId: payload.reservationId,
-          credential: payload.credential
-        }).then(function () {
+        request.post('/checkin', { reservationId: payload.reservationId, credential: payload.credential }).then(function () {
           wx.showToast({ title: '签到成功', icon: 'success' })
           that.loadStats()
         }).catch(function (err) {
@@ -99,48 +374,64 @@ Page({
         if (err && String(err.errMsg || '').indexOf('cancel') !== -1) return
         that.showScanError('无法完成扫码，请检查相机权限')
       },
-      complete: function () {
-        that.setData({ scanning: false })
-      }
+      complete: function () { that.setData({ scanning: false }) }
     })
   },
-  onApprove: function (e) {
+  onApprove: function (event) {
     var that = this
-    var id = e.currentTarget.dataset.id
+    var id = event.currentTarget.dataset.id
+    if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
+    var expectedRole = auth.getUserRole()
+    var expectedQueue = this.data.queueType
     wx.showModal({
       title: '确认审批',
       content: '确定通过该预约申请？',
-      success: function (res) {
-        if (res.confirm) {
-          request.put('/reservation/' + id + '/approve', {}).then(function () {
-            wx.showToast({ title: '已通过', icon: 'success' })
-            that.loadPendingList()
-            that.loadStats()
-          }).catch(function () {
-            wx.showToast({ title: '操作失败', icon: 'none' })
-          })
-        }
+      success: function (result) {
+        if (!result.confirm || that.isProcessing(id) || !that.revalidateQuickApproval(id, expectedRole, expectedQueue)) return
+        that.setProcessing(id, true)
+        request.post('/audit/' + id + '/approve', {}, { silent: true }).then(function () {
+          wx.showToast({ title: '已通过', icon: 'success' })
+          return Promise.all([that.loadPendingList(), that.loadStats()])
+        }, function (err) {
+          wx.showToast({ title: err && err.message ? err.message : '操作失败', icon: 'none' })
+        }).then(function () {
+          that.setProcessing(id, false)
+        }, function () {
+          that.setProcessing(id, false)
+        })
       }
     })
   },
-  onReject: function (e) {
+  onReject: function (event) {
     var that = this
-    var id = e.currentTarget.dataset.id
+    var id = event.currentTarget.dataset.id
+    if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
+    var expectedRole = auth.getUserRole()
+    var expectedQueue = this.data.queueType
     wx.showModal({
       title: '拒绝预约',
       content: '请输入拒绝理由',
       editable: true,
       placeholderText: '请输入拒绝理由',
-      success: function (res) {
-        if (res.confirm) {
-          request.put('/reservation/' + id + '/reject', { reason: res.content || '' }).then(function () {
-            wx.showToast({ title: '已拒绝', icon: 'success' })
-            that.loadPendingList()
-            that.loadStats()
-          }).catch(function () {
-            wx.showToast({ title: '操作失败', icon: 'none' })
-          })
+      success: function (result) {
+        if (!result.confirm) return
+        var reason = String(result.content || '').trim()
+        if (!reason) {
+          wx.showToast({ title: '请填写拒绝理由', icon: 'none' })
+          return
         }
+        if (that.isProcessing(id) || !that.revalidateQuickApproval(id, expectedRole, expectedQueue)) return
+        that.setProcessing(id, true)
+        request.post('/audit/' + id + '/reject', { reason: reason }, { silent: true }).then(function () {
+          wx.showToast({ title: '已拒绝', icon: 'success' })
+          return Promise.all([that.loadPendingList(), that.loadStats()])
+        }, function (err) {
+          wx.showToast({ title: err && err.message ? err.message : '操作失败', icon: 'none' })
+        }).then(function () {
+          that.setProcessing(id, false)
+        }, function () {
+          that.setProcessing(id, false)
+        })
       }
     })
   }

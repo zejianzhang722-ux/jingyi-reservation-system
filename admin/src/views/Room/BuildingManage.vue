@@ -9,7 +9,6 @@
       </div>
 
       <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="name" label="楼栋名称" width="180" />
         <el-table-column prop="code" label="楼栋编号" width="120" />
         <el-table-column prop="floors" label="楼层数" width="90" />

@@ -1,7 +1,7 @@
-.container { padding: 24rpx 24rpx 150rpx; background: #f5f7fa; min-height: 100vh; box-sizing: border-box; }
+.container { padding: 24rpx 24rpx calc(180rpx + env(safe-area-inset-bottom)); background: #f5f7fa; min-height: 100vh; box-sizing: border-box; }
 .manage-header { padding: 10rpx 4rpx 28rpx; }
 .manage-title { display: block; font-size: 40rpx; font-weight: 800; color: #172033; }
-.manage-subtitle { display: block; margin-top: 8rpx; color: #7b8794; font-size: 24rpx; line-height: 1.5; }
+.manage-subtitle { display: block; margin-top: 8rpx; color: #667085; font-size: 24rpx; line-height: 1.5; }
 .menu-section { margin-bottom: 26rpx; }
 .section-label { display: block; font-size: 26rpx; color: #536175; font-weight: 700; margin: 0 0 14rpx 4rpx; }
 .menu-grid { display: flex; flex-direction: column; gap: 16rpx; }
@@ -33,4 +33,7 @@
 .admin-symbol-announcement::after { width: 16rpx; height: 4rpx; left: 9rpx; top: 13rpx; background: #9a6a00; box-shadow: 0 8rpx 0 #9a6a00; }
 .menu-info { flex: 1; min-width: 0; }
 .menu-name { display: block; font-size: 30rpx; color: #172033; font-weight: 700; }
-.menu-desc { display: block; font-size: 23rpx; color: #8a94a6; margin-top: 8rpx; line-height: 1.35; }
+.menu-desc { display: block; font-size: 23rpx; color: #667085; margin-top: 8rpx; line-height: 1.35; }
+
+.menu-icon { position: relative; }
+.menu-badge { position: absolute; top: -12rpx; right: -14rpx; min-width: 32rpx; height: 32rpx; padding: 0 7rpx; box-sizing: border-box; border-radius: 18rpx; background: #d92d20; color: #fff; font-size: 20rpx; line-height: 32rpx; text-align: center; }

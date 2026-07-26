@@ -91,9 +91,10 @@ INSERT INTO seats (room_id, seat_number, row_num, col_num, status, has_power) VA
 (5, 22, 3, 2, 'available', 1), (5, 23, 3, 3, 'available', 1), (5, 24, 3, 4, 'available', 1),
 (5, 25, 3, 5, 'available', 1), (5, 26, 3, 6, 'available', 1);
 
-INSERT INTO admins (id, username, password, real_name, role, building_id, phone, status) VALUES
-(1, 'admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 'admin', NULL, '13800000001', 'active'),
-(2, 'superadmin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '超级管理员', 'super_admin', NULL, '13800000002', 'active');
+INSERT INTO admins (id, username, password, real_name, role, building_id, scope_type, phone, status) VALUES
+(1, 'admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 'admin', NULL, 'global', '13800000001', 'active'),
+(2, 'superadmin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '超级管理员', 'super_admin', NULL, 'global', '13800000002', 'active'),
+(3, 'counselor', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '辅导员', 'counselor', NULL, 'global', '13800000003', 'active');
 
 INSERT INTO users (id, openid, nickname, name, avatar, phone, student_id, student_no, card_no, real_name, gender, college, major, grade, class_name, building_id, room_number, role, credit_score, status) VALUES
 (1, 'test_openid_001', '张三', '张三', '', '13900000001', '2024001001', '2024001001', '200001', '张三', '男', '敬一书院', '软件工程', '2024', '2024级1班', 1, 'B301', 'student', 80, 'active'),

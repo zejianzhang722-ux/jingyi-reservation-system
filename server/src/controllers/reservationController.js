@@ -1,4 +1,4 @@
-﻿const db = require('../config/database');
+const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const reservationService = require('../services/reservationService');
@@ -15,13 +15,20 @@ const list = async function(req, res) {
     const roomId = req.query.roomId;
     const userRole = req.user.role || 'student';
     const isAdmin = ['admin', 'super_admin', 'counselor'].includes(userRole);
+    const actionableOnly = String(req.query.actionable || '') === '1';
+    const actionableStatuses = userRole === 'admin'
+      ? ['pending']
+      : ['pending', 'counselor_pending'];
 
+    if (actionableOnly && !isAdmin) return response.error(res, '无权查看管理员待处理预约', 403);
     if (isAdmin && !req.adminScope) return response.error(res, '管理员数据范围未初始化', 500);
 
     if (db.isMock()) {
       const rows = reservationPresenter.getMockReservationRows({
-        adminScope: req.adminScope || { isGlobal: false, buildingId: null },
-        status: status,
+        adminScope: req.adminScope || { isGlobal: true, buildingId: null },
+        userId: isAdmin ? null : req.user.id,
+        status: actionableOnly ? null : status,
+        statuses: actionableOnly ? actionableStatuses : null,
         date: date,
         roomId: roomId,
         startDate: req.query.startDate,
@@ -44,7 +51,10 @@ const list = async function(req, res) {
       where += ' AND rm.building_id = ?';
       params.push(req.adminScope.buildingId);
     }
-    if (status) {
+    if (actionableOnly) {
+      where += ' AND r.status IN (' + actionableStatuses.map(function() { return '?'; }).join(',') + ')';
+      Array.prototype.push.apply(params, actionableStatuses);
+    } else if (status) {
       where += ' AND r.status = ?';
       params.push(status);
     }
@@ -86,8 +96,11 @@ const list = async function(req, res) {
 const detail = async function(req, res) {
   try {
     const [reservations] = await db.query(
-      'SELECT r.*, rm.name AS room_name, rm.type AS room_type, rm.location, rm.building_id, ' +
-      'rm.open_start_time, rm.open_end_time, u.nickname, u.real_name, u.student_id, u.phone, ' +
+      'SELECT r.id, r.user_id, r.room_id, r.seat_id, r.date, r.start_time, r.end_time, ' +
+      'r.purpose, r.participants, r.status, r.reservation_code, r.reject_reason, r.audited_at, r.created_at, ' +
+      'rm.name AS room_name, rm.type AS room_type, rm.location, rm.building_id, ' +
+      'rm.open_start_time, rm.open_end_time, u.nickname, u.real_name, u.student_id, u.student_no, u.phone, ' +
+      'u.credit_score, u.status AS user_status, ' +
       's.id AS joined_seat_id, s.seat_number AS joined_seat_number, s.row_num AS joined_seat_row, ' +
       's.col_num AS joined_seat_col, s.status AS joined_seat_status ' +
       'FROM reservations r JOIN rooms rm ON r.room_id = rm.id ' +
@@ -128,6 +141,10 @@ const detail = async function(req, res) {
     delete reservation.joined_seat_status;
     delete reservation.room_number;
     delete reservation.roomNumber;
+    if (['admin', 'super_admin', 'counselor'].includes(role)) {
+      delete reservation.phone;
+      delete reservation.reservation_code;
+    }
     return response.success(res, reservation);
   } catch (err) {
     logger.error('获取预约详情异常:', err);

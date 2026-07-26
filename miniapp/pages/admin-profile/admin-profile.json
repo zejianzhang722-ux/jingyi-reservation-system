@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "管理中心",
+  "navigationBarTitleText": "账号与设置",
   "usingComponents": {
     "admin-nav": "/components/admin-nav/admin-nav"
   }

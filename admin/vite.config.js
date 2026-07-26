@@ -1,22 +1,20 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
-import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import path from 'path'
 
 const apiTarget = process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:3000'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
-    AutoImport({
-      resolvers: [ElementPlusResolver()],
-      imports: ['vue', 'vue-router', 'pinia']
-    }),
-    Components({
-      resolvers: [ElementPlusResolver()]
-    })
+    ...(mode === 'test' ? [] : [
+      AutoImport({
+        resolvers: [ElementPlusResolver({ importStyle: false })],
+        imports: ['vue', 'vue-router', 'pinia']
+      })
+    ])
   ],
   resolve: {
     alias: {
@@ -36,4 +34,4 @@ export default defineConfig({
       }
     }
   }
-})
+}))

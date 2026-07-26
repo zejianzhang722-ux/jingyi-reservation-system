@@ -14,7 +14,8 @@ export function formatReservationTrend(rows) {
     dates: list.map(row => row.period || row.date || ''),
     total: list.map(row => toNumber(row.total)),
     used: list.map(row => toNumber(row.approved) + toNumber(row.completed) + toNumber(row.checked_in)),
-    cancelled: list.map(row => toNumber(row.cancelled))
+    cancelled: list.map(row => toNumber(row.cancelled)),
+    noshow: list.map(row => toNumber(row.noshow))
   };
 }
 
@@ -37,10 +38,12 @@ export function formatPeakHours(rows) {
 
 export function formatNoshowRate(data) {
   const rows = normalizeRows(data?.roomNoshowStats);
-  const total = toNumber(data?.totalNoshow) || rows.reduce((sum, row) => sum + toNumber(row.noshow_count), 0);
+  const usableRows = rows.filter(row => Number.isFinite(Number(row.rate)) || toNumber(row.reservation_count) > 0);
   return {
-    labels: rows.map(row => row.name || row.room_name || ''),
-    rates: rows.map(row => (total > 0 ? Math.round((toNumber(row.noshow_count) / total) * 100) : 0))
+    labels: usableRows.map(row => row.name || row.room_name || ''),
+    rates: usableRows.map(row => Number.isFinite(Number(row.rate))
+      ? Math.round(Number(row.rate))
+      : Math.round((toNumber(row.noshow_count) / toNumber(row.reservation_count)) * 100))
   };
 }
 
@@ -68,4 +71,32 @@ export function getRangeDays(startDate, endDate) {
   const end = new Date(`${endDate}T00:00:00`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 30;
   return Math.max(1, Math.round((end - start) / 86400000) + 1);
+}
+
+export function getRecentDateRange(today = new Date()) {
+  const end = new Date(today)
+  const start = new Date(today)
+  start.setDate(start.getDate() - 6)
+  const format = date => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  return [format(start), format(end)]
+}
+
+export function deriveStatsSummary({ trend, usage, peak, noshow }) {
+  const sum = values => normalizeRows(values).reduce((total, value) => total + toNumber(value), 0)
+  const average = values => values?.length ? Math.round(sum(values) / values.length) : 0
+  const peakCounts = peak?.counts || []
+  const peakIndex = peakCounts.length ? peakCounts.indexOf(Math.max(...peakCounts.map(toNumber))) : -1
+  const reservationCount = trend?.total ? sum(trend.total) : null
+  const noshowCount = trend?.noshow ? sum(trend.noshow) : null
+  return {
+    reservationCount,
+    averageUsageRate: usage?.rates?.length ? average(usage.rates) : null,
+    busiestHour: peakIndex >= 0 ? peak.hours[peakIndex] : '暂无',
+    noshowRate: reservationCount > 0 && noshowCount !== null ? Math.round((noshowCount / reservationCount) * 100) : null
+  }
 }

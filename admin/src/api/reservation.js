@@ -4,6 +4,12 @@ export function getPending(params) {
   return request.get('/audit/pending', { params })
 }
 
+export async function getPendingCount(params) {
+  const response = await request.get('/reservation/pending-count', { params })
+  const count = Number(response?.data?.count)
+  return Number.isFinite(count) && count > 0 ? count : 0
+}
+
 export function approve(id, data) {
   return request.post(`/audit/${id}/approve`, data)
 }
@@ -16,8 +22,8 @@ export function batchAudit(data) {
   return request.post('/audit/batch', data)
 }
 
-export function getAll(params) {
-  return request.get('/reservation', { params })
+export function getAll(params, options = {}) {
+  return request.get('/reservation', { ...options, params })
 }
 
 export function getDetail(id) {

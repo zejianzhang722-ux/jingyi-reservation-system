@@ -1,4 +1,6 @@
 var request = require('../../utils/request')
+var auth = require('../../utils/auth')
+var adminPolicy = require('../../utils/admin-policy')
 
 var apiTypeMap = {
   study: 'study_room',
@@ -12,10 +14,23 @@ var apiTypeMap = {
   multi: 'multi_purpose_hall'
 }
 
+var statusLabelMap = {
+  open: '\u5f00\u653e\u4e2d',
+  closed: '\u5df2\u5173\u95ed',
+  maintenance: '\u7ef4\u62a4\u4e2d'
+}
+
+function fingerprintValue(value) {
+  return value === undefined || value === null ? '' : String(value)
+}
+
 Page({
   data: {
     list: [],
     filterType: '',
+    filterStatus: '',
+    filterStatusLabel: '',
+    canConfigureRooms: false,
     typeMap: {
       study_room: '自习室',
       seminar_room: '共享空间',
@@ -37,24 +52,98 @@ Page({
     statusMap: { open: '开放中', closed: '已关闭', maintenance: '维护中' }
   },
 
-  onLoad: function () {
-    this.loadData()
+  onLoad: function (options) {
+    if (!this.ensureAdmin()) return
+    this.applyStatusPreset(options && options.status)
   },
 
   onShow: function () {
-    this.loadData()
+    if (this.ensureAdmin()) return this.loadData()
+  },
+
+  hasReadAccess: function () {
+    return auth.isLoggedIn() && auth.isAdmin() && adminPolicy.can(auth.getUserRole(), 'roomView')
+  },
+
+  normalizeStatus: function (status) {
+    return Object.prototype.hasOwnProperty.call(statusLabelMap, status) ? status : ''
+  },
+
+  applyStatusPreset: function (status) {
+    var normalized = this.normalizeStatus(status)
+    this.setData({
+      filterStatus: normalized,
+      filterStatusLabel: normalized ? statusLabelMap[normalized] : ''
+    })
+  },
+
+  requestContextFingerprint: function () {
+    var userInfo = auth.getUserInfo() || {}
+    var buildingId = userInfo.buildingId
+    var scopeType = userInfo.scopeType
+    if (buildingId === undefined) buildingId = userInfo.building_id
+    if (scopeType === undefined) scopeType = userInfo.scope_type
+    return JSON.stringify([
+      fingerprintValue(userInfo.id),
+      fingerprintValue(userInfo.username),
+      fingerprintValue(userInfo.role),
+      fingerprintValue(buildingId),
+      fingerprintValue(scopeType)
+    ])
+  },
+
+  clearList: function () {
+    this._listRequestVersion = (this._listRequestVersion || 0) + 1
+    this.setData({ list: [] })
+  },
+
+  ensureAdmin: function () {
+    if (!this.hasReadAccess()) {
+      this.clearList()
+      wx.reLaunch({ url: '/pages/login/login' })
+      return false
+    }
+    return true
   },
 
   loadData: function () {
     var that = this
-    var params = {}
+    if (!this.hasReadAccess()) {
+      this.clearList()
+      return Promise.resolve()
+    }
+    var requestContext = this.requestContextFingerprint()
+    this._listRequestVersion = (this._listRequestVersion || 0) + 1
+    var requestVersion = this._listRequestVersion
+    var params = { page: 1, pageSize: 100 }
     var apiType = apiTypeMap[this.data.filterType]
     if (apiType) params.type = apiType
+    if (this.data.filterStatus) params.status = this.data.filterStatus
 
-    return request.get('/room', params, { silent: true }).then(function (data) {
+    return request.get('/admin/rooms', params, { silent: true }).then(function (data) {
+      if (!that.hasReadAccess()) {
+        that.clearList()
+        return
+      }
+      if (requestVersion !== that._listRequestVersion) return
+      if (that.requestContextFingerprint() !== requestContext) {
+        that.clearList()
+        if (that.hasReadAccess()) return that.loadData()
+        return
+      }
       var list = Array.isArray(data) ? data : (data.list || data.rooms || [])
       that.setData({ list: list })
     }).catch(function () {
+      if (!that.hasReadAccess()) {
+        that.clearList()
+        return
+      }
+      if (requestVersion !== that._listRequestVersion) return
+      if (that.requestContextFingerprint() !== requestContext) {
+        that.clearList()
+        if (that.hasReadAccess()) return that.loadData()
+        return
+      }
       that.setData({ list: [] })
     })
   },
@@ -64,26 +153,13 @@ Page({
     return this.loadData()
   },
 
+  onClearStatus: function () {
+    this.applyStatusPreset('')
+    return this.loadData()
+  },
+
   onToggleStatus: function (e) {
-    var that = this
-    var id = e.currentTarget.dataset.id
-    var currentStatus = e.currentTarget.dataset.status
-    var newStatus = currentStatus === 'open' ? 'closed' : 'open'
-    var statusText = newStatus === 'open' ? '开放' : '关闭'
-    wx.showModal({
-      title: '确认操作',
-      content: '确定将功能房状态改为“' + statusText + '”？',
-      success: function (res) {
-        if (res.confirm) {
-          request.put('/admin/rooms/' + id, { status: newStatus }).then(function () {
-            wx.showToast({ title: '操作成功', icon: 'success' })
-            that.loadData()
-          }).catch(function () {
-            wx.showToast({ title: '操作失败', icon: 'none' })
-          })
-        }
-      }
-    })
+    wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
   },
 
   onViewDetail: function (e) {

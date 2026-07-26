@@ -9,8 +9,13 @@ const scopeError = function(res, message, status) {
   return response.error(res, message, status || 403);
 };
 
-const isLegacyMockGlobal = function(admin, role) {
-  return process.env.NODE_ENV === 'test' && db.isMock() && role !== 'super_admin' && !admin.building_id;
+const resolveScope = function(admin) {
+  const role = normalizeRole(admin.role);
+  const scopeType = role === 'super_admin' || role === 'counselor' ? 'global' : admin.scope_type;
+  const buildingId = admin.building_id ? Number(admin.building_id) : null;
+  if (scopeType === 'global' && buildingId === null) return { scopeType, isGlobal: true, buildingId: null };
+  if (scopeType === 'building' && Number.isInteger(buildingId) && buildingId > 0) return { scopeType, isGlobal: false, buildingId };
+  return null;
 };
 
 const loadAdminScope = async function(req, res, next) {
@@ -18,23 +23,21 @@ const loadAdminScope = async function(req, res, next) {
     if (!req.user || !['super_admin', 'admin', 'counselor', 'superadmin'].includes(req.user.role)) {
       return scopeError(res, '管理员身份无效', 403);
     }
-    const [rows] = await db.query('SELECT id, role, building_id, status FROM admins WHERE id = ?', [req.user.id]);
+    const [rows] = await db.query('SELECT id, role, building_id, scope_type, status FROM admins WHERE id = ?', [req.user.id]);
     if (!rows || !rows.length) return scopeError(res, '管理员账号不存在', 401);
     const admin = rows[0];
     const databaseRole = normalizeRole(admin.role);
     const tokenRole = normalizeRole(req.user.role);
     if (admin.status !== 'active') return scopeError(res, '管理员账号已禁用', 403);
     if (databaseRole !== tokenRole) return scopeError(res, '管理员权限已变化，请重新登录', 401);
-    const legacyGlobal = isLegacyMockGlobal(admin, databaseRole);
-    const buildingId = admin.building_id ? Number(admin.building_id) : null;
-    if (databaseRole !== 'super_admin' && !legacyGlobal && (!Number.isInteger(buildingId) || buildingId <= 0)) {
-      return scopeError(res, '管理员尚未分配楼栋范围', 403);
-    }
+    const scope = resolveScope(admin);
+    if (!scope) return scopeError(res, '管理员数据范围尚未明确，请由超级管理员设置为全院或指定楼栋', 403);
     req.adminScope = {
       adminId: Number(admin.id),
       role: databaseRole,
-      isGlobal: databaseRole === 'super_admin' || legacyGlobal,
-      buildingId
+      scopeType: scope.scopeType,
+      isGlobal: scope.isGlobal,
+      buildingId: scope.buildingId
     };
     next();
   } catch (err) {
@@ -237,7 +240,7 @@ const ownBuildingList = async function(req, res, next) {
 
 module.exports = {
   normalizeRole,
-  isLegacyMockGlobal,
+  resolveScope,
   loadAdminScope,
   forceBuildingQuery,
   enforceBodyBuilding,

@@ -193,7 +193,7 @@ const noshowStats = async function(req, res) {
     );
 
     const [roomNoshow] = await db.query(
-      'SELECT rm.name, COUNT(*) as noshow_count FROM reservations r JOIN rooms rm ON r.room_id = rm.id WHERE r.status = "noshow" AND r.date BETWEEN ? AND ? GROUP BY r.room_id ORDER BY noshow_count DESC',
+      'SELECT rm.name, SUM(CASE WHEN r.status = "noshow" THEN 1 ELSE 0 END) AS noshow_count, COUNT(*) AS reservation_count FROM reservations r JOIN rooms rm ON r.room_id = rm.id WHERE r.date BETWEEN ? AND ? GROUP BY r.room_id, rm.name ORDER BY noshow_count DESC',
       [start, end]
     );
 
