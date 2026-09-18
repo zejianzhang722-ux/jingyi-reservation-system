@@ -6,6 +6,7 @@ const creditService = require('../services/creditService');
 const credentialService = require('../services/checkinCredentialService');
 const reservationLifecycleService = require('../services/reservationLifecycleService');
 const realtimeEventService = require('../services/realtimeEventService');
+const privacyAuditService = require('../services/privacyAuditService');
 const helpers = require('../utils/helpers');
 
 const ensureProductionDatabase = function() {
@@ -301,14 +302,21 @@ const manualCheckin = async function(req, res) {
 
 const currentCheckins = async function(req, res) {
   try {
+    // 附带 rm.building_id，供隐私脱敏按管理员数据域判定可见性（R-14）。
     const [checkins] = await db.query(
-      'SELECT c.*, r.date, r.start_time, r.end_time, u.nickname, u.real_name, u.student_id ' +
+      'SELECT c.*, r.date, r.start_time, r.end_time, rm.building_id, u.nickname, u.real_name, u.student_id ' +
       'FROM checkins c JOIN reservations r ON c.reservation_id = r.id ' +
+      'JOIN rooms rm ON rm.id = c.room_id ' +
       'JOIN users u ON c.user_id = u.id WHERE c.room_id = ? AND c.checkout_time IS NULL ' +
       'ORDER BY c.checkin_time DESC',
       [req.params.roomId]
     );
-    return response.success(res, checkins);
+    // 按请求者身份分级脱敏：管理员在数据域内可见明文（并落审计），否则掩码。
+    const safeCheckins = await privacyAuditService.maskRowsForRequest(req, checkins, {
+      targetTable: 'checkins',
+      description: '当前在场签到列表：管理员查看明文个人信息'
+    });
+    return response.success(res, safeCheckins);
   } catch (err) {
     logger.error('获取当前签到列表异常:', err);
     return response.error(res, err.message || '获取当前签到列表失败', err.httpStatus || 500);

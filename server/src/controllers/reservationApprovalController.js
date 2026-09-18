@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const notificationService = require('../services/notificationService');
 const lifecycleService = require('../services/reservationLifecycleService');
 const realtimeEventService = require('../services/realtimeEventService');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const allowedStatusesForRole = function(role) {
   if (role === 'super_admin') return ['pending', 'counselor_pending'];
@@ -58,14 +59,20 @@ const pending = async function(req, res) {
     const allowedStatuses = allowedStatusesForRole(req.user.role);
     if (allowedStatuses.length === 0) return response.error(res, '权限不足', 403);
     const placeholders = allowedStatuses.map(function() { return '?'; }).join(',');
+    // 附带 rm.building_id，供隐私脱敏按管理员数据域判定可见性（R-14）。
     const [reservations] = await db.query(
-      'SELECT r.*, rm.name AS roomName, rm.name AS room_name, ' +
+      'SELECT r.*, rm.name AS roomName, rm.name AS room_name, rm.building_id, ' +
       'u.real_name AS userName, u.real_name AS user_name, u.student_id, u.student_no ' +
       'FROM reservations r JOIN rooms rm ON r.room_id = rm.id JOIN users u ON r.user_id = u.id ' +
       'WHERE r.status IN (' + placeholders + ') ORDER BY r.created_at DESC LIMIT 50',
       allowedStatuses
     );
-    return response.success(res, reservations);
+    // 按请求者身份分级脱敏：管理员在数据域内可见明文（并落审计），否则掩码。
+    const safeReservations = await privacyAuditService.maskRowsForRequest(req, reservations, {
+      targetTable: 'reservations',
+      description: '审批待办列表：管理员查看明文个人信息'
+    });
+    return response.success(res, safeReservations);
   } catch (err) {
     logger.error('获取待审批列表异常:', err);
     return response.error(res, '获取待审批列表失败', 500);

@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const reservationApprovalController = require('./reservationApprovalController');
 const reservationPresenter = require('../utils/reservationPresenter');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const pagination = function(query, defaultSize) {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
@@ -63,6 +64,7 @@ const loadPendingRows = async function(req, limit, offset) {
     return { rows, query, total };
   }
 
+  // 附带 rm.building_id，供隐私脱敏按管理员数据域判定可见性（R-14）。
   let sql = 'SELECT r.*, rm.name AS room_name, rm.name AS roomName, rm.type AS room_type, rm.type AS roomType, rm.building_id, ' +
     'u.real_name AS user_name, u.real_name AS userName, u.student_id, u.student_no ' +
     'FROM reservations r JOIN rooms rm ON rm.id = r.room_id JOIN users u ON u.id = r.user_id' +
@@ -73,7 +75,8 @@ const loadPendingRows = async function(req, limit, offset) {
     params.push(limit, Number(offset || 0));
   }
   const [rows] = await db.query(sql, params);
-  return { rows: rows.map(reservationPresenter.formatReservationRow), query };
+  // ⚠️ 不要把 formatReservationRow 直接作为 map 回调：map 会把数组下标当成第二参数(viewer)。
+  return { rows: rows.map(function(row) { return reservationPresenter.formatReservationRow(row); }), query };
 };
 
 // `/reservation/pending` historically returns a plain array and existing clients rely on it.
@@ -81,7 +84,11 @@ const pendingReservations = async function(req, res) {
   try {
     const loaded = await loadPendingRows(req, 50, 0);
     if (!loaded) return response.error(res, '当前角色无权查看审核队列', 403);
-    return response.success(res, loaded.rows);
+    const rows = await privacyAuditService.maskRowsForRequest(req, loaded.rows, {
+      targetTable: 'reservations',
+      description: '待审核预约列表：管理员查看明文个人信息'
+    });
+    return response.success(res, rows);
   } catch (err) {
     logger.error('获取楼栋范围内待审核预约失败:', err);
     return response.error(res, err.message || '获取待审核预约失败', 500);
@@ -94,14 +101,18 @@ const pendingAuditList = async function(req, res) {
     const page = pagination(req.query, 20);
     const loaded = await loadPendingRows(req, page.pageSize, page.offset);
     if (!loaded) return response.error(res, '当前角色无权查看审核队列', 403);
+    const rows = await privacyAuditService.maskRowsForRequest(req, loaded.rows, {
+      targetTable: 'reservations',
+      description: '分页审核队列：管理员查看明文个人信息'
+    });
     if (db.isMock()) {
-      return response.paginate(res, loaded.rows, loaded.total, page.page, page.pageSize);
+      return response.paginate(res, rows, loaded.total, page.page, page.pageSize);
     }
     const [countRows] = await db.query(
       'SELECT COUNT(*) AS total FROM reservations r JOIN rooms rm ON rm.id = r.room_id' + loaded.query.where,
       loaded.query.params
     );
-    return response.paginate(res, loaded.rows, Number(countRows[0].total || 0), page.page, page.pageSize);
+    return response.paginate(res, rows, Number(countRows[0].total || 0), page.page, page.pageSize);
   } catch (err) {
     logger.error('获取分页审核队列失败:', err);
     return response.error(res, err.message || '获取待审核预约失败', 500);
@@ -154,7 +165,12 @@ const users = async function(req, res) {
       'FROM users u' + where + ' ORDER BY u.created_at DESC LIMIT ? OFFSET ?',
       params.concat([page.pageSize, page.offset])
     );
-    return response.paginate(res, rows, Number(countRows[0].total || 0), page.page, page.pageSize);
+    // 按请求者身份分级脱敏：管理员在数据域内可见明文（并落审计），否则掩码（R-14）。
+    const safeRows = await privacyAuditService.maskRowsForRequest(req, rows, {
+      targetTable: 'users',
+      description: '用户列表：管理员查看明文个人信息'
+    });
+    return response.paginate(res, safeRows, Number(countRows[0].total || 0), page.page, page.pageSize);
   } catch (err) {
     logger.error('获取楼栋范围内用户列表失败:', err);
     return response.error(res, err.message || '获取用户列表失败', 500);
@@ -184,11 +200,16 @@ const posters = async function(req, res) {
       params
     );
     const [rows] = await db.query(
-      'SELECT p.*, u.nickname, u.real_name, u.student_id FROM posters p JOIN users u ON u.id = p.user_id' +
+      'SELECT p.*, u.nickname, u.real_name, u.student_id, u.building_id FROM posters p JOIN users u ON u.id = p.user_id' +
       where + ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?',
       params.concat([page.pageSize, page.offset])
     );
-    return response.paginate(res, rows, Number(countRows[0].total || 0), page.page, page.pageSize);
+    // 按请求者身份分级脱敏（R-14）。
+    const safeRows = await privacyAuditService.maskRowsForRequest(req, rows, {
+      targetTable: 'posters',
+      description: '海报列表：管理员查看明文个人信息'
+    });
+    return response.paginate(res, safeRows, Number(countRows[0].total || 0), page.page, page.pageSize);
   } catch (err) {
     logger.error('获取安全范围内海报列表失败:', err);
     return response.error(res, err.message || '获取海报列表失败', 500);
@@ -202,4 +223,3 @@ module.exports = {
   users,
   posters
 };
-

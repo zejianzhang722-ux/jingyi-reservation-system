@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const maskPresenter = require('./maskPresenter');
 
 const valueOf = function(row, keys) {
   for (const key of keys) {
@@ -7,10 +8,25 @@ const valueOf = function(row, keys) {
   return '';
 };
 
-const formatReservationRow = function(row) {
+/**
+ * 格式化预约行。
+ *
+ * 第二参数为**可选的查看者身份**（R-14 隐私脱敏）：
+ *  - 不传 viewer 时，行为与改造前**完全一致**（不做任何脱敏），保证既有调用点零影响；
+ *  - 传入 viewer 时，按 utils/maskPresenter 的分级策略脱敏。
+ *
+ * ⚠️ 注意：不要把本函数直接作为 Array.map 的回调（`rows.map(formatReservationRow)`），
+ * 因为 map 会把「数组下标」当作第二个实参传入，从而被误当作 viewer 触发脱敏。
+ * 必须写成 `rows.map(function(row) { return formatReservationRow(row, viewer); })`。
+ *
+ * @param {object} row 原始行
+ * @param {object} [viewer] 查看者身份（见 maskPresenter.viewerFromRequest）
+ * @returns {object}
+ */
+const formatReservationRow = function(row, viewer) {
   const start = valueOf(row, ['start_time', 'startTime']);
   const end = valueOf(row, ['end_time', 'endTime']);
-  return Object.assign({}, row, {
+  const formatted = Object.assign({}, row, {
     id: valueOf(row, ['id', 'r.id']),
     userName: valueOf(row, ['userName', 'user_name', 'real_name', 'nickname']),
     studentId: valueOf(row, ['studentId', 'student_id', 'student_no']),
@@ -24,12 +40,15 @@ const formatReservationRow = function(row) {
     rejectReason: valueOf(row, ['rejectReason', 'reject_reason', 'r.reject_reason']),
     counselorName: valueOf(row, ['counselorName', 'counselor_name'])
   });
+  if (viewer === undefined || viewer === null) return formatted;
+  return maskPresenter.applyViewerMask(formatted, viewer);
 };
 
 const getMockReservationRows = function(options) {
   const settings = options || {};
   const tables = require('../config/mock-db').__tables;
   const adminScope = settings.adminScope || { isGlobal: true };
+  const viewer = settings.viewer;
   const rooms = tables.rooms || [];
   const users = tables.users || [];
   const roomById = new Map(rooms.map(function(room) { return [Number(room.id), room]; }));
@@ -74,7 +93,7 @@ const getMockReservationRows = function(options) {
       user_name: user.real_name || user.nickname,
       student_id: user.student_id || user.student_no,
       student_no: user.student_no || user.student_id
-    }));
+    }), viewer);
   });
 };
 

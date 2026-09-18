@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const reservationService = require('../services/reservationService');
 const waitlistService = require('../services/waitlistService');
 const reservationPresenter = require('../utils/reservationPresenter');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const list = async function(req, res) {
   try {
@@ -24,7 +25,7 @@ const list = async function(req, res) {
     if (isAdmin && !req.adminScope) return response.error(res, '管理员数据范围未初始化', 500);
 
     if (db.isMock()) {
-      const rows = reservationPresenter.getMockReservationRows({
+      const rawRows = reservationPresenter.getMockReservationRows({
         adminScope: req.adminScope || { isGlobal: true, buildingId: null },
         userId: isAdmin ? null : req.user.id,
         status: actionableOnly ? null : status,
@@ -38,7 +39,12 @@ const list = async function(req, res) {
         const byDate = String(b.date || '').localeCompare(String(a.date || ''));
         return byDate || String(b.timeSlot || '').localeCompare(String(a.timeSlot || ''));
       });
-      const paged = reservationPresenter.paginateRows(rows, page, pageSize);
+      // 先按请求者身份脱敏，再分页返回（R-14）。
+      const maskedRows = await privacyAuditService.maskRowsForRequest(req, rawRows, {
+        targetTable: 'reservations',
+        description: '预约列表：管理员查看明文个人信息'
+      });
+      const paged = reservationPresenter.paginateRows(maskedRows, page, pageSize);
       return response.paginate(res, paged.list, paged.total, paged.page, paged.pageSize);
     }
 
@@ -86,7 +92,22 @@ const list = async function(req, res) {
       'SELECT COUNT(*) AS total FROM reservations r JOIN rooms rm ON rm.id = r.room_id' + where,
       params
     );
-    return response.paginate(res, reservations.map(reservationPresenter.formatReservationRow), Number(countResult[0].total) || 0, page, pageSize);
+
+    // 先按请求者身份对原始行脱敏（管理员在数据域内可见明文并落审计），再做行格式化，
+    // 这样 formatReservationRow 派生出的 studentId/userName 也会带上掩码值（R-14）。
+    const maskedReservations = await privacyAuditService.maskRowsForRequest(req, reservations, {
+      targetTable: 'reservations',
+      description: '预约列表：管理员查看明文个人信息'
+    });
+
+    // ⚠️ 不要把 formatReservationRow 直接作为 map 回调：map 会把数组下标当成第二参数(viewer)。
+    return response.paginate(
+      res,
+      maskedReservations.map(function(row) { return reservationPresenter.formatReservationRow(row); }),
+      Number(countResult[0].total) || 0,
+      page,
+      pageSize
+    );
   } catch (err) {
     logger.error('获取预约列表异常:', err);
     return response.error(res, err.message || '获取预约列表失败', err.httpStatus || 500);
@@ -203,4 +224,3 @@ const leaveWaitlist = async function(req, res) {
 };
 
 module.exports = { list, detail, checkConflict, joinWaitlist, leaveWaitlist };
-
