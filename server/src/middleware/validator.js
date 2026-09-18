@@ -61,6 +61,8 @@ const timelineRules = [
 const auditRules = [
   param('id').isInt({ min: 1 }).withMessage('审核ID无效'),
   body('reason').optional().isLength({ max: 500 }).withMessage('原因不能超过500字'),
+  // 可选乐观锁版本号（R-02）：不传 -> 退化为既有 WHERE status 条件更新。
+  body('version').optional().isInt({ min: 1 }).withMessage('版本号无效'),
   validate
 ];
 
@@ -122,6 +124,22 @@ const waitlistRules = [
   validate
 ];
 
+// 补签申请（R-08）：预约 + 类型（补签到/补签退）+ 原因（必填）。
+const supplementApplyRules = [
+  body('reservationId').isInt({ min: 1 }).withMessage('预约ID无效'),
+  body('type').isIn(['signin', 'signout']).withMessage('补签类型无效'),
+  body('reason').notEmpty().withMessage('请填写补签原因').isLength({ max: 255 }).withMessage('补签原因不能超过255字'),
+  validate
+];
+
+// 补签审核（R-08）：动作（通过/驳回）+ 可选原因（驳回时业务层强校验非空）。
+const supplementReviewRules = [
+  param('id').isInt({ min: 1 }).withMessage('工单ID无效'),
+  body('action').isIn(['approve', 'reject']).withMessage('审核动作无效'),
+  body('reason').optional().isLength({ max: 255 }).withMessage('原因不能超过255字'),
+  validate
+];
+
 module.exports = {
   validate,
   wechatLoginRules,
@@ -138,5 +156,7 @@ module.exports = {
   paginationRules,
   bindStudentRules,
   batchAuditRules,
-  waitlistRules
+  waitlistRules,
+  supplementApplyRules,
+  supplementReviewRules
 };

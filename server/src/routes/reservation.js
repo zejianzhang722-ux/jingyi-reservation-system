@@ -5,6 +5,7 @@ const reservationCreateController = require('../controllers/reservationCreateCon
 const reservationMutationController = require('../controllers/reservationMutationController');
 const reservationLifecycleController = require('../controllers/reservationLifecycleController');
 const reservationApprovalController = require('../controllers/reservationApprovalController');
+const reservationTrailController = require('../controllers/reservationTrailController');
 const scopedQueryController = require('../controllers/scopedQueryController');
 const checkinCredentialController = require('../controllers/checkinCredentialController');
 const { auth, requireAdmin } = require('../middleware/auth');
@@ -24,6 +25,8 @@ router.get('/:id', auth, optionalAdminReservationScope('id'), reservationIdRules
 router.delete('/:id', auth, optionalAdminReservationScope('id'), reservationIdRules, reservationLifecycleController.cancel);
 router.put('/:id', auth, optionalAdminReservationScope('id'), reservationIdRules, reservationMutationController.update);
 router.get('/:id/qrcode', auth, optionalAdminReservationScope('id'), reservationIdRules, checkinCredentialController.issue);
+// 审核批注轨迹（只读，R-02/R-07）；出口经统一脱敏。与 GET /:id 同为「本人或数据域内管理员」可见。
+router.get('/:id/trail', auth, optionalAdminReservationScope('id'), reservationIdRules, reservationTrailController.trail);
 router.post('/:id/rebook', auth, optionalAdminReservationScope('id'), reservationIdRules, reservationMutationController.rebook);
 router.post('/check-conflict', auth, reservationController.checkConflict);
 router.post('/waitlist', auth, reservationLimiter, waitlistRules, reservationController.joinWaitlist);

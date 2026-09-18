@@ -849,12 +849,20 @@ function handleUpdate(sql, params) {
       for (const pair of setPairs) {
         const eqMatch = pair.match(/(\w+)\s*=\s*([\s\S]*)/);
         if (eqMatch) {
+          const field = eqMatch[1];
           let val = eqMatch[2].trim();
+          // 支持自增写法 `col = col + N`（R-02 乐观锁 version = version + 1）：
+          // 使 mock 与 MySQL 数值自增语义一致；仅在「赋值右侧为同名列 + 数字」时生效。
+          const incMatch = val.match(/^(\w+)\s*\+\s*(\d+)$/);
+          if (incMatch && incMatch[1] === field) {
+            row[field] = Number(row[field] || 0) + Number(incMatch[2]);
+            continue;
+          }
           if (/^NOW\(\)$/i.test(val)) val = dayjs().format('YYYY-MM-DD HH:mm:ss');
           else if (/^CURDATE\(\)$/i.test(val)) val = dayjs().format('YYYY-MM-DD');
           else if (/^NULL$/i.test(val)) val = null;
           else val = val.replace(/^['"]|['"]$/g, '');
-          row[eqMatch[1]] = val;
+          row[field] = val;
         }
       }
       affectedRows++;

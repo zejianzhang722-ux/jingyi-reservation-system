@@ -2,11 +2,37 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const helpers = require('../utils/helpers');
 const config = require('../config');
+const errorCodes = require('../config/errorCodes');
 const commandService = require('./reservationCommandService');
 const notificationService = require('./notificationService');
 const realtimeEventService = require('./realtimeEventService');
 
 const ACTIVE_STATUSES = commandService.ACTIVE_STATUSES;
+
+/**
+ * 归一化「期望版本号」（R-02 乐观锁）。
+ * 未传（undefined/null/''）或非法值一律返回 null，表示**退化**为既有 `WHERE status` 条件更新，
+ * 保证蓝绿过渡期新旧客户端行为一致。
+ * @param {*} value 原始入参
+ * @returns {number|null}
+ */
+const normalizeExpectedVersion = function(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  return Number.isInteger(num) && num > 0 ? num : null;
+};
+
+/**
+ * 构造审核乐观锁冲突错误（HTTP 409，业务码 AUDIT_VERSION_CONFLICT）。
+ * 由控制器层映射为带 businessCode 的响应。
+ * @returns {Error}
+ */
+const auditVersionConflictError = function() {
+  const err = new Error('审核记录已被其他人修改，请刷新后重试');
+  err.businessCode = errorCodes.ERROR_CODES.AUDIT_VERSION_CONFLICT;
+  err.httpStatus = 409;
+  return err;
+};
 
 const mapReservation = function(row, status) {
   return {
@@ -36,19 +62,28 @@ const validateRelease = function(reservation, options) {
 
 const updateReleasedReservation = async function(connection, reservation, options) {
   const nextStatus = options.nextStatus || 'cancelled';
+  const expectedVersion = normalizeExpectedVersion(options.expectedVersion);
   if (nextStatus === 'rejected') {
-    await connection.execute(
-      "UPDATE reservations SET status = 'rejected', reject_reason = ?, audited_by = ?, audited_at = NOW(), updated_at = NOW() WHERE id = ? AND status = ?",
-      [options.reason || '', options.auditedBy || null, reservation.id, reservation.status]
-    );
+    // 乐观锁（R-02）：带 version 时追加 `AND version = ?`；不带时退化为 `AND status = ?`。
+    // 两种路径都执行 `version = version + 1`，保证「每次审核写入必然推进版本号」。
+    let sql = "UPDATE reservations SET status = 'rejected', reject_reason = ?, audited_by = ?, audited_at = NOW(), updated_at = NOW(), version = version + 1 WHERE id = ? AND status = ?";
+    const params = [options.reason || '', options.auditedBy || null, reservation.id, reservation.status];
+    if (expectedVersion !== null) {
+      sql += ' AND version = ?';
+      params.push(expectedVersion);
+    }
+    const [result] = await connection.execute(sql, params);
+    if (expectedVersion !== null && (!result || Number(result.affectedRows) === 0)) {
+      throw auditVersionConflictError();
+    }
   } else if (nextStatus === 'noshow') {
     await connection.execute(
-      "UPDATE reservations SET status = 'noshow', updated_at = NOW() WHERE id = ? AND status = ?",
+      "UPDATE reservations SET status = 'noshow', updated_at = NOW(), version = version + 1 WHERE id = ? AND status = ?",
       [reservation.id, reservation.status]
     );
   } else {
     await connection.execute(
-      "UPDATE reservations SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW() WHERE id = ? AND status = ?",
+      "UPDATE reservations SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW(), version = version + 1 WHERE id = ? AND status = ?",
       [reservation.id, reservation.status]
     );
   }
@@ -205,8 +240,14 @@ const releaseAndPromoteMock = async function(options) {
       return Number(row.id) === Number(options.reservationId);
     });
     validateRelease(reservation, options);
+    // 乐观锁（R-02）：mock 模式同样支持 version 校验与自增，行为与 MySQL 路径一致。
+    const expectedVersion = normalizeExpectedVersion(options.expectedVersion);
+    if (expectedVersion !== null && Number(reservation.version || 1) !== expectedVersion) {
+      throw auditVersionConflictError();
+    }
     const nextStatus = options.nextStatus || 'cancelled';
     reservation.status = nextStatus;
+    reservation.version = Number(reservation.version || 1) + 1;
     reservation.updated_at = helpers.formatDateTime(new Date());
     if (nextStatus === 'cancelled') reservation.cancelled_at = reservation.updated_at;
     if (nextStatus === 'rejected') reservation.reject_reason = options.reason || '';

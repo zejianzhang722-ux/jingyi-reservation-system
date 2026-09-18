@@ -1,10 +1,57 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
+const errorCodes = require('../config/errorCodes');
 const notificationService = require('../services/notificationService');
 const lifecycleService = require('../services/reservationLifecycleService');
 const realtimeEventService = require('../services/realtimeEventService');
 const privacyAuditService = require('../services/privacyAuditService');
+const auditTrailService = require('../services/auditTrailService');
+const reservationAuditTrailService = require('../services/reservationAuditTrailService');
+
+/**
+ * 解析客户端可选传入的审核乐观锁版本号（R-02）。
+ * 未传 / 非法 -> null，表示退化为既有 `WHERE status` 条件更新（蓝绿过渡）。
+ * @param {import('express').Request} req
+ * @returns {number|null}
+ */
+const parseRequestedVersion = function(req) {
+  const raw = req && req.body ? req.body.version : undefined;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const num = Number(raw);
+  return Number.isInteger(num) && num > 0 ? num : null;
+};
+
+/**
+ * best-effort 写入业务批注轨迹（reservation_audit_trail）。
+ * 失败不影响已提交的业务动作，仅记录错误日志（与仓库内通知类 best-effort 风格一致）。
+ */
+const recordTrailSafely = async function(reservation, action, remark, req) {
+  try {
+    await reservationAuditTrailService.record({
+      reservationId: reservation.id,
+      stage: reservationAuditTrailService.stageForStatus(reservation.status),
+      actorId: req && req.user ? req.user.id : null,
+      actorRole: req && req.user ? req.user.role : 'system',
+      action: action,
+      remark: remark || ''
+    });
+  } catch (err) {
+    logger.error('预约审核轨迹写入失败(action=' + action + ', reservation=' + reservation.id + '):', err);
+  }
+};
+
+/**
+ * best-effort 写入防篡改审计链（operation_logs 哈希链）。
+ * 与业务轨迹表职责不同：轨迹面向用户展示，审计链面向合规取证。
+ */
+const recordAuditSafely = async function(event) {
+  try {
+    await auditTrailService.record(event);
+  } catch (err) {
+    logger.error('预约审核审计链写入失败:', err && err.message ? err.message : err);
+  }
+};
 
 const allowedStatusesForRole = function(role) {
   if (role === 'super_admin') return ['pending', 'counselor_pending'];
@@ -110,13 +157,45 @@ const approve = async function(req, res) {
 
     const reservation = reservations[0];
     if (!ensureApprovalScope(req, res, reservation)) return;
-    const [updateResult] = await db.query(
-      "UPDATE reservations SET status = 'approved', audited_by = ?, audited_at = NOW() WHERE id = ? AND status = ?",
-      [req.user.id, id, reservation.status]
-    );
-    if (!updateResult || updateResult.affectedRows === 0) {
-      return response.error(res, '该预约已被其他管理员处理，请刷新后重试', 409);
+    // 乐观锁（R-02）：传了 version -> `AND version = ?`；未传 -> 退化为 `AND status = ?`。
+    // 两条路径都 `version = version + 1`，保证每次审核写入必然推进版本号。
+    const expectedVersion = parseRequestedVersion(req);
+    let updateSql = "UPDATE reservations SET status = 'approved', audited_by = ?, audited_at = NOW(), version = version + 1 WHERE id = ?";
+    const updateParams = [req.user.id, id];
+    if (expectedVersion !== null) {
+      updateSql += ' AND version = ?';
+      updateParams.push(expectedVersion);
+    } else {
+      updateSql += ' AND status = ?';
+      updateParams.push(reservation.status);
     }
+    const [updateResult] = await db.query(updateSql, updateParams);
+    if (!updateResult || updateResult.affectedRows === 0) {
+      // 受影响行数为 0：既可能是状态被他人改动，也可能是版本号过期，统一返回 409 + 业务码。
+      return response.errorWithCode(res, 409, errorCodes.ERROR_CODES.AUDIT_VERSION_CONFLICT, {
+        message: '该预约已被其他管理员处理，请刷新后重试'
+      });
+    }
+
+    // 业务轨迹（用户可见）+ 防篡改审计链（合规取证）双写。
+    await recordTrailSafely(reservation, 'approve', '', req);
+    await recordAuditSafely({
+      operatorId: req.user.id,
+      requestId: req.requestId,
+      actorRole: req.user.role,
+      action: 'reservation.approve',
+      targetTable: 'reservations',
+      targetId: id,
+      description: '预约审批通过：' + (reservation.room_name || ''),
+      method: req.method,
+      path: (req.baseUrl || '') + (req.route && req.route.path ? req.route.path : ''),
+      statusCode: 200,
+      metadata: {
+        reservationId: id,
+        stage: reservationAuditTrailService.stageForStatus(reservation.status),
+        expectedVersion: expectedVersion
+      }
+    });
 
     await createNotificationSafely(
       reservation.user_id,
@@ -158,12 +237,42 @@ const reject = async function(req, res) {
 
     const reservation = reservations[0];
     if (!ensureApprovalScope(req, res, reservation)) return;
-    await lifecycleService.releaseAndPromote({
-      reservationId: id,
-      nextStatus: 'rejected',
-      reason,
-      auditedBy: req.user.id,
-      allowedCurrentStatuses: [reservation.status]
+    // 乐观锁（R-02）：将可选 version 透传至释放/驳回事务，由其在 UPDATE 时追加 `AND version = ?`。
+    const expectedVersion = parseRequestedVersion(req);
+    try {
+      await lifecycleService.releaseAndPromote({
+        reservationId: id,
+        nextStatus: 'rejected',
+        reason,
+        auditedBy: req.user.id,
+        allowedCurrentStatuses: [reservation.status],
+        expectedVersion: expectedVersion
+      });
+    } catch (err) {
+      if (err && err.businessCode) {
+        return response.errorWithCode(res, Number(err.httpStatus) || 409, err.businessCode, { message: err.message });
+      }
+      throw err;
+    }
+
+    // 业务轨迹（用户可见）+ 防篡改审计链（合规取证）双写。
+    await recordTrailSafely(reservation, 'reject', reason, req);
+    await recordAuditSafely({
+      operatorId: req.user.id,
+      requestId: req.requestId,
+      actorRole: req.user.role,
+      action: 'reservation.reject',
+      targetTable: 'reservations',
+      targetId: id,
+      description: '预约审批驳回：' + (reservation.room_name || ''),
+      method: req.method,
+      path: (req.baseUrl || '') + (req.route && req.route.path ? req.route.path : ''),
+      statusCode: 200,
+      metadata: {
+        reservationId: id,
+        stage: reservationAuditTrailService.stageForStatus(reservation.status),
+        expectedVersion: expectedVersion
+      }
     });
 
     await createNotificationSafely(
