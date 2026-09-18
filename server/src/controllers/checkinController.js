@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const config = require('../config');
 const creditService = require('../services/creditService');
 const credentialService = require('../services/checkinCredentialService');
+const checkinLocationService = require('../services/checkinLocationService');
 const reservationLifecycleService = require('../services/reservationLifecycleService');
 const realtimeEventService = require('../services/realtimeEventService');
 const privacyAuditService = require('../services/privacyAuditService');
@@ -78,6 +79,29 @@ const checkin = async function(req, res) {
     ensureProductionDatabase();
     if (existingCheckin.length) return response.error(res, '已签到，请勿重复签到', 409);
 
+    // R-05 地理围栏：**必须**在消费一次性凭证（credentialService.consume）之前判定。
+    // 否则越界签到会先烧掉 nonce，用户重新靠近后无法用同一凭证重试（只能刷新重发）。
+    const clientLocation = checkinLocationService.readClientLocation(req.body);
+    const geoResult = await checkinLocationService.verify({
+      roomId: reservation.room_id,
+      lat: clientLocation.lat,
+      lng: clientLocation.lng,
+      accuracy: clientLocation.accuracy
+    });
+    if (geoResult.mode === checkinLocationService.MODES.OUT) {
+      // 越界直接拒绝：此刻尚未 consume，nonce 仍然有效，用户靠近后可重试。
+      return response.errorWithCode(res, 409, 'CHECKIN_GEOFENCE_OUT', {
+        distanceM: geoResult.distanceM,
+        message: '不在签到范围内，请靠近功能房后重试'
+      });
+    }
+    const geoColumns = checkinLocationService.persistColumns({
+      mode: geoResult.mode,
+      distanceM: geoResult.distanceM,
+      lat: clientLocation.lat,
+      lng: clientLocation.lng
+    });
+
     connection = await db.getConnection();
     ensureProductionDatabase();
     transactional = isTransactionalConnection(connection);
@@ -102,13 +126,25 @@ const checkin = async function(req, res) {
     }
 
     await runQuery(
-      'INSERT INTO checkins (reservation_id, user_id, room_id, checkin_time, checkin_type, created_at) VALUES (?, ?, ?, NOW(), ?, NOW())',
-      [reservationId, reservation.user_id, reservation.room_id, 'qrcode']
+      'INSERT INTO checkins (reservation_id, user_id, room_id, checkin_time, checkin_type, geo_mode, geo_verified, checkin_lat, checkin_lng, geo_distance_m, created_at) ' +
+      'VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, NOW())',
+      [
+        reservationId,
+        reservation.user_id,
+        reservation.room_id,
+        'qrcode',
+        geoColumns.geo_mode,
+        geoColumns.geo_verified,
+        geoColumns.checkin_lat,
+        geoColumns.checkin_lng,
+        geoColumns.geo_distance_m
+      ]
     );
 
     if (transactional) await connection.commit();
     await realtimeEventService.publishRoomStatusSafely(reservation.room_id, 'qrcode-checkin');
-    return response.success(res, null, '签到成功');
+    // 返回围栏标记：degraded 时 geoVerified=false / degraded=true（R-05）。
+    return response.success(res, checkinLocationService.responseFlags(geoResult), '签到成功');
   } catch (err) {
     if (transactional && connection && typeof connection.rollback === 'function') {
       try {

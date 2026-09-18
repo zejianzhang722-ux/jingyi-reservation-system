@@ -51,6 +51,11 @@ const config = {
     noshowCountLimit: 3,
     noshowPauseDays: 7
   },
+  // 签到地理围栏（R-05）。功能房未配置经纬度时不启用；精度低于 degradeAccuracyMeters 判为 degraded（放行+标记）。
+  checkin: {
+    geoRadiusMeters: boundedInteger(process.env.CHECKIN_GEO_RADIUS_METERS, 500, 10, 100000),
+    degradeAccuracyMeters: boundedInteger(process.env.CHECKIN_GEO_DEGRADE_ACCURACY_METERS, 100, 1, 100000)
+  },
   credit: {
     initialScore: 100,
     maxScore: 120,
