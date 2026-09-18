@@ -208,7 +208,7 @@ const dashboard = async function(req, res) {
       scope.params
     );
     const [pendingItems] = await db.query(
-      "SELECT r.id, r.status, r.purpose, r.date, r.start_time, u.real_name, rm.name AS room_name " +
+      "SELECT r.id, r.status, r.purpose, r.date, r.start_time, u.real_name, rm.building_id, rm.name AS room_name " +
       "FROM reservations r LEFT JOIN users u ON u.id = r.user_id JOIN rooms rm ON rm.id = r.room_id " +
       'WHERE ' + pendingDetailCondition(req) + scope.sql + ' ORDER BY r.created_at DESC LIMIT 10',
       scope.params
@@ -356,10 +356,10 @@ const noshowStats = async function(req, res) {
       params
     );
     const [users] = await db.query(
-      "SELECT u.id, u.real_name, u.student_id, u.credit_score, COUNT(*) AS noshow_count " +
+      "SELECT u.id, u.real_name, u.student_id, u.building_id, u.credit_score, COUNT(*) AS noshow_count " +
       "FROM reservations r JOIN users u ON u.id = r.user_id JOIN rooms rm ON rm.id = r.room_id " +
       "WHERE r.status = 'noshow' AND r.date BETWEEN ? AND ?" + scope.sql +
-      ' GROUP BY u.id, u.real_name, u.student_id, u.credit_score ORDER BY noshow_count DESC LIMIT 10',
+      ' GROUP BY u.id, u.real_name, u.student_id, u.building_id, u.credit_score ORDER BY noshow_count DESC LIMIT 10',
       params
     );
     const [rooms] = await db.query(
@@ -422,14 +422,14 @@ const exportData = async function(req, res) {
     if (type === 'users') {
       const scope = req.adminScope.isGlobal ? { sql: '', params: [] } : { sql: ' WHERE u.building_id = ?', params: [req.adminScope.buildingId] };
       [rows] = await db.query(
-        'SELECT u.id, u.real_name, u.student_id, u.college, u.credit_score, u.status, u.created_at FROM users u' +
+        'SELECT u.id, u.real_name, u.student_id, u.building_id, u.college, u.credit_score, u.status, u.created_at FROM users u' +
         scope.sql + ' ORDER BY u.created_at DESC',
         scope.params
       );
     } else if (type === 'violations') {
       const scope = buildingFilter(req, 'rm');
       [rows] = await db.query(
-        'SELECT v.id, u.student_id, u.real_name, v.type, v.description, v.score, v.created_at ' +
+        'SELECT v.id, u.student_id, u.real_name, u.building_id, v.type, v.description, v.score, v.created_at ' +
         'FROM violations v JOIN users u ON u.id = v.user_id LEFT JOIN reservations r ON r.id = v.related_id ' +
         'LEFT JOIN rooms rm ON rm.id = r.room_id WHERE v.created_at BETWEEN ? AND ?' + scope.sql +
         ' ORDER BY v.created_at DESC',
@@ -438,7 +438,7 @@ const exportData = async function(req, res) {
     } else {
       const scope = buildingFilter(req, 'rm');
       [rows] = await db.query(
-        'SELECT r.id, u.student_id, u.real_name, rm.name AS room_name, r.date, r.start_time, r.end_time, r.status, r.purpose, r.created_at ' +
+        'SELECT r.id, u.student_id, u.real_name, rm.building_id, rm.name AS room_name, r.date, r.start_time, r.end_time, r.status, r.purpose, r.created_at ' +
         'FROM reservations r JOIN users u ON u.id = r.user_id JOIN rooms rm ON rm.id = r.room_id ' +
         'WHERE r.date BETWEEN ? AND ?' + scope.sql + ' ORDER BY r.date DESC, r.start_time DESC',
         [range.start, range.end].concat(scope.params)

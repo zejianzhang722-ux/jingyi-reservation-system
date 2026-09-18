@@ -9,7 +9,9 @@ const violationList = async function(req, res) {
     const { page = 1, pageSize = 10, userId, type } = req.query;
     const offset = (page - 1) * pageSize;
 
-    let sql = 'SELECT v.*, u.nickname, u.real_name, u.student_id FROM violations v JOIN users u ON v.user_id = u.id WHERE 1=1';
+    // R-14：投影带 u.building_id，供 maskPresenter 按数据域判定；
+    // 仅补投影、不加行级过滤，保持"管理员可见全部违规"的既有返回集合不变（域外行由脱敏降级为掩码）。
+    let sql = 'SELECT v.*, u.nickname, u.real_name, u.student_id, u.building_id FROM violations v JOIN users u ON v.user_id = u.id WHERE 1=1';
     const params = [];
 
     if (userId) { sql += ' AND v.user_id = ?'; params.push(userId); }
