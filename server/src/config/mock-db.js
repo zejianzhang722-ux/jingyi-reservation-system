@@ -4,6 +4,13 @@ const dayjs = require('dayjs');
 const fs = require('fs');
 const path = require('path');
 
+// 生产环境禁止加载模拟数据库（fail-closed 兜底）。
+if (process.env.NODE_ENV === 'production') {
+  const err = new Error('生产环境禁止加载模拟数据库');
+  err.code = 'MOCK_DB_FORBIDDEN';
+  throw err;
+}
+
 const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
 const today = dayjs().format('YYYY-MM-DD');
 const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD');
@@ -133,11 +140,16 @@ tables.users = [
   { id: 2, openid: 'test_openid_002', session_key: 'sk002', nickname: '李四', avatar: '', phone: '13900000002', student_id: '2024001002', student_no: '2024001002', real_name: '李四', name: '李四', gender: '女', college: '敬一书院', major: '计算机科学', class_name: '2024级2班', grade: '2024', building_id: 2, room_number: 'C205', card_no: '200002', role: 'student', credit_score: 95, status: 'active', restricted_until: null, noshow_count: 0, wechat_openid: null, created_at: now, updated_at: now }
 ];
 
+// 种子账号口令改为 env 注入，保留原值作为非生产默认，仅非生产 mock 使用。
+const adminPassword = process.env.MOCK_ADMIN_PASSWORD || 'admin123';
+const superAdminPassword = process.env.MOCK_SUPERADMIN_PASSWORD || 'super123';
+const counselorPassword = process.env.MOCK_COUNSELOR_PASSWORD || 'counselor123';
+
 tables.admins = [
-  { id: 1, username: 'admin', password: bcrypt.hashSync('admin123', 10), real_name: '系统管理员', role: 'admin', building_id: null, scope_type: 'global', phone: '13800000001', status: 'active', last_login_at: null, created_at: now, updated_at: now },
-  { id: 2, username: 'superadmin', password: bcrypt.hashSync('super123', 10), real_name: '超级管理员', role: 'super_admin', building_id: null, scope_type: 'global', phone: '13800000002', status: 'active', last_login_at: null, created_at: now, updated_at: now },
-  { id: 3, username: 'counselor', password: bcrypt.hashSync('counselor123', 10), real_name: '辅导员', role: 'counselor', building_id: null, scope_type: 'global', phone: '13800000003', status: 'active', last_login_at: null, created_at: now, updated_at: now },
-  { id: 4, username: 'building_admin', password: bcrypt.hashSync('admin123', 10), real_name: 'B座导生管理员', role: 'admin', building_id: 1, scope_type: 'building', phone: '13800000004', status: 'active', last_login_at: null, created_at: now, updated_at: now }
+  { id: 1, username: 'admin', password: bcrypt.hashSync(adminPassword, 10), real_name: '系统管理员', role: 'admin', building_id: null, scope_type: 'global', phone: '13800000001', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 2, username: 'superadmin', password: bcrypt.hashSync(superAdminPassword, 10), real_name: '超级管理员', role: 'super_admin', building_id: null, scope_type: 'global', phone: '13800000002', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 3, username: 'counselor', password: bcrypt.hashSync(counselorPassword, 10), real_name: '辅导员', role: 'counselor', building_id: null, scope_type: 'global', phone: '13800000003', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 4, username: 'building_admin', password: bcrypt.hashSync(adminPassword, 10), real_name: 'B座导生管理员', role: 'admin', building_id: 1, scope_type: 'building', phone: '13800000004', status: 'active', last_login_at: null, created_at: now, updated_at: now }
 ];
 
 tables.reservations = [
@@ -591,7 +603,11 @@ function handleSelect(sql, params) {
     rows = parseWhereClause(wherePart, rows, aliasMap);
   }
 
-  const isAggregate = /COUNT|SUM|AVG|MIN|MAX|GROUP\s+BY/i.test(selectPart);
+  // 聚合判定需锚定「函数调用」形态：仅当 COUNT/SUM/AVG/MIN/MAX 紧跟左括号时才视为聚合。
+  // 旧写法 /COUNT|SUM|AVG|MIN|MAX|GROUP\s+BY/i 无词边界，会把列名子串误命中——
+  // 例如 `admin_id` 含 `min`、`building_id` 若含 `max` 同理——导致该 SELECT 被误判为聚合，
+  // 返回 [{__count__:n}] 并丢失所有真实字段。GROUP BY 仍然单独识别。
+  const isAggregate = /(COUNT|SUM|AVG|MIN|MAX)\s*\(|GROUP\s+BY/i.test(selectPart);
 
   if (isAggregate && groupByPart) {
     const groupFields = groupByPart.split(',').map(function(f) { return f.trim().replace(/^\w+\./, ''); });
@@ -908,6 +924,12 @@ function handleDelete(sql, params) {
 }
 
 function query(sql, params) {
+  // 生产环境即使被加载也不得查询模拟数据。
+  if (process.env.NODE_ENV === 'production') {
+    const err = new Error('生产环境禁止使用模拟数据库');
+    err.code = 'MOCK_DB_FORBIDDEN';
+    return Promise.reject(err);
+  }
   try {
     const normalizedSql = sql.trim().replace(/\s+/g, ' ');
 

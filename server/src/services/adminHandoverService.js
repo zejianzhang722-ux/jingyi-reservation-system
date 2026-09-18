@@ -10,13 +10,19 @@
  *   任一步失败整体回滚；Redis 删除属外部副作用，失败/回滚时会尽力恢复原刷新令牌。
  *   完成后写审计（auditTrailService.record）。
  *
- * 注意：本仓库的 access token 是无状态 JWT，删除刷新令牌只能阻止其**续期**，
- * 已签发且未过期的 access token 在其 TTL 内仍有效（与既有 logout 的能力一致）。
- * 如需即时吊销 access token，需引入 token 版本号/黑名单，属后续批次范围。
+ * 语义约定（重要）：
+ *  - `admin_handover.admin_id = from_user`：本系统没有独立的「岗位表」，因此以「离任方的管理员账号」
+ *    作为交接标的（账号即岗位）。
+ *  - 「结束旧任职」= 把离任方的 `admins.status` 置为 `disabled`。这是**管理员账号**层面的禁用，
+ *    与宿生身份无关：`admins`（管理端账号）与 `users`（宿生账号）是**两张完全独立的表**，
+ *    二者无外键关联、也无代码做状态同步（见 server/sql/schema.sql；authController 中管理端登录查
+ *    admins、宿生登录查 users）。因此禁用 admin 账号**不会**影响该人在小程序的宿生端登录与预约。
  *
- * 实现说明：查询刻意使用 `SELECT *`：mock-db 的聚合判定用 `/COUNT|SUM|AVG|MIN|MAX/i` 且无词边界，
- *   列名 `admin_id` 含子串 `min` 会被误判为聚合查询（返回 `[{__count__:n}]` 丢字段）。
- *   `SELECT *` 不含 `min`，同时兼容 MySQL 与 mock。根因见交付报告。
+ * 已知限制：本仓库 access token 是无状态 JWT，删除刷新令牌只能阻止其**续期**，已签发且未过期的
+ *   access token 在其 TTL 内仍有效（与既有 logout 的能力一致）。如需即时吊销，需引入 token 版本号/黑名单。
+ *
+ * 实现说明：曾因 mock-db 聚合误判（列名 `admin_id` 含子串 min）被迫使用 `SELECT *`；
+ *   该 mock-db 缺陷已在 Batch0+Batch1 第 5 次提交修复，故此处恢复为明确列查询。
  */
 
 const db = require('../config/database');
@@ -25,6 +31,9 @@ const redis = require('../config/redis');
 const errorCodes = require('../config/errorCodes');
 const permissions = require('../config/permissions');
 const auditTrailService = require('./auditTrailService');
+
+const HANDOVER_COLUMNS =
+  'id, admin_id, from_user, to_user, status, initiated_by, accepted_at, created_at';
 
 const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 3600;
 
@@ -100,13 +109,16 @@ const loadAdmin = async function(query, adminId) {
 };
 
 const loadHandover = async function(query, id) {
-  const [rows] = await query('SELECT * FROM admin_handover WHERE id = ?', [Number(id)]);
+  const [rows] = await query(
+    'SELECT ' + HANDOVER_COLUMNS + ' FROM admin_handover WHERE id = ?',
+    [Number(id)]
+  );
   return rows && rows.length ? rows[0] : null;
 };
 
 const findPendingForAdmin = async function(query, adminId) {
   const [rows] = await query(
-    "SELECT * FROM admin_handover WHERE admin_id = ? AND status = 'pending'",
+    'SELECT ' + HANDOVER_COLUMNS + " FROM admin_handover WHERE admin_id = ? AND status = 'pending'",
     [Number(adminId)]
   );
   return rows && rows.length ? rows[0] : null;
@@ -205,7 +217,7 @@ const accept = async function(input) {
       const toAdmin = await loadAdmin(runner.query, handover.to_user);
       if (!toAdmin) throw buildError('新任管理员不存在', errorCodes.ERROR_CODES.HANDOVER_CONFLICT, 404);
 
-      // 1) 结束旧任职：仅当仍为 active 时置为 disabled
+      // 1) 结束旧任职：仅当仍为 active 时置为 disabled（管理员账号层面，不影响宿生端 users 账号）
       if (fromAdmin.status === 'active') {
         await runner.query(
           "UPDATE admins SET status = 'disabled' WHERE id = ? AND status = 'active'",
@@ -353,7 +365,7 @@ const revoke = async function(input) {
  */
 const list = async function(options) {
   const settings = options || {};
-  let sql = 'SELECT * FROM admin_handover WHERE 1=1';
+  let sql = 'SELECT ' + HANDOVER_COLUMNS + ' FROM admin_handover WHERE 1=1';
   const params = [];
   if (settings.status) {
     sql += ' AND status = ?';
@@ -369,6 +381,7 @@ const list = async function(options) {
 };
 
 module.exports = {
+  HANDOVER_COLUMNS,
   REFRESH_TOKEN_TTL_SECONDS,
   refreshTokenKeyForAdmin,
   runAtomically,

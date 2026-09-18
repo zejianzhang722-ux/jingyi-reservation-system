@@ -4,18 +4,22 @@
  * 语义：给某管理员授予某个能力（audit/checkin/data_export/rule_config），并带有效期。
  * 过期即“自动失效”——不依赖后台定时任务，读取时按 now ∈ [valid_from, valid_to] 判定。
  *
- * 实现说明（务必注意）：
+ * 实现说明：
  *  1) 查询刻意**不使用 SQL BETWEEN**：仓库的 mock-db（server/src/config/mock-db.js）按 ` AND ` 切分条件，
  *     不支持 BETWEEN 语法。因此 SQL 只按 admin_id + status 过滤，有效期在 JS 侧判定，
  *     这样 MySQL 与 mock 两种模式行为一致。
- *  2) 查询刻意使用 `SELECT *` 而非显式列名：mock-db 的聚合判定用 `/COUNT|SUM|AVG|MIN|MAX/i` 且**无词边界**，
- *     列名 `admin_id` 含子串 `min` 会被误判为聚合查询并返回 `[{__count__:n}]`（丢失字段）。
- *     `SELECT *` 不含 `min`，可同时兼容 MySQL 与 mock。根因见交付报告。
+ *  2) 时间戳口径：valid_from / valid_to 以「本地时间（无时区）」写入 DATETIME，与 NOW() 对齐；
+ *     解析口径（toDate）同样按本地时间。调用方传入带时区的 ISO 字符串亦可（toDate 会正确解析后转本地）。
+ *     注意：不要传「UTC 字符串但省略时区后缀」（如 toISOString().slice(0,19)），否则会被当本地时间，产生时区偏移。
+ *  3) 曾因 mock-db 聚合误判（列名 `admin_id` 含子串 min）被迫使用 `SELECT *`；
+ *     该 mock-db 缺陷已在 Batch0+Batch1 第 5 次提交修复，故此处恢复为明确列查询。
  */
 
 const db = require('../config/database');
 const errorCodes = require('../config/errorCodes');
 const permissions = require('../config/permissions');
+
+const COLUMNS = 'id, admin_id, capability, granted_by, valid_from, valid_to, status, created_at';
 
 const buildError = function(message, businessCode, httpStatus) {
   const err = new Error(message);
@@ -145,7 +149,7 @@ const listActive = async function(adminId, now) {
   if (!Number.isInteger(id) || id <= 0) return [];
   const current = normalizeNow(now);
   const [rows] = await db.query(
-    "SELECT * FROM admin_capability_grants WHERE admin_id = ? AND status = 'active'",
+    "SELECT " + COLUMNS + " FROM admin_capability_grants WHERE admin_id = ? AND status = 'active'",
     [id]
   );
   return (rows || []).filter(function(record) {
@@ -192,13 +196,14 @@ const listByAdmin = async function(adminId) {
   const id = Number(adminId);
   if (!Number.isInteger(id) || id <= 0) return [];
   const [rows] = await db.query(
-    'SELECT * FROM admin_capability_grants WHERE admin_id = ? ORDER BY id DESC',
+    'SELECT ' + COLUMNS + ' FROM admin_capability_grants WHERE admin_id = ? ORDER BY id DESC',
     [id]
   );
   return rows || [];
 };
 
 module.exports = {
+  COLUMNS,
   toDate,
   toDbTimestamp,
   isWithinValidity,
