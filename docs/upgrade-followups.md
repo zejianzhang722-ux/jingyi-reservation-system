@@ -42,14 +42,18 @@
 
 ## P2 · 健壮性 / 可维护性
 
-### P2-0 组团预约审批绕过 R-02 乐观锁 / R-07 轨迹（third write path）
+### P2-0 【合并前必须收口 · blocking-before-merge】组团预约审批绕过 R-02 乐观锁 / R-07 轨迹（third write path）
 - 位置：`server/src/services/reservationGroupService.js` 的 `approveGroup`（约 517-520 行）与 `rejectGroup`（约 555 行）。
 - 现象：`approveGroup` 直接 `UPDATE reservations SET status='approved', audited_by=?, audited_at=NOW() WHERE id=? AND status=?`，
   **未 `version = version + 1`、未写 `reservation_audit_trail`**；`rejectGroup` 经 `lifecycleService` 会自增 version，
   但同样不写业务轨迹。这是继「单条审批」「批量审批」之后**第三条改预约审核状态的路径**，绕过 R-02/R-07 不变式。
 - 说明：该文件属**组团预约特性**（改动前工作区已在途、非 Batch2 产物），故本批次未改动，仅登记。
-- 建议：组团审批一并接入 R-02（`version = version + 1`）与 R-07（写 `reservation_audit_trail`，可复用
-  `services/reservationAuditTrailService.record`）；由组团特性作者收口。
+- **收口要求（合并前必须完成，blocking-before-merge）**：组团特性作者**必须在合并前采用与本次完全相同的语义**——
+  `approveGroup` / `rejectGroup` 均需
+  1) 目标 `reservations` 行写入时 `version = version + 1`（与单条/批量一致，保证并发冲突可识别）；
+  2) 每次审核写一行 `reservation_audit_trail`（`stage` 按审核阶段、`action` 为 `approve`/`reject`、`remark` 为原因），
+     可直接复用 `services/reservationAuditTrailService.record`（支持传入事务 `queryRunner`）。
+  否则 **R-02（乐观锁）/ R-07（审核轨迹）不变式在组团审批路径上仍然破裂**，视为合并阻断项。
 
 ### P2-1【已修】mock-db 聚合误判（列名含 min/max/avg 子串）
 - 现象：`config/mock-db.js` 原用 `/COUNT|SUM|AVG|MIN|MAX/i`（**无词边界**）判定聚合，`admin_id` 含子串 `min`

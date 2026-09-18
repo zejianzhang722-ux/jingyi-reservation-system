@@ -8,8 +8,8 @@
  *
  * 幂等：
  *   - 建表 supplement_requests 使用 CREATE TABLE IF NOT EXISTS；
- *   - checkins.supplement_request_id 先探测 information_schema，缺失才 ALTER。
- *   两处均可重复执行，不会报错，也不会改动既有数据。
+ *   - checkins.supplement_request_id、supplement_requests.review_remark 先探测 information_schema，缺失才 ALTER。
+ *   各处均可重复执行，不会报错，也不会改动既有数据。
  * 本脚本**只创建空表结构与可空列，不写入任何业务数据**。
  */
 
@@ -18,6 +18,7 @@ const mysql = require('../server/node_modules/mysql2/promise');
 const LOCK_NAME = 'jingyi_supplement_migration';
 const TABLE = 'supplement_requests';
 const COLUMN = { table: 'checkins', column: 'supplement_request_id' };
+const REVIEW_COLUMN = { table: 'supplement_requests', column: 'review_remark' };
 
 function safeIdentifier(value) {
   if (!/^[A-Za-z0-9_]+$/.test(value)) throw new Error('Unsafe database identifier');
@@ -60,6 +61,7 @@ async function createSupplementRequests(connection) {
     'status ENUM(\'pending\',\'approved\',\'rejected\') NOT NULL DEFAULT \'pending\' COMMENT \'工单状态\',' +
     'reviewer_id INT DEFAULT NULL COMMENT \'审核人管理员 id\',' +
     'reviewed_at DATETIME DEFAULT NULL COMMENT \'审核时间\',' +
+    'review_remark VARCHAR(255) DEFAULT NULL COMMENT \'审核意见（approve/reject 均可填，无意见为 NULL）\',' +
     'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
     'KEY idx_supplement_reservation (reservation_id),' +
     'KEY idx_supplement_status (status, created_at)' +
@@ -76,10 +78,20 @@ async function addSupplementRequestColumn(connection, database) {
   return true;
 }
 
+async function addReviewRemarkColumn(connection, database) {
+  if (await columnExists(connection, database, REVIEW_COLUMN.table, REVIEW_COLUMN.column)) return false;
+  await connection.query(
+    'ALTER TABLE ' + safeIdentifier(REVIEW_COLUMN.table) +
+    ' ADD COLUMN review_remark VARCHAR(255) DEFAULT NULL COMMENT \'审核意见（approve/reject 均可填，无意见为 NULL）\''
+  );
+  return true;
+}
+
 async function verify(connection, database) {
   return {
     table: await tableExists(connection, database, TABLE),
-    checkinsSupplementRequestId: await columnExists(connection, database, COLUMN.table, COLUMN.column)
+    checkinsSupplementRequestId: await columnExists(connection, database, COLUMN.table, COLUMN.column),
+    supplementReviewRemark: await columnExists(connection, database, REVIEW_COLUMN.table, REVIEW_COLUMN.column)
   };
 }
 
@@ -102,13 +114,15 @@ async function main() {
 
     await assertPreconditions(connection, database);
     await createSupplementRequests(connection);
-    const addedColumn = await addSupplementRequestColumn(connection, database);
+    const addedCheckinColumn = await addSupplementRequestColumn(connection, database);
+    const addedReviewRemarkColumn = await addReviewRemarkColumn(connection, database);
     const state = await verify(connection, database);
 
     console.log(JSON.stringify({
       migration: 'supplement-request',
       database,
-      addedCheckinColumn: addedColumn,
+      addedCheckinColumn,
+      addedReviewRemarkColumn,
       state,
       status: 'ready'
     }, null, 2));

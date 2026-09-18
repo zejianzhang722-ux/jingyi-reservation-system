@@ -25,7 +25,7 @@ const STATUSES = Object.freeze({ PENDING: 'pending', APPROVED: 'approved', REJEC
 const TYPES = Object.freeze({ SIGNIN: 'signin', SIGNOUT: 'signout' });
 const ACTIONS = Object.freeze({ APPROVE: 'approve', REJECT: 'reject' });
 
-const COLUMNS = 'id, reservation_id, applicant_id, type, reason, status, reviewer_id, reviewed_at, created_at';
+const COLUMNS = 'id, reservation_id, applicant_id, type, reason, status, reviewer_id, reviewed_at, review_remark, created_at';
 
 const buildError = function(message, businessCode, httpStatus) {
   const err = new Error(message);
@@ -288,12 +288,12 @@ const review = async function(input) {
     }
 
     const nextStatus = action === ACTIONS.APPROVE ? STATUSES.APPROVED : STATUSES.REJECTED;
-    // 注意：迁移表按任务要求仅有 `reason`（= 申请人填写的原因）单列，未设「审核意见」列，
-    // 故驳回原因不入本表，改由响应回显 + 审计链 metadata 承载（后续如需用户可见驳回原因，
-    // 建议追加 `review_remark` 列，见交付报告「残余/未验证项」）。
+    // 审核意见持久化到独立列 `review_remark`（approve/reject 均可填；无意见写 NULL），
+    // 与申请人填写的 `reason` 分列存放，互不覆盖。驳回时业务已强校验 reason 非空。
+    const reviewRemark = reason ? reason : null;
     const [updateResult] = await runner.query(
-      "UPDATE supplement_requests SET status = ?, reviewer_id = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending'",
-      [nextStatus, reviewerId, requestId]
+      "UPDATE supplement_requests SET status = ?, reviewer_id = ?, reviewed_at = NOW(), review_remark = ? WHERE id = ? AND status = 'pending'",
+      [nextStatus, reviewerId, reviewRemark, requestId]
     );
     if (!updateResult || Number(updateResult.affectedRows) !== 1) {
       throw buildError('该工单已被其他管理员处理，请刷新后重试', null, 409);
@@ -306,7 +306,8 @@ const review = async function(input) {
       type: request.type,
       action: action,
       status: nextStatus,
-      reason: reason
+      reason: reason,
+      reviewRemark: reviewRemark
     };
   });
 
