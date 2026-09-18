@@ -8,6 +8,15 @@
 
 ## P1 · 合规 / 安全（建议下一批优先）
 
+### P1-0 停用 `manualCheckin` 直写路径（R-08 迁移收尾）
+- 位置：`server/src/controllers/checkinController.js` 的 `manualCheckin`（以及 `POST /api/v1/checkin/manual`）。
+- 现状：Batch2（T04/R-08）新增了「补签申请 → 审核 → 写入 checkins」受控流程（`services/supplementService.js`
+  + `controllers/supplementController.js` + `POST /api/v1/checkin/supplement`），并已把 `manualCheckin` 的
+  事务写入体抽为可复用函数 `applyManualCheckinWithinTransaction` 供审核通过后调用。
+- 但为**避免蓝绿期前端 500**，本批次**保留** `manualCheckin` 直写路径可用（前端 admin UI 仍在使用）。
+- 后续动作：**前端迁移到补签申请-审核流后，停用/移除 `manualCheckin` 直写**（先在 admin UI 去掉「直接手动签到」
+  入口，再评估下线后端接口与路由 `routes/checkin.js` 的 `/manual`）。**删除前须先说明并获确认。**
+
 ### P1-1 其余 PII 明文出口尚未接入分级脱敏（R-14 未覆盖）
 本批次只对「预约 / 签到 / 审批队列」链路接入脱敏（`utils/maskPresenter.js` + `services/privacyAuditService.js`）。
 以下接口仍直接返回学号 / 手机号 / 姓名的明文，建议按同一模式接入 `privacyAuditService.maskRowsForRequest(req, rows, ...)`：
