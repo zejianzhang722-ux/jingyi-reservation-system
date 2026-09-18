@@ -7,6 +7,7 @@ const reservationLifecycleService = require('../services/reservationLifecycleSer
 const realtimeEventService = require('../services/realtimeEventService');
 const reservationAuditTrailService = require('../services/reservationAuditTrailService');
 const reservationApprovalController = require('./reservationApprovalController');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const allowedStatusesForRole = reservationApprovalController.allowedStatusesForRole;
 
@@ -41,7 +42,7 @@ const pendingList = async function(req, res) {
     params.push(pagination.pageSize, pagination.offset);
 
     const [reservations] = await db.query(
-      "SELECT r.*, rm.name AS room_name, rm.type AS room_type, " +
+      "SELECT r.*, rm.name AS room_name, rm.type AS room_type, rm.building_id, " +
       "u.nickname, u.real_name, u.student_id, u.student_no " +
       "FROM reservations r " +
       "JOIN rooms rm ON r.room_id = rm.id " +
@@ -56,9 +57,16 @@ const pendingList = async function(req, res) {
       statuses
     );
 
+    // R-14 统一出口：待审核列表含申请人学号 / 姓名明文；附带 rm.building_id 以便按数据域判定，
+    // 管理员在数据域内查看明文时落审计，越权降级为掩码。
+    const safeReservations = await privacyAuditService.maskRowsForRequest(req, reservations, {
+      targetTable: 'reservations',
+      description: '待审核列表：管理员查看明文个人信息'
+    });
+
     return response.paginate(
       res,
-      reservations,
+      safeReservations,
       Number(countResult[0].total) || 0,
       pagination.page,
       pagination.pageSize

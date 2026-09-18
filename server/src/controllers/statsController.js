@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const helpers = require('../utils/helpers');
 const dayjs = require('dayjs');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const dashboard = async function(req, res) {
   try {
@@ -68,10 +69,15 @@ const dashboard = async function(req, res) {
       return Math.min(100, Math.round((r.reservation_count / 30) * 100));
     }).reverse();
 
-    const [pendingList] = await db.query(
+    const [pendingRaw] = await db.query(
       "SELECT r.id, r.status, r.purpose, r.date, r.start_time, u.real_name, rm.name as room_name FROM reservations r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN rooms rm ON r.room_id = rm.id WHERE r.status IN ('pending', 'counselor_pending') ORDER BY r.created_at DESC LIMIT 10"
     );
-    const pendingItems = pendingList.map(function(r) {
+    // R-14 统一出口：待办文案含申请人姓名明文，先按请求者身份脱敏再拼装。
+    const safePending = await privacyAuditService.maskRowsForRequest(req, pendingRaw, {
+      targetTable: 'reservations',
+      description: '仪表盘待办列表：查看明文个人信息'
+    });
+    const pendingItems = safePending.map(function(r) {
       const isCounselor = r.status === 'counselor_pending';
       return {
         id: r.id,
@@ -197,9 +203,15 @@ const noshowStats = async function(req, res) {
       [start, end]
     );
 
+    // R-14 统一出口：爽约 TOP 用户含学号 / 姓名明文，按请求者身份分级脱敏。
+    const safeTopNoshow = await privacyAuditService.maskRowsForRequest(req, topNoshow, {
+      targetTable: 'users',
+      description: '爽约统计 TOP 用户：查看明文个人信息'
+    });
+
     return response.success(res, {
       totalNoshow: totalNoshow[0].total,
-      topNoshowUsers: topNoshow,
+      topNoshowUsers: safeTopNoshow,
       roomNoshowStats: roomNoshow
     });
   } catch (err) {
@@ -266,7 +278,13 @@ const exportData = async function(req, res) {
       data = rows;
     }
 
-    return response.success(res, { type: type, data: data, count: data.length, startDate: start, endDate: end });
+    // R-14 统一出口：导出数据含学号 / 手机号 / 姓名明文（CSV 场景风险最高），按请求者身份分级脱敏。
+    const safeData = await privacyAuditService.maskRowsForRequest(req, data, {
+      targetTable: type,
+      description: '数据导出：查看明文个人信息'
+    });
+
+    return response.success(res, { type: type, data: safeData, count: safeData.length, startDate: start, endDate: end });
   } catch (err) {
     logger.error('导出数据异常:', err);
     return response.error(res, err.message);

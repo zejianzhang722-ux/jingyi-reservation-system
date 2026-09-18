@@ -2,6 +2,7 @@
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const creditService = require('../services/creditService');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const violationList = async function(req, res) {
   try {
@@ -25,7 +26,13 @@ const violationList = async function(req, res) {
     if (type) { countSql += ' AND type = ?'; countParams.push(type); }
     const [countResult] = await db.query(countSql, countParams);
 
-    return response.paginate(res, violations, countResult[0].total, page, pageSize);
+    // R-14 统一出口：违规记录含学号 / 姓名明文，按请求者身份分级脱敏（学生看他人掩码，管理员明文并落审计）。
+    const safeViolations = await privacyAuditService.maskRowsForRequest(req, violations, {
+      targetTable: 'violations',
+      description: '违规记录列表：查看明文个人信息'
+    });
+
+    return response.paginate(res, safeViolations, countResult[0].total, page, pageSize);
   } catch (err) {
     logger.error('获取违规记录异常:', err);
     return response.error(res, err.message);
@@ -57,7 +64,13 @@ const blacklist = async function(req, res) {
       [60]
     );
 
-    return response.success(res, list);
+    // R-14 统一出口：黑名单含学号 / 姓名明文，按请求者身份分级脱敏。
+    const safeList = await privacyAuditService.maskRowsForRequest(req, list, {
+      targetTable: 'users',
+      description: '信用黑名单：查看明文个人信息'
+    });
+
+    return response.success(res, safeList);
   } catch (err) {
     logger.error('获取黑名单异常:', err);
     return response.error(res, err.message);

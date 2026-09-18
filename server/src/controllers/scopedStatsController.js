@@ -3,6 +3,7 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const helpers = require('../utils/helpers');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const buildingFilter = function(req, alias) {
   if (req.adminScope.isGlobal) return { sql: '', params: [] };
@@ -31,6 +32,20 @@ const getRoomTypeLabel = function(type) {
 
 const canReviewCounselorPending = function(req) {
   return !!(req.adminScope && ['counselor', 'super_admin'].includes(req.adminScope.role));
+};
+
+/**
+ * 把待办原始行拼装为前端展示项（R-14 前先按请求者身份脱敏，再调用本函数）。
+ * @param {object} row 待办原始行（含 real_name / room_name / purpose / date / start_time）
+ * @returns {{id: *, tag: string, text: string, time: string}}
+ */
+const shapePendingItem = function(row) {
+  return {
+    id: row.id,
+    tag: row.status === 'counselor_pending' ? '辅导员审核' : '待审核',
+    text: (row.real_name || '') + ' 申请 ' + (row.room_name || '') + (row.purpose ? ' - ' + row.purpose : ''),
+    time: row.date + ' ' + row.start_time
+  };
 };
 
 const pendingDetailCondition = function(req) {
@@ -95,11 +110,17 @@ const buildMockDashboard = function(req) {
     .map(function(row) {
       const user = users.get(Number(row.user_id)) || {};
       const room = roomById.get(Number(row.room_id)) || {};
+      // 返回「原始行」而非最终文案：由 dashboard() 先按请求者身份脱敏（R-14），再 shapePendingItem 拼装。
       return {
         id: row.id,
-        tag: row.status === 'counselor_pending' ? '辅导员审核' : '待审核',
-        text: (user.real_name || user.nickname || '') + ' 申请 ' + (room.name || '') + (row.purpose ? ' - ' + row.purpose : ''),
-        time: row.date + ' ' + row.start_time
+        status: row.status,
+        purpose: row.purpose,
+        date: row.date,
+        start_time: row.start_time,
+        real_name: user.real_name || user.nickname || '',
+        room_name: room.name || '',
+        user_id: row.user_id,
+        building_id: room.building_id
       };
     });
 
@@ -127,7 +148,14 @@ const buildMockDashboard = function(req) {
 const dashboard = async function(req, res) {
   try {
     if (db.isMock()) {
-      return response.success(res, buildMockDashboard(req));
+      const mock = buildMockDashboard(req);
+      // R-14 统一出口：mock 路径同样先按请求者身份脱敏待办明文，再拼装展示文案。
+      const safePending = await privacyAuditService.maskRowsForRequest(req, mock.pendingItems, {
+        targetTable: 'reservations',
+        description: '楼栋范围仪表盘待办：查看明文个人信息'
+      });
+      mock.pendingItems = safePending.map(shapePendingItem);
+      return response.success(res, mock);
     }
     const today = helpers.formatDate(new Date());
     const scope = buildingFilter(req, 'rm');
@@ -186,6 +214,12 @@ const dashboard = async function(req, res) {
       scope.params
     );
 
+    // R-14 统一出口：待办含申请人姓名明文，先按请求者身份脱敏，再拼装展示文案。
+    const safePendingItems = await privacyAuditService.maskRowsForRequest(req, pendingItems, {
+      targetTable: 'reservations',
+      description: '楼栋范围仪表盘待办：查看明文个人信息'
+    });
+
     return response.success(res, {
       todayReservations,
       ordinaryPendingCount,
@@ -201,14 +235,7 @@ const dashboard = async function(req, res) {
         rooms: ranking.map(function(row) { return row.name; }),
         rates: ranking.map(function(row) { return Math.min(100, Math.round(Number(row.reservation_count || 0) / 30 * 100)); })
       },
-      pendingItems: pendingItems.map(function(row) {
-        return {
-          id: row.id,
-          tag: row.status === 'counselor_pending' ? '辅导员审核' : '待审核',
-          text: (row.real_name || '') + ' 申请 ' + (row.room_name || '') + (row.purpose ? ' - ' + row.purpose : ''),
-          time: row.date + ' ' + row.start_time
-        };
-      })
+      pendingItems: safePendingItems.map(shapePendingItem)
     });
   } catch (err) {
     logger.error('获取楼栋范围内仪表盘失败:', err);
@@ -342,9 +369,14 @@ const noshowStats = async function(req, res) {
       ' GROUP BY rm.id, rm.name ORDER BY noshow_count DESC',
       params
     );
+    // R-14 统一出口：爽约 TOP 用户含学号 / 姓名明文，按请求者身份分级脱敏。
+    const safeTopNoshowUsers = await privacyAuditService.maskRowsForRequest(req, users, {
+      targetTable: 'users',
+      description: '楼栋范围爽约统计 TOP 用户：查看明文个人信息'
+    });
     return response.success(res, {
       totalNoshow: Number(total[0].total || 0),
-      topNoshowUsers: users,
+      topNoshowUsers: safeTopNoshowUsers,
       roomNoshowStats: rooms
     });
   } catch (err) {
@@ -412,7 +444,12 @@ const exportData = async function(req, res) {
         [range.start, range.end].concat(scope.params)
       );
     }
-    return response.success(res, { type, startDate: range.start, endDate: range.end, rows });
+    // R-14 统一出口：导出数据含学号 / 姓名明文（CSV 场景风险最高），按请求者身份分级脱敏。
+    const safeRows = await privacyAuditService.maskRowsForRequest(req, rows, {
+      targetTable: type,
+      description: '楼栋范围数据导出：查看明文个人信息'
+    });
+    return response.success(res, { type, startDate: range.start, endDate: range.end, rows: safeRows });
   } catch (err) {
     logger.error('导出楼栋范围内统计失败:', err);
     return response.error(res, err.message || '导出失败', 500);

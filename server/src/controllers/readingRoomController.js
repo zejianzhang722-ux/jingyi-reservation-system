@@ -1,6 +1,7 @@
 ﻿const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const enter = async function(req, res) {
   try {
@@ -53,7 +54,13 @@ const current = async function(req, res) {
       "SELECT r.*, u.nickname, u.real_name, u.student_id FROM reading_room_logs r JOIN users u ON r.user_id = u.id WHERE r.leave_time IS NULL ORDER BY r.enter_time DESC"
     );
 
-    return response.success(res, list);
+    // R-14 统一出口：在馆列表含学号 / 姓名明文，按请求者身份分级脱敏（管理员明文并落审计）。
+    const safeList = await privacyAuditService.maskRowsForRequest(req, list, {
+      targetTable: 'reading_room_logs',
+      description: '当前在馆列表：查看明文个人信息'
+    });
+
+    return response.success(res, safeList);
   } catch (err) {
     logger.error('获取当前在馆列表异常:', err);
     return response.error(res, err.message);

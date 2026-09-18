@@ -142,6 +142,15 @@ const detail = async function(req, res) {
       }
     }
 
+    // R-14 详情出口收口：详情含学号 / 姓名 / 手机号明文，管理员在数据域内查看明文必须落审计；
+    // 学生看自己为明文（不审计），越权场景降级掩码。学生/管理员非明文的掩码值经 Object.assign 回写。
+    const maskedReservations = await privacyAuditService.maskRowsForRequest(req, [reservation], {
+      targetTable: 'reservations',
+      targetId: reservation.id,
+      description: '预约详情：管理员查看明文个人信息'
+    });
+    Object.assign(reservation, maskedReservations[0]);
+
     if (reservation.joined_seat_id) {
       reservation.seat_info = {
         id: reservation.joined_seat_id,

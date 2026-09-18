@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const creditService = require('../services/creditService');
 const config = require('../config');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const create = async function(req, res) {
   try {
@@ -41,7 +42,13 @@ const list = async function(req, res) {
     if (status) { countSql += ' AND status = ?'; countParams.push(status); }
     const [countResult] = await db.query(countSql, countParams);
 
-    return response.paginate(res, posters, countResult[0].total, page, pageSize);
+    // R-14 统一出口：海报列表含申请人学号 / 姓名明文，按请求者身份分级脱敏。
+    const safePosters = await privacyAuditService.maskRowsForRequest(req, posters, {
+      targetTable: 'posters',
+      description: '海报列表：查看明文个人信息'
+    });
+
+    return response.paginate(res, safePosters, countResult[0].total, page, pageSize);
   } catch (err) {
     logger.error('获取海报列表异常:', err);
     return response.error(res, err.message);

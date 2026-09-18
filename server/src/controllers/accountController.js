@@ -4,6 +4,7 @@ const response = require('../utils/response');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
 const { normalizeAdminScope } = require('../utils/adminScope');
+const privacyAuditService = require('../services/privacyAuditService');
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'counselor'];
 const STUDENT_ROLE = 'student';
@@ -175,7 +176,13 @@ const getAccounts = async function(req, res) {
     });
 
     const result = paginateRows(rows, page, pageSize);
-    return response.paginate(res, result.list, result.total, result.page, result.pageSize);
+    // R-14 统一出口：账号列表含学号 / 手机号 / 姓名明文，按请求者身份分级脱敏，
+    // 管理员在数据域内查看明文时落审计。viewer 为空时行为不变（兼容既有调用）。
+    const safeList = await privacyAuditService.maskRowsForRequest(req, result.list, {
+      targetTable: 'accounts',
+      description: '统一账号列表：管理员查看明文个人信息'
+    });
+    return response.paginate(res, safeList, result.total, result.page, result.pageSize);
   } catch (err) {
     logger.error('获取统一账号列表异常:', err);
     return response.error(res, err.message);
@@ -353,7 +360,12 @@ const getManagers = async function(req, res) {
     });
     rows.sort(function(a, b) { return Number(a.rawId) - Number(b.rawId); });
     const result = paginateRows(rows, page, pageSize);
-    return response.paginate(res, result.list, result.total, result.page, result.pageSize);
+    // R-14 统一出口：管理员列表含手机号等联系方式明文，按请求者身份分级脱敏并落审计。
+    const safeList = await privacyAuditService.maskRowsForRequest(req, result.list, {
+      targetTable: 'admins',
+      description: '管理员列表：查看明文联系方式'
+    });
+    return response.paginate(res, safeList, result.total, result.page, result.pageSize);
   } catch (err) {
     logger.error('获取管理员列表异常:', err);
     return response.error(res, err.message);
