@@ -8,6 +8,8 @@ router.use('/auth', require('./auth'));
 router.use('/user', require('./user'));
 router.use('/room', require('./room'));
 router.use('/reservation', require('./reservation'));
+// FOLLOWUP(并非本批次产物)：下一行 `/groups` 属「组团预约」在途工作（此前已存在于工作区但未提交）。
+// 本次 Batch0+Batch1 为注册 /admin/delegations 而提交本文件时，该行被一并带入，非本次改造内容。
 router.use('/groups', require('./groups'));
 router.use('/audit', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./audit'));
 router.use('/checkin', require('./checkin'));

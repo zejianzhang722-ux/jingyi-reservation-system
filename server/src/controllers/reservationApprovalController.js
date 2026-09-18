@@ -54,6 +54,10 @@ const enqueueWechatSafely = async function(userId, templateId, templateData, ded
   }
 };
 
+// NOTE(死代码，请勿直接删除)：pending / pendingCount 当前**没有任何路由挂载**——线上 `/reservation/pending`
+// 实际由 controllers/scopedQueryController.pendingReservations 提供（见 routes/reservation.js）。
+// 按项目约定「删除任何代码前必须先说明并获确认」，本批次仅保留此处并同步 App 的脱敏修复，
+// 清理工作另立任务（见 docs/upgrade-followups.md）。
 const pending = async function(req, res) {
   try {
     const allowedStatuses = allowedStatusesForRole(req.user.role);

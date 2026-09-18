@@ -9,6 +9,13 @@
 -- 关于 admins 表：经核对 server/sql/schema.sql（第 314-328 行），admins 已存在
 --   status ENUM('active','disabled')，足以支撑「结束旧任职（status='disabled'）/ 启用新任职（status='active'）」，
 --   因此本迁移**不新增任何列**，避免无意义的 ALTER。
+--
+-- 交接语义（R-06，重要）：
+--   admin_handover.admin_id = from_user：本系统没有独立的「岗位表」，故以「离任方的管理员账号」作为交接标的。
+--   accept 时：离任方 admins.status = 'disabled'（结束旧任职）；新任方 status = 'active' 并接续其 role /
+--   scope_type / building_id（启用新任职）。
+--   注意：admins（管理端账号）与 users（宿生账号）是**两张完全独立的表**，二者无外键关联、亦无状态同步，
+--   因此禁用某个 admin 账号**不会**影响该人在小程序的宿生端登录与预约（前提已核实）。
 --   若未来某套环境确实缺少 status 列，请在此文件末尾追加幂等 ALTER（用 information_schema 先判断）。
 --
 -- 执行前检查：
