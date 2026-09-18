@@ -49,10 +49,13 @@ const toNullId = function(value) {
  * @param {string} [input.actorRole] 操作人角色
  * @param {string} input.action 动作（ACTIONS）
  * @param {string} [input.remark] 批注 / 原因
+ * @param {Function} [queryRunner] 可选查询执行器（形如 (sql, params) => Promise<[result]>）。
+ *   传入时复用该执行器（例如批量审核的事务连接），使轨迹与业务写入同一事务；不传则回退 db.query。
  * @returns {Promise<{id: number}>}
  */
-const record = async function(input) {
+const record = async function(input, queryRunner) {
   const settings = input || {};
+  const run = typeof queryRunner === 'function' ? queryRunner : db.query;
   const reservationId = Number(settings.reservationId);
   if (!Number.isInteger(reservationId) || reservationId <= 0) {
     throw new Error('轨迹写入失败：预约 id 无效');
@@ -65,7 +68,7 @@ const record = async function(input) {
     : ACTIONS.REMARK;
   const remark = settings.remark === undefined || settings.remark === null ? '' : String(settings.remark).slice(0, 500);
 
-  const [result] = await db.query(
+  const [result] = await run(
     'INSERT INTO reservation_audit_trail (reservation_id, stage, actor_id, actor_role, action, remark, created_at) ' +
     'VALUES (?, ?, ?, ?, ?, ?, NOW())',
     [reservationId, stage, toNullId(settings.actorId), normalizeRole(settings.actorRole) || 'system', action, remark]

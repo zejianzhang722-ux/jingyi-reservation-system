@@ -42,6 +42,15 @@
 
 ## P2 · 健壮性 / 可维护性
 
+### P2-0 组团预约审批绕过 R-02 乐观锁 / R-07 轨迹（third write path）
+- 位置：`server/src/services/reservationGroupService.js` 的 `approveGroup`（约 517-520 行）与 `rejectGroup`（约 555 行）。
+- 现象：`approveGroup` 直接 `UPDATE reservations SET status='approved', audited_by=?, audited_at=NOW() WHERE id=? AND status=?`，
+  **未 `version = version + 1`、未写 `reservation_audit_trail`**；`rejectGroup` 经 `lifecycleService` 会自增 version，
+  但同样不写业务轨迹。这是继「单条审批」「批量审批」之后**第三条改预约审核状态的路径**，绕过 R-02/R-07 不变式。
+- 说明：该文件属**组团预约特性**（改动前工作区已在途、非 Batch2 产物），故本批次未改动，仅登记。
+- 建议：组团审批一并接入 R-02（`version = version + 1`）与 R-07（写 `reservation_audit_trail`，可复用
+  `services/reservationAuditTrailService.record`）；由组团特性作者收口。
+
 ### P2-1【已修】mock-db 聚合误判（列名含 min/max/avg 子串）
 - 现象：`config/mock-db.js` 原用 `/COUNT|SUM|AVG|MIN|MAX/i`（**无词边界**）判定聚合，`admin_id` 含子串 `min`
   被误判为聚合，SELECT 返回 `[{__count__:n}]` 并丢失全部真实字段。任何「选到含 min/max/avg 列名」的查询都会中招。

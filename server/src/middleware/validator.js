@@ -61,8 +61,8 @@ const timelineRules = [
 const auditRules = [
   param('id').isInt({ min: 1 }).withMessage('审核ID无效'),
   body('reason').optional().isLength({ max: 500 }).withMessage('原因不能超过500字'),
-  // 可选乐观锁版本号（R-02）：不传 -> 退化为既有 WHERE status 条件更新。
-  body('version').optional().isInt({ min: 1 }).withMessage('版本号无效'),
+  // 可选乐观锁版本号（R-02）：不传 / 显式 null -> 退化为既有 WHERE status 条件更新。
+  body('version').optional({ nullable: true }).isInt({ min: 1 }).withMessage('版本号无效'),
   validate
 ];
 

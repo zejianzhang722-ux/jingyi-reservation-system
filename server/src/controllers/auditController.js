@@ -5,6 +5,7 @@ const notificationService = require('../services/notificationService');
 const wechatPushService = require('../services/wechatPushService');
 const reservationLifecycleService = require('../services/reservationLifecycleService');
 const realtimeEventService = require('../services/realtimeEventService');
+const reservationAuditTrailService = require('../services/reservationAuditTrailService');
 const reservationApprovalController = require('./reservationApprovalController');
 
 const allowedStatusesForRole = reservationApprovalController.allowedStatusesForRole;
@@ -186,13 +187,13 @@ const batchAudit = async function(req, res) {
       let updateResult;
       if (action === 'approve') {
         [updateResult] = await runQuery(
-          "UPDATE reservations SET status = 'approved', audited_at = NOW(), audited_by = ? " +
+          "UPDATE reservations SET status = 'approved', audited_at = NOW(), audited_by = ?, version = version + 1 " +
           'WHERE id = ? AND status = ?',
           [req.user.id, reservation.id, reservation.status]
         );
       } else {
         [updateResult] = await runQuery(
-          "UPDATE reservations SET status = 'rejected', audited_at = NOW(), audited_by = ?, reject_reason = ? " +
+          "UPDATE reservations SET status = 'rejected', audited_at = NOW(), audited_by = ?, reject_reason = ?, version = version + 1 " +
           'WHERE id = ? AND status = ?',
           [req.user.id, reason, reservation.id, reservation.status]
         );
@@ -206,6 +207,16 @@ const batchAudit = async function(req, res) {
       if (!updateResult || updateResult.affectedRows === 0) {
         throw createHttpError(409, '部分预约已被其他管理员处理，请刷新后重试');
       }
+
+      // 与单条审批一致：批量审核的每条也写业务轨迹（R-02/R-07），并复用同一事务保证原子性。
+      await reservationAuditTrailService.record({
+        reservationId: reservation.id,
+        stage: reservationAuditTrailService.stageForStatus(reservation.status),
+        actorId: req.user.id,
+        actorRole: req.user.role,
+        action: action === 'approve' ? 'approve' : 'reject',
+        remark: action === 'reject' ? reason : ''
+      }, runQuery);
     }
 
     if (transactional) await connection.commit();
