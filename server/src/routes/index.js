@@ -8,6 +8,7 @@ router.use('/auth', require('./auth'));
 router.use('/user', require('./user'));
 router.use('/room', require('./room'));
 router.use('/reservation', require('./reservation'));
+router.use('/groups', require('./groups'));
 router.use('/audit', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./audit'));
 router.use('/checkin', require('./checkin'));
 router.use('/reading-room', require('./readingRoom'));
@@ -15,6 +16,8 @@ router.use('/poster', require('./poster'));
 router.use('/credit', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./credit'));
 router.use('/stats', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./stats'));
 router.use('/notification', require('./notification'));
+// 临时授权 + 岗位交接（R-06）。放在 /admin 之前，避免被 /admin 路由层先行匹配。
+router.use('/admin/delegations', require('./adminDelegation'));
 router.use('/admin', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./admin'));
 router.use('/student-ops', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./studentAdmin'));
 router.use('/account-batch', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./accountBatch'));

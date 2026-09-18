@@ -1,5 +1,7 @@
 const db = require('../config/database');
 const response = require('../utils/response');
+const logger = require('../config/logger');
+const adminCapabilityService = require('../services/adminCapabilityService');
 
 const normalizeRole = function(role) {
   return role === 'superadmin' ? 'super_admin' : role;
@@ -18,6 +20,12 @@ const resolveScope = function(admin) {
   return null;
 };
 
+/**
+ * 装载管理员数据域。装载后追加 capabilities（R-06 临时授权），来自 adminCapabilityService.listActive。
+ *
+ * 兼容性说明：capabilities 是**新增字段**，且读取失败（例如迁移尚未在某个环境应用，新表不存在）
+ * 时降级为空数组，绝不因此中断既有管理端接口，保证蓝绿部署与 9 个 CI workflow 不受影响。
+ */
 const loadAdminScope = async function(req, res, next) {
   try {
     if (!req.user || !['super_admin', 'admin', 'counselor', 'superadmin'].includes(req.user.role)) {
@@ -37,11 +45,27 @@ const loadAdminScope = async function(req, res, next) {
       role: databaseRole,
       scopeType: scope.scopeType,
       isGlobal: scope.isGlobal,
-      buildingId: scope.buildingId
+      buildingId: scope.buildingId,
+      capabilities: []
     };
+    req.adminScope.capabilities = await loadCapabilities(admin.id);
     next();
   } catch (err) {
     next(err);
+  }
+};
+
+/**
+ * 读取管理员当前生效的临时能力值列表；任何异常都降级为 []（不阻断请求）。
+ * @param {number} adminId 管理员 id
+ * @returns {Promise<string[]>}
+ */
+const loadCapabilities = async function(adminId) {
+  try {
+    return await adminCapabilityService.listActiveCapabilities(Number(adminId));
+  } catch (err) {
+    logger.warn('加载管理员临时能力失败（已降级为空）:', err && err.message ? err.message : err);
+    return [];
   }
 };
 
@@ -242,6 +266,7 @@ module.exports = {
   normalizeRole,
   resolveScope,
   loadAdminScope,
+  loadCapabilities,
   forceBuildingQuery,
   enforceBodyBuilding,
   assertBuilding,
