@@ -91,8 +91,10 @@ const PHONE_KEYS = ['phone', 'mobile', 'contact_phone', 'contactPhone'];
  * @param {object} viewer 调用方身份
  * @returns {{id: (number|null), role: string, scope: object}|null}
  */
+// 仅接受对象型 viewer。非对象（null / undefined / 数字下标 / 字符串等）一律视为「未提供身份」，
+// 从而保持既有不脱敏行为——避免 `rows.map(fn)` 把数组下标当作 viewer 传入时被误判为匿名学生而错误掩码。
 const normalizeViewer = function(viewer) {
-  if (!viewer) return null;
+  if (viewer === null || viewer === undefined || typeof viewer !== 'object') return null;
   const role = normalizeRole(viewer.role) || 'student';
   // 幂等：viewer 可能已是本函数产出的「标准化对象」（其数据域在 `scope` 字段上），
   // 若不识别 `viewer.scope`，二次标准化会把楼栋域信息丢掉，导致管理员被误判为明文不可见。

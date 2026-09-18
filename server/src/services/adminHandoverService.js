@@ -246,9 +246,11 @@ const accept = async function(input) {
         throw buildError('交接状态已变化，请刷新后重试', errorCodes.ERROR_CODES.HANDOVER_CONFLICT, 409);
       }
 
-      // 4) 撤销离任方旧会话（刷新令牌）；在同一工作单元内执行，失败则整体回滚
+      // 4) 撤销离任方旧会话（仅管理端刷新令牌）；在同一工作单元内执行，失败则整体回滚。
+      //    只删 `token:admin:<id>`：这是管理端刷新令牌键（middleware/auth.getRefreshTokenKey）。
+      //    绝不删 `token:<id>`（宿生端键）：admins 与 users 是两张独立表、id 空间无关联，
+      //    且离任只是「管理员账号」层面的变更，不应影响该人在宿生端的登录与预约（见文件头语义约定）。
       const adminRefreshKey = refreshTokenKeyForAdmin(handover.from_user);
-      const studentLikeKey = 'token:' + Number(handover.from_user);
       let storedToken = null;
       try {
         storedToken = await redis.get(adminRefreshKey);
@@ -258,7 +260,6 @@ const accept = async function(input) {
       sessionBackup = { key: adminRefreshKey, token: storedToken };
       try {
         await redis.del(adminRefreshKey);
-        await redis.del(studentLikeKey);
       } catch (delErr) {
         const err = buildError('撤销离任方会话失败', errorCodes.ERROR_CODES.HANDOVER_CONFLICT, 503);
         err.cause = delErr;

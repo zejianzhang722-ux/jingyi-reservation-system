@@ -719,7 +719,8 @@ function handleSelect(sql, params) {
 
     const simpleFields = selectPart.split(',').map(function(f) { return f.trim(); });
     for (const sf of simpleFields) {
-      if (/COUNT|SUM|AVG|MIN|MAX/i.test(sf)) continue;
+      // 与上方 isAggregate 判定保持一致：只跳过「函数调用」形态的聚合项，避免列名子串（如 admin_id 含 min）误命中。
+      if (/(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(sf)) continue;
       const asM = sf.match(/\bAS\s+(\w+)\s*$/i);
       if (asM) {
         const alias = asM[1];
