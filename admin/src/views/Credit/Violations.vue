@@ -18,41 +18,57 @@
         <el-form-item>
           <el-button type="primary" @click="loadData">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
-          <el-button type="warning" @click="handleCreate">创建违规记录</el-button>
+        </el-form-item>
+        <el-form-item class="create-item">
+          <el-button type="primary" @click="handleCreate">创建违规记录</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="userName" label="学生姓名" width="100" />
-        <el-table-column prop="studentId" label="学号" width="130" />
-        <el-table-column prop="type" label="违规类型" width="110">
-          <template #default="{ row }">
-            <el-tag :type="typeMap[row.type]?.tagType || 'info'" size="small">{{ typeMap[row.type]?.label || '其他违规' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="deduction" label="扣分" width="80">
-          <template #default="{ row }">
-            <span style="color: #FF4D4F; font-weight: 600;">-{{ row.deduction }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdAt" label="记录时间" width="170" />
-        <el-table-column prop="operatorName" label="操作人" width="100" />
-      </el-table>
+    <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" />
 
-      <div class="pagination-wrap">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :total="pagination.total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
-          @current-change="loadData"
-        />
-      </div>
+    <el-card shadow="never">
+      <AsyncState
+        :loading="loading"
+        :error="!!loadError && !tableData.length"
+        :empty="!loading && !loadError && !tableData.length"
+        empty-description="暂无违规记录"
+        @retry="loadData"
+      >
+        <template #empty-action>
+          <el-button type="primary" @click="resetFilters">重置筛选</el-button>
+        </template>
+
+        <el-table :data="tableData" stripe>
+          <el-table-column prop="userName" label="学生姓名" width="100" />
+          <el-table-column prop="studentId" label="学号" width="130" />
+          <el-table-column prop="type" label="违规类型" width="110">
+            <template #default="{ row }">
+              <el-tag :type="typeMap[row.type]?.tagType || 'info'" size="small">{{ typeMap[row.type]?.label || '其他违规' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="deduction" label="扣分" width="80">
+            <template #default="{ row }">
+              <span style="color: #FF4D4F; font-weight: 600;">-{{ row.deduction }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="记录时间" width="170" />
+          <el-table-column prop="operatorName" label="操作人" width="100" />
+        </el-table>
+
+        <div class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="loadData"
+            @current-change="loadData"
+          />
+        </div>
+      </AsyncState>
     </el-card>
 
     <el-dialog v-model="createDialogVisible" title="创建违规记录" width="500px">
@@ -89,8 +105,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getViolations, createViolation } from '@/api/credit'
 import { ElMessage } from 'element-plus'
+import AsyncState from '@/components/admin/AsyncState.vue'
 
 const loading = ref(false)
+const loadError = ref('')
 const submitLoading = ref(false)
 const tableData = ref([])
 const createDialogVisible = ref(false)
@@ -106,7 +124,7 @@ const typeMap = {
 }
 
 const filters = reactive({ type: '', studentId: '' })
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const form = reactive({ studentId: '', type: '', deduction: 10, description: '' })
 const rules = {
   studentId: [{ required: true, message: '请输入学号', trigger: 'blur' }],
@@ -117,12 +135,13 @@ const rules = {
 
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await getViolations({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
-    // handled
+    loadError.value = '违规记录加载失败，请重试'
   } finally {
     loading.value = false
   }
@@ -171,6 +190,13 @@ onMounted(() => {
 
 .filter-card :deep(.el-card__body) {
   padding-bottom: 0;
+}
+
+/* 写操作与查询筛选视觉分区：以竖分隔线拉开「查询/重置」与「创建违规记录」 */
+.filter-card :deep(.create-item) {
+  margin-left: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--el-border-color-lighter, #EBEEF5);
 }
 
 .pagination-wrap {

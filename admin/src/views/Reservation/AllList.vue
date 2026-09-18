@@ -33,41 +33,52 @@
       </el-form>
     </el-card>
 
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false"><template #default><el-button link type="primary" @click="loadData">重试</el-button></template></el-alert>
+    <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" class="stale-alert" />
 
     <el-card shadow="never">
-      <el-empty v-if="!loading && !loadError && !tableData.length" description="暂无符合条件的预约" />
-      <el-table v-else-if="tableData.length || loading" :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="userName" label="预约人" width="100" />
-        <el-table-column prop="studentId" label="学号" width="130" />
-        <el-table-column prop="roomName" label="功能房" width="130" />
-        <el-table-column prop="date" label="预约日期" width="110" />
-        <el-table-column prop="timeSlot" label="时间段" width="150" />
-        <el-table-column prop="status" label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="purpose" label="用途" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="createdAt" label="创建时间" width="170" />
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="handleDetail(row)">详情</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <AsyncState
+        :loading="loading"
+        :error="!!loadError && !tableData.length"
+        :empty="!loading && !loadError && !tableData.length"
+        empty-description="暂无符合条件的预约"
+        @retry="loadData"
+      >
+        <template #empty-action>
+          <el-button type="primary" @click="resetFilters">重置筛选</el-button>
+        </template>
 
-      <div v-if="tableData.length" class="pagination-wrap">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :total="pagination.total"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
-          @current-change="loadData"
-        />
-      </div>
+        <el-table :data="tableData" stripe>
+          <el-table-column prop="userName" label="预约人" width="100" />
+          <el-table-column prop="studentId" label="学号" width="130" />
+          <el-table-column prop="roomName" label="功能房" width="130" />
+          <el-table-column prop="date" label="预约日期" width="110" />
+          <el-table-column prop="timeSlot" label="时间段" width="150" />
+          <el-table-column prop="status" label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="reservationStatusType(row.status)" size="small">{{ reservationStatusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="purpose" label="用途" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="创建时间" width="170" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" size="small" link @click="handleDetail(row)">详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-if="tableData.length" class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="loadData"
+            @current-change="loadData"
+          />
+        </div>
+      </AsyncState>
     </el-card>
 
     <el-dialog v-model="detailDialogVisible" title="预约详情" width="600px">
@@ -78,7 +89,7 @@
         <el-descriptions-item label="预约日期">{{ currentRow.date }}</el-descriptions-item>
         <el-descriptions-item label="时间段">{{ currentRow.timeSlot }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="statusMap[currentRow.status]?.type || 'info'" size="small">{{ statusMap[currentRow.status]?.label || '状态待确认' }}</el-tag>
+          <el-tag :type="reservationStatusType(currentRow.status)" size="small">{{ reservationStatusLabel(currentRow.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="用途" :span="2">{{ currentRow.purpose }}</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ currentRow.createdAt }}</el-descriptions-item>
@@ -96,6 +107,8 @@ import { getAll } from '@/api/reservation'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage } from 'element-plus'
 import { createLatestRequestCoordinator } from '@/utils/latestRequest'
+import { reservationStatusLabel, reservationStatusType } from '@/utils/reservationStatus'
+import AsyncState from '@/components/admin/AsyncState.vue'
 
 const loading = ref(false)
 const loadError = ref('')
@@ -104,19 +117,8 @@ const roomOptions = ref([])
 const detailDialogVisible = ref(false)
 const currentRow = ref(null)
 
-const statusMap = {
-  pending: { label: '待审核', type: 'warning' },
-  counselor_pending: { label: '辅导员审核', type: 'warning' },
-  approved: { label: '已通过', type: 'success' },
-  rejected: { label: '已驳回', type: 'danger' },
-  checked_in: { label: '使用中', type: '' },
-  completed: { label: '已完成', type: 'info' },
-  noshow: { label: '已爽约', type: 'danger' },
-  cancelled: { label: '已取消', type: 'info' }
-}
-
 const filters = reactive({ status: '', roomId: '', keyword: '', dateRange: null })
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 
 const listRequest = createLatestRequestCoordinator({
   load: params => getAll(params, { silentError: true }),
@@ -183,14 +185,13 @@ async function handleExport() {
       return
     }
     const XLSX = await import('xlsx')
-    const statusLabels = { pending: '待审核', counselor_pending: '辅导员审核', approved: '已通过', rejected: '已驳回', checked_in: '使用中', completed: '已完成', noshow: '已爽约', cancelled: '已取消' }
     const exportData = list.map(row => ({
       '预约人': row.userName,
       '学号': row.studentId,
       '功能房': row.roomName,
       '预约日期': row.date,
       '时间段': row.timeSlot,
-      '状态': statusLabels[row.status] || '状态待确认',
+      '状态': reservationStatusLabel(row.status),
       '用途': row.purpose || '',
       '创建时间': row.createdAt
     }))
@@ -228,4 +229,3 @@ onBeforeUnmount(() => { listRequest.invalidate() })
   margin-top: 16px;
 }
 </style>
-

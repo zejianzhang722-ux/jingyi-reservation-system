@@ -61,7 +61,7 @@ const tableData = ref([])
 const isCurrent = ref(false)
 
 const filters = reactive({ date: '', studentId: '' })
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 
 async function loadData() {
   isCurrent.value = false

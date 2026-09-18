@@ -26,35 +26,46 @@
       </el-form>
     </el-card>
 
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false"><template #default><el-button link type="primary" @click="loadData">重试</el-button></template></el-alert>
+    <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" />
 
     <el-card shadow="never">
-      <el-empty v-if="!loading && !loadError && !tableData.length" description="暂无操作记录" />
-      <el-table v-else-if="tableData.length || loading" :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="operatorName" label="操作人" width="100" />
-        <el-table-column prop="actionLabel" label="具体操作" min-width="150">
-          <template #default="{ row }">
-            <el-tag :type="actionTypeMap[row.actionCategory] || 'info'" size="small">{{ row.actionLabel || '操作待确认' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="moduleLabel" label="业务范围" width="130" />
-        <el-table-column prop="targetDescription" label="操作对象" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="detail" label="操作详情" min-width="200" show-overflow-tooltip />
-        <el-table-column label="来源记录" width="100"><template #default="{ row }">{{ row.sourceRecorded ? '已记录' : '未记录' }}</template></el-table-column>
-        <el-table-column prop="createdAt" label="操作时间" width="170" />
-      </el-table>
+      <AsyncState
+        :loading="loading"
+        :error="!!loadError && !tableData.length"
+        :empty="!loading && !loadError && !tableData.length"
+        empty-description="暂无操作记录"
+        @retry="loadData"
+      >
+        <template #empty-action>
+          <el-button type="primary" @click="resetFilters">重置筛选</el-button>
+        </template>
 
-      <div v-if="tableData.length" class="pagination-wrap">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :total="pagination.total"
-          :page-sizes="[20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
-          @current-change="loadData"
-        />
-      </div>
+        <el-table :data="tableData" stripe>
+          <el-table-column prop="operatorName" label="操作人" width="100" />
+          <el-table-column prop="actionLabel" label="具体操作" min-width="150">
+            <template #default="{ row }">
+              <el-tag :type="actionTypeMap[row.actionCategory] || 'info'" size="small">{{ row.actionLabel || '操作待确认' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="moduleLabel" label="业务范围" width="130" />
+          <el-table-column prop="targetDescription" label="操作对象" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="detail" label="操作详情" min-width="200" show-overflow-tooltip />
+          <el-table-column label="来源记录" width="100"><template #default="{ row }">{{ row.sourceRecorded ? '已记录' : '未记录' }}</template></el-table-column>
+          <el-table-column prop="createdAt" label="操作时间" width="170" />
+        </el-table>
+
+        <div v-if="tableData.length" class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="loadData"
+            @current-change="loadData"
+          />
+        </div>
+      </AsyncState>
     </el-card>
   </div>
 </template>
@@ -63,6 +74,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { getLogs } from '@/api/admin'
 import { createLatestRequestCoordinator } from '@/utils/latestRequest'
+import AsyncState from '@/components/admin/AsyncState.vue'
 
 const loading = ref(false)
 const loadError = ref('')
@@ -71,7 +83,7 @@ const tableData = ref([])
 const actionTypeMap = { login: '', create: 'success', update: 'warning', operate: 'warning', delete: 'danger', audit: '', export: 'success', other: 'info' }
 
 const filters = reactive({ operator: '', action: '', dateRange: null })
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 
 const logsRequest = createLatestRequestCoordinator({
   load: params => getLogs(params, { silentError: true }),

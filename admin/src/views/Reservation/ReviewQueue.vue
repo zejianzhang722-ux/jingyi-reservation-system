@@ -28,40 +28,50 @@
       <el-date-picker v-model="filters.date" type="date" placeholder="预约日期" value-format="YYYY-MM-DD" style="width: 180px" />
     </FilterBar>
 
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
-      <template #default><el-button link type="primary" @click="loadData">重试</el-button></template>
-    </el-alert>
+    <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" />
     <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
     <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" stripe>
-        <el-table-column type="selection" width="50" />
-        <el-table-column prop="userName" label="预约人" width="110" />
-        <el-table-column prop="studentId" label="学号" width="130" />
-        <el-table-column prop="roomName" label="功能房" min-width="150" />
-        <el-table-column prop="date" label="预约日期" width="120" />
-        <el-table-column prop="timeSlot" label="时间段" width="160" />
-        <el-table-column prop="purpose" label="用途" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="createdAt" label="提交时间" width="170" />
-        <el-table-column label="操作" width="190" fixed="right">
-          <template #default="{ row }">
-            <el-button type="success" size="small" link :loading="actionSubmitting" :disabled="actionSubmitting" @click="handleApprove(row)">通过</el-button>
-            <el-button type="warning" size="small" link :disabled="actionSubmitting" @click="openReturn(row)">退回</el-button>
-            <el-button type="primary" size="small" link @click="openDetail(row)">详情</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <AsyncState
+        :loading="loading"
+        :error="!!loadError && !tableData.length"
+        :empty="!loading && !loadError && !tableData.length"
+        empty-description="暂无待处理预约"
+        @retry="loadData"
+      >
+        <template #empty-action>
+          <el-button type="primary" @click="resetFilters">重置筛选</el-button>
+        </template>
 
-      <div class="pagination-wrap">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :total="pagination.total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
-          @current-change="loadData"
-        />
-      </div>
+        <el-table :data="tableData" @selection-change="handleSelectionChange" stripe>
+          <el-table-column type="selection" width="50" />
+          <el-table-column prop="userName" label="预约人" width="110" />
+          <el-table-column prop="studentId" label="学号" width="130" />
+          <el-table-column prop="roomName" label="功能房" min-width="150" />
+          <el-table-column prop="date" label="预约日期" width="120" />
+          <el-table-column prop="timeSlot" label="时间段" width="160" />
+          <el-table-column prop="purpose" label="用途" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="提交时间" width="170" />
+          <el-table-column label="操作" width="190" fixed="right">
+            <template #default="{ row }">
+              <el-button type="success" size="small" link :loading="actionSubmitting" :disabled="actionSubmitting" @click="handleApprove(row)">通过</el-button>
+              <el-button type="warning" size="small" link :disabled="actionSubmitting" @click="openReturn(row)">退回</el-button>
+              <el-button type="primary" size="small" link @click="openDetail(row)">详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="loadData"
+            @current-change="loadData"
+          />
+        </div>
+      </AsyncState>
     </el-card>
 
     <el-dialog v-model="returnDialogVisible" title="退回预约" width="500px">
@@ -93,6 +103,35 @@
         <el-descriptions-item label="用途">{{ currentRow.purpose }}</el-descriptions-item>
         <el-descriptions-item label="提交时间">{{ currentRow.createdAt }}</el-descriptions-item>
       </el-descriptions>
+
+      <div class="trail-section" v-if="currentRow">
+        <div class="trail-title">审核轨迹 · 一审 / 二审进度</div>
+        <AsyncState
+          :loading="trailLoading"
+          :error="!!trailError"
+          :empty="!trailLoading && !trailError && !trailList.length"
+          :error-message="trailError"
+          empty-description="暂无审核轨迹"
+          @retry="loadTrail(currentRow.id)"
+        >
+          <el-timeline>
+            <el-timeline-item
+              v-for="item in trailList"
+              :key="item.id"
+              :timestamp="item.createdAt || ''"
+              :type="trailActionType(item.action)"
+              placement="top"
+            >
+              <div class="trail-line">
+                <el-tag size="small" :type="trailActionType(item.action)">{{ trailStageLabel(item.stage) }} · {{ trailActionLabel(item.action) }}</el-tag>
+                <span class="trail-actor">{{ trailRoleLabel(item.actorRole) }}</span>
+              </div>
+              <div v-if="item.remark" class="trail-remark">{{ item.remark }}</div>
+            </el-timeline-item>
+          </el-timeline>
+        </AsyncState>
+      </div>
+
       <template #footer>
         <div class="drawer-actions" v-if="currentRow">
           <el-button type="warning" :disabled="actionSubmitting" @click="openReturn(currentRow); detailVisible = false">退回</el-button>
@@ -105,12 +144,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getPending, approve, reject as returnReservation, batchAudit } from '@/api/reservation'
+import { getPending, approve, reject as returnReservation, batchAudit, getReservationTrail } from '@/api/reservation'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import AsyncState from '@/components/admin/AsyncState.vue'
 import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '@/utils/approvalState'
 
 const loading = ref(false)
@@ -125,6 +165,19 @@ const returnDialogVisible = ref(false)
 const detailVisible = ref(false)
 const currentRow = ref(null)
 const returnTemplate = ref('')
+
+// R-07 审核轨迹（只读）
+const trailLoading = ref(false)
+const trailError = ref('')
+const trailList = ref([])
+const TRAIL_STAGE_LABELS = { first: '一审', counselor: '二审' }
+const TRAIL_ACTION_LABELS = { approve: '通过', reject: '驳回', remark: '批注', transfer: '转派' }
+const TRAIL_ACTION_TYPES = { approve: 'success', reject: 'danger', remark: 'info', transfer: 'warning' }
+const TRAIL_ROLE_LABELS = { admin: '管理员', super_admin: '超级管理员', counselor: '辅导员', system: '系统', student: '学生' }
+const trailStageLabel = stage => TRAIL_STAGE_LABELS[stage] || '审核'
+const trailActionLabel = action => TRAIL_ACTION_LABELS[action] || '记录'
+const trailActionType = action => TRAIL_ACTION_TYPES[action] || 'info'
+const trailRoleLabel = role => TRAIL_ROLE_LABELS[role] || '系统'
 
 const filters = reactive({ roomId: '', date: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
@@ -150,6 +203,21 @@ async function loadRooms() {
     roomOptions.value = res.data?.list || []
   } catch (e) {
     roomOptions.value = []
+  }
+}
+
+async function loadTrail(id) {
+  if (!id) return
+  trailLoading.value = true
+  trailError.value = ''
+  try {
+    const res = await getReservationTrail(id)
+    trailList.value = Array.isArray(res.data) ? res.data : []
+  } catch (e) {
+    trailList.value = []
+    trailError.value = '审核轨迹加载失败，请重试'
+  } finally {
+    trailLoading.value = false
   }
 }
 
@@ -219,7 +287,10 @@ async function confirmReturn() {
 
 function openDetail(row) {
   currentRow.value = row
+  trailList.value = []
+  trailError.value = ''
   detailVisible.value = true
+  loadTrail(row.id)
 }
 
 async function handleBatch(action) {
@@ -269,5 +340,33 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 8px;
 }
-</style>
 
+.trail-section {
+  margin-top: 20px;
+}
+
+.trail-title {
+  font-weight: 600;
+  color: var(--jy-text-primary, #1A1A2E);
+  margin-bottom: 12px;
+}
+
+.trail-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trail-actor {
+  font-size: 12px;
+  color: var(--jy-text-secondary, #8C8C9A);
+}
+
+.trail-remark {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--jy-text-secondary, #475569);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+</style>

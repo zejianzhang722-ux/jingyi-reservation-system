@@ -37,46 +37,57 @@
       </el-select>
     </FilterBar>
 
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" class="load-alert"><template #default><el-button link type="primary" @click="loadData">重试</el-button></template></el-alert>
+    <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" class="load-alert" />
 
     <el-card shadow="never">
-      <el-empty v-if="!loading && !loadError && !tableData.length" description="暂无符合条件的功能房" />
-      <el-table v-else-if="tableData.length || loading" :data="tableData" v-loading="loading" stripe>
-        <el-table-column prop="name" label="名称" min-width="150" />
-        <el-table-column prop="type" label="类型" width="130">
-          <template #default="{ row }">
-            <el-tag size="small">{{ typeLabels[row.type] || '类型待确认' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="building_name" label="楼栋" width="110" />
-        <el-table-column prop="floor" label="楼层" width="80" />
-        <el-table-column prop="capacity" label="容量" width="90" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
-        <el-table-column label="操作" width="230" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="success" size="small" link @click="handleSeats(row)">座位</el-button>
-            <el-button type="danger" size="small" link @click="handleDelete(row)">关闭</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <AsyncState
+        :loading="loading"
+        :error="!!loadError && !tableData.length"
+        :empty="!loading && !loadError && !tableData.length"
+        empty-description="暂无符合条件的功能房"
+        @retry="loadData"
+      >
+        <template #empty-action>
+          <el-button type="primary" @click="resetFilters">重置筛选</el-button>
+        </template>
 
-      <div v-if="tableData.length" class="pagination-wrap">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :total="pagination.total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
-          @current-change="loadData"
-        />
-      </div>
+        <el-table :data="tableData" stripe>
+          <el-table-column prop="name" label="名称" min-width="150" />
+          <el-table-column prop="type" label="类型" width="130">
+            <template #default="{ row }">
+              <el-tag size="small">{{ typeLabels[row.type] || '类型待确认' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="building_name" label="楼栋" width="110" />
+          <el-table-column prop="floor" label="楼层" width="80" />
+          <el-table-column prop="capacity" label="容量" width="90" />
+          <el-table-column prop="status" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+          <el-table-column label="操作" width="230" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" size="small" link @click="handleEdit(row)">编辑</el-button>
+              <el-button type="success" size="small" link @click="handleSeats(row)">座位</el-button>
+              <el-button type="danger" size="small" link @click="handleDelete(row)">关闭</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-if="tableData.length" class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="loadData"
+            @current-change="loadData"
+          />
+        </div>
+      </AsyncState>
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑功能房' : '新增功能房'" width="620px" @close="resetForm">
@@ -174,6 +185,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import AsyncState from '@/components/admin/AsyncState.vue'
 import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 
 const loading = ref(false)
@@ -419,7 +431,7 @@ onBeforeUnmount(() => { roomListRequest.invalidate() })
 }
 
 .load-alert {
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .seat-toolbar {
@@ -480,4 +492,3 @@ onBeforeUnmount(() => { roomListRequest.invalidate() })
   margin-top: 10px;
 }
 </style>
-

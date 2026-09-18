@@ -109,7 +109,7 @@ async function loadCurrentList() {
 
 async function loadPatrolList() {
   try {
-    const res = await getPatrolList({ pageSize: 20 })
+    const res = await getPatrolList({ pageSize: 10 })
     patrolList.value = res.data?.list || []
   } catch (e) {
     // handled

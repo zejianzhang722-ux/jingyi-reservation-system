@@ -33,3 +33,13 @@ export function getDetail(id) {
 export function getCounselorPending(params) {
   return request.get('/audit/counselor/pending', { params })
 }
+
+/**
+ * 获取预约审核轨迹（一审 / 二审批注，只读，入口已脱敏）。
+ * 后端：GET /api/v1/reservation/:id/trail（见 server/src/controllers/reservationTrailController.js）
+ * @param {number|string} id 预约 id
+ * @returns {Promise<{code:number,message:string,data:Array}>} data 为轨迹数组
+ */
+export function getReservationTrail(id) {
+  return request.get(`/reservation/${id}/trail`)
+}

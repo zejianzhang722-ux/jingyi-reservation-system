@@ -23,47 +23,58 @@
       </el-select>
     </FilterBar>
 
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" class="load-alert"><template #default><el-button link type="primary" @click="loadFeedbacks">重试</el-button></template></el-alert>
+    <el-alert v-if="loadError && feedbacks.length" :title="loadError" type="warning" show-icon :closable="false" class="load-alert" />
 
     <el-card shadow="never">
-      <el-empty v-if="!loading && !loadError && !feedbacks.length" description="暂无用户反馈" />
-      <el-table v-else-if="feedbacks.length || loading" :data="feedbacks" v-loading="loading" stripe>
-        <el-table-column prop="userName" label="用户" width="110" />
-        <el-table-column prop="type" label="类型" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.type === 'bug' ? 'danger' : row.type === 'feature' ? 'success' : 'info'" size="small">
-              {{ typeMap[row.type] || '类型待确认' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="content" label="内容" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="contact" label="联系方式" width="140" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'resolved' ? 'success' : 'warning'" size="small">
-              {{ row.status === 'resolved' ? '已处理' : '待处理' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdAt" label="提交时间" width="170" />
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="row.status !== 'resolved'" type="primary" size="small" link @click="openResolve(row)">回复处理</el-button>
-            <el-button v-else type="info" size="small" link @click="openResolve(row)">查看回复</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div v-if="feedbacks.length" class="pagination-wrap">
-        <el-pagination
-          v-model:current-page="page"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadFeedbacks"
-          @current-change="loadFeedbacks"
-        />
-      </div>
+      <AsyncState
+        :loading="loading"
+        :error="!!loadError && !feedbacks.length"
+        :empty="!loading && !loadError && !feedbacks.length"
+        empty-description="暂无用户反馈"
+        @retry="loadFeedbacks"
+      >
+        <template #empty-action>
+          <el-button type="primary" @click="resetFilters">重置筛选</el-button>
+        </template>
+
+        <el-table :data="feedbacks" stripe>
+          <el-table-column prop="userName" label="用户" width="110" />
+          <el-table-column prop="type" label="类型" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.type === 'bug' ? 'danger' : row.type === 'feature' ? 'success' : 'info'" size="small">
+                {{ typeMap[row.type] || '类型待确认' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="content" label="内容" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="contact" label="联系方式" width="140" />
+          <el-table-column prop="status" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'resolved' ? 'success' : 'warning'" size="small">
+                {{ row.status === 'resolved' ? '已处理' : '待处理' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="提交时间" width="170" />
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <el-button v-if="row.status !== 'resolved'" type="primary" size="small" link @click="openResolve(row)">回复处理</el-button>
+              <el-button v-else type="info" size="small" link @click="openResolve(row)">查看回复</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="feedbacks.length" class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            :total="total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="loadFeedbacks"
+            @current-change="loadFeedbacks"
+          />
+        </div>
+      </AsyncState>
     </el-card>
 
     <el-dialog v-model="resolveDialogVisible" title="回复反馈" width="520px">
@@ -89,6 +100,7 @@ import request from '@/utils/request'
 import PageShell from '@/components/admin/PageShell.vue'
 import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import AsyncState from '@/components/admin/AsyncState.vue'
 import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 
 const feedbacks = ref([])
@@ -96,7 +108,7 @@ const loading = ref(false)
 const loadError = ref('')
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(10)
 const statusFilter = ref('')
 const resolveDialogVisible = ref(false)
 const currentFeedback = ref(null)
@@ -165,7 +177,6 @@ onBeforeUnmount(() => { feedbackRequest.invalidate() })
 }
 
 .load-alert {
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 </style>
-
