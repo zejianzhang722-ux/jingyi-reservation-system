@@ -21,6 +21,8 @@ const logger = require('../config/logger');
 const commandService = require('./reservationCommandService');
 const lifecycleService = require('./reservationLifecycleService');
 const notificationService = require('./notificationService');
+const auditTrailService = require('./auditTrailService');
+const reservationAuditTrailService = require('./reservationAuditTrailService');
 
 const httpError = commandService.httpError;
 
@@ -503,7 +505,22 @@ const allowedApprovalStatusesForRole = function(role) {
   return [];
 };
 
-const approveGroup = async function(groupId, adminId, role) {
+/**
+ * 审批通过组团预约。
+ *
+ * 一致性约束（与常规预约审批 reservationApprovalController.approve 对齐，F2 收口）：
+ *  - R-02 乐观锁：主预约 reservations 的 UPDATE 必须 `version = version + 1`，
+ *    即便客户端未传版本号也必然推进版本号，杜绝第三条写路径绕过乐观锁。
+ *  - R-08 审计：业务批注轨迹（reservation_audit_trail，用户可见）+ 防篡改审计链
+ *    （operation_logs 哈希链，合规取证）双写，与常规审批一致。
+ *
+ * @param {number} groupId 团队 id
+ * @param {number} adminId 操作管理员 id
+ * @param {string} role 操作人角色
+ * @param {object} [options] 可选上下文，目前仅携带 requestId 供审计链关联
+ */
+const approveGroup = async function(groupId, adminId, role, options) {
+  const settings = options || {};
   const allowed = allowedApprovalStatusesForRole(role);
   if (!allowed.length) throw httpError(403, '当前角色无权审批组团预约');
 
@@ -514,8 +531,9 @@ const approveGroup = async function(groupId, adminId, role) {
   }
   if (!group.reservation_id) throw httpError(409, '该组团缺少关联预约，无法审批');
 
+  // R-02 乐观锁：version = version + 1 必然推进；WHERE status = ? 兜底并发双审。
   const [result] = await db.query(
-    "UPDATE reservations SET status = 'approved', audited_by = ?, audited_at = NOW() WHERE id = ? AND status = ?",
+    "UPDATE reservations SET status = 'approved', audited_by = ?, audited_at = NOW(), version = version + 1 WHERE id = ? AND status = ?",
     [adminId, group.reservation_id, group.status]
   );
   if (!result || result.affectedRows === 0) {
@@ -530,6 +548,43 @@ const approveGroup = async function(groupId, adminId, role) {
     "UPDATE reservation_group_members SET status = 'confirmed' WHERE group_id = ? AND status <> 'rejected'",
     [groupId]
   );
+
+  // R-08 双写轨迹：业务批注轨迹（用户可见）+ 防篡改审计链（合规取证）。
+  // 均为 best-effort，失败仅记日志，不影响已提交的业务动作（与常规审批一致）。
+  const stage = reservationAuditTrailService.stageForStatus(group.status);
+  try {
+    await reservationAuditTrailService.record({
+      reservationId: group.reservation_id,
+      stage: stage,
+      actorId: adminId,
+      actorRole: role,
+      action: reservationAuditTrailService.ACTIONS.APPROVE,
+      remark: ''
+    });
+  } catch (err) {
+    logger.error('组团审批业务轨迹写入失败(group=' + groupId + '):', err);
+  }
+  try {
+    await auditTrailService.record({
+      operatorId: adminId,
+      requestId: settings.requestId || null,
+      actorRole: role,
+      action: 'reservation.approve',
+      targetTable: 'reservations',
+      targetId: group.reservation_id,
+      description: '组团预约审批通过：' + (group.name || ''),
+      method: 'POST',
+      path: '/api/v1/groups/' + groupId + '/approve',
+      statusCode: 200,
+      metadata: {
+        groupId: Number(groupId),
+        reservationId: Number(group.reservation_id),
+        stage: stage
+      }
+    });
+  } catch (err) {
+    logger.error('组团审批审计链写入失败(group=' + groupId + '):', err);
+  }
 
   await notifySafely(group.created_by, 'group_approved', '组团预约已通过', '你的组团预约「' + (group.name || '') + '」已通过审批', { groupId });
   return loadGroup(groupId, group.created_by);

@@ -147,7 +147,7 @@ const approve = async function(req, res) {
     const preview = await reservationGroupService.loadGroup(groupId, req.user.id);
     if (!ensureGroupInScope(req, res, preview)) return;
 
-    const group = await reservationGroupService.approveGroup(groupId, req.user.id, req.user.role);
+    const group = await reservationGroupService.approveGroup(groupId, req.user.id, req.user.role, { requestId: req.requestId });
     return response.success(res, group, '审批通过');
   } catch (err) {
     return fail(res, err, '审批失败');
