@@ -9,6 +9,8 @@ const reservationLifecycleService = require('../services/reservationLifecycleSer
 const realtimeEventService = require('../services/realtimeEventService');
 const privacyAuditService = require('../services/privacyAuditService');
 const helpers = require('../utils/helpers');
+// 复用 scopedStatsController 的 buildingFilter 数据域过滤模式（无循环依赖）。
+const { buildingFilter } = require('./scopedStatsController');
 
 const ensureProductionDatabase = function() {
   if (process.env.NODE_ENV === 'production' && db.isMock()) {
@@ -495,6 +497,64 @@ const patrol = async function(req, res) {
   }
 };
 
+/**
+ * 实时签到面板（管理员数据域）：当前所有「在场」签到记录（不限定房间）。
+ *
+ * 前端「实时签到面板」需要的是管理员数据域范围内的全部在场签到列表，而非按房间查询。
+ * 复用 scopedStatsController 的 buildingFilter 模式按数据域过滤，并走统一的隐私脱敏出口。
+ *
+ * 返回分页结构 { list, total, ... }（与前端 res.data?.list / res.data?.total 对齐）。
+ */
+const currentCheckinsAll = async function(req, res) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.max(1, parseInt(req.query.pageSize, 10) || 10);
+    const scope = buildingFilter(req, 'rm');
+    const where = 'c.checkout_time IS NULL' + scope.sql;
+    const scopeParams = scope.params || [];
+
+    const [countRows] = await db.query(
+      'SELECT COUNT(*) AS total FROM checkins c JOIN rooms rm ON rm.id = c.room_id WHERE ' + where,
+      scopeParams
+    );
+    const total = countRows && countRows.length ? Number(countRows[0].total || 0) : 0;
+
+    const [rows] = await db.query(
+      'SELECT c.reservation_id AS reservation_id, u.real_name AS real_name, u.nickname AS nickname, ' +
+      'u.student_id AS student_id, rm.name AS room_name, c.seat_number AS seat_number, ' +
+      'c.checkin_time AS checkin_time, rm.building_id AS building_id, c.user_id AS user_id ' +
+      'FROM checkins c JOIN reservations r ON c.reservation_id = r.id ' +
+      'JOIN rooms rm ON rm.id = c.room_id JOIN users u ON c.user_id = u.id ' +
+      'WHERE ' + where + ' ORDER BY c.checkin_time DESC LIMIT ? OFFSET ?',
+      scopeParams.concat([pageSize, (page - 1) * pageSize])
+    );
+
+    // 按请求者身份分级脱敏：管理员在数据域内可见明文（并落审计），否则掩码。
+    const safeRows = await privacyAuditService.maskRowsForRequest(req, rows, {
+      targetTable: 'checkins',
+      description: '当前在场签到列表：管理员查看明文个人信息'
+    });
+
+    const shaped = safeRows.map(function(row) {
+      return {
+        reservationId: row.reservation_id,
+        userName: row.real_name || row.nickname,
+        studentId: row.student_id,
+        roomName: row.room_name,
+        seatNumber: row.seat_number,
+        checkinTime: row.checkin_time,
+        // duration 由前端基于 checkinTime 实时计算，后端不存。
+        duration: ''
+      };
+    });
+
+    return response.paginate(res, shaped, total, page, pageSize);
+  } catch (err) {
+    logger.error('获取当前在场签到列表（全部）异常:', err);
+    return response.error(res, err.message || '获取当前在场签到列表失败', err.httpStatus || 500);
+  }
+};
+
 module.exports = {
   ensureProductionDatabase,
   checkin,
@@ -504,5 +564,6 @@ module.exports = {
   applyManualCheckinWithinTransaction,
   applyManualSignoutWithinTransaction,
   currentCheckins,
+  currentCheckinsAll,
   patrol
 };

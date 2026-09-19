@@ -61,19 +61,45 @@
 
         <el-card shadow="never" style="margin-top: 16px">
           <template #header>
-            <span class="card-title">巡查记录</span>
+            <span class="card-title">巡查操作</span>
           </template>
-          <el-table :data="patrolList" size="small" max-height="300">
-            <el-table-column prop="roomName" label="功能房" width="100" />
-            <el-table-column prop="status" label="状态" width="70">
-              <template #default="{ row }">
-                <el-tag :type="row.status === 'normal' ? 'success' : 'warning'" size="small">
-                  {{ row.status === 'normal' ? '正常' : '异常' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="patrolTime" label="巡查时间" width="130" />
-          </el-table>
+          <el-form :model="patrolForm" label-width="80px">
+            <el-form-item label="在场记录">
+              <el-select
+                v-model="patrolForm.reservationId"
+                placeholder="选择在场签到记录"
+                filterable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="o in patrolOptions"
+                  :key="o.reservationId"
+                  :label="`${o.userName}（${o.roomName}${o.seatNumber ? ' / ' + o.seatNumber + '座' : ''}）`"
+                  :value="o.reservationId"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="巡查状态">
+              <el-select v-model="patrolForm.status" style="width: 100%">
+                <el-option label="正常" value="normal" />
+                <el-option label="缺席（爽约）" value="absent" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button
+                type="primary"
+                style="width: 100%"
+                :loading="patrolSubmitting"
+                @click="handlePatrol"
+              >提交巡查</el-button>
+            </el-form-item>
+          </el-form>
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="选择一条在场签到记录并提交。状态为「缺席」将标记为爽约并扣信用分。"
+          />
         </el-card>
       </el-col>
     </el-row>
@@ -82,37 +108,54 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { manualCheckin, manualCheckout, getCurrentList, getPatrolList } from '@/api/checkin'
+import { manualCheckin, manualCheckout, getCurrentList, submitPatrol } from '@/api/checkin'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
+const patrolSubmitting = ref(false)
 const currentList = ref([])
-const patrolList = ref([])
 const roomOptions = ref([])
+const patrolOptions = ref([])
 
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const checkinForm = reactive({ studentId: '', roomId: '', seatNumber: '' })
+const patrolForm = reactive({ reservationId: '', status: 'normal' })
+
+// 基于签到时间实时计算在场时长。
+function computeDuration(checkinTime) {
+  if (!checkinTime) return ''
+  const start = new Date(String(checkinTime).replace(' ', 'T'))
+  if (Number.isNaN(start.getTime())) return ''
+  const diffMs = Math.max(0, Date.now() - start.getTime())
+  const totalMinutes = Math.floor(diffMs / 60000)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return hours > 0 ? `${hours}小时${minutes}分` : `${minutes}分`
+}
 
 async function loadCurrentList() {
   loading.value = true
   try {
     const res = await getCurrentList({ page: pagination.page, pageSize: pagination.pageSize })
-    currentList.value = res.data?.list || []
+    currentList.value = (res.data?.list || []).map(function(item) {
+      return Object.assign({}, item, { duration: computeDuration(item.checkinTime) })
+    })
     pagination.total = res.data?.total || 0
   } catch (e) {
-    // handled
+    // 已由全局拦截器处理
   } finally {
     loading.value = false
   }
 }
 
-async function loadPatrolList() {
+// 巡查操作的目标下拉：复用在场签到列表（大页），展示在巡记录供管理员选择。
+async function loadCheckinOptions() {
   try {
-    const res = await getPatrolList({ pageSize: 10 })
-    patrolList.value = res.data?.list || []
+    const res = await getCurrentList({ page: 1, pageSize: 100 })
+    patrolOptions.value = res.data?.list || []
   } catch (e) {
-    // handled
+    // 已由全局拦截器处理
   }
 }
 
@@ -121,7 +164,7 @@ async function loadRooms() {
     const res = await getRoomList({ pageSize: 100 })
     roomOptions.value = res.data?.list || []
   } catch (e) {
-    // handled
+    // 已由全局拦截器处理
   }
 }
 
@@ -137,8 +180,40 @@ async function handleManualCheckin() {
     checkinForm.roomId = ''
     checkinForm.seatNumber = ''
     loadCurrentList()
+    loadCheckinOptions()
   } catch (e) {
-    // handled
+    // 已由全局拦截器处理
+  }
+}
+
+async function handlePatrol() {
+  if (!patrolForm.reservationId) {
+    ElMessage.warning('请选择巡查的在场签到记录')
+    return
+  }
+  const confirmText = patrolForm.status === 'absent'
+    ? '确认将该记录标记为「缺席（爽约）」？将扣减信用分。'
+    : '确认提交该记录的巡查结果？'
+  try {
+    await ElMessageBox.confirm(confirmText, '提示', { type: 'warning' })
+  } catch (e) {
+    return // 用户取消
+  }
+  patrolSubmitting.value = true
+  try {
+    await submitPatrol({
+      reservationId: Number(patrolForm.reservationId),
+      status: patrolForm.status
+    })
+    ElMessage.success('巡查记录已提交')
+    patrolForm.reservationId = ''
+    patrolForm.status = 'normal'
+    loadCurrentList()
+    loadCheckinOptions()
+  } catch (e) {
+    // 已由全局拦截器处理
+  } finally {
+    patrolSubmitting.value = false
   }
 }
 
@@ -148,14 +223,15 @@ async function handleCheckout(row) {
     await manualCheckout({ reservationId: row.reservationId })
     ElMessage.success('签退成功')
     loadCurrentList()
+    loadCheckinOptions()
   } catch (e) {
-    // cancelled
+    // 取消或未处理
   }
 }
 
 onMounted(() => {
   loadCurrentList()
-  loadPatrolList()
+  loadCheckinOptions()
   loadRooms()
 })
 </script>

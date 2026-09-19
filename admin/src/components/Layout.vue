@@ -77,20 +77,60 @@
           </div>
           <div class="header-right">
             <el-button class="quick-btn" :icon="Search" circle @click="quickSearchVisible = true" />
-            <el-button
-              class="quick-btn notify-btn"
-              :icon="Bell"
-              circle
-              :aria-label="pendingCount > 0 ? `待审核预约，${pendingCount} 条` : '待审核预约'"
-              @click="goPending"
+            <el-popover
+              v-model:visible="notificationsVisible"
+              placement="bottom-end"
+              :width="348"
+              trigger="manual"
+              :aria-label="unreadCount > 0 ? `消息中心，有 ${unreadCount} 条未读` : '消息中心'"
             >
-              <span
-                v-if="pendingCount > 0"
-                class="pending-badge"
-                role="status"
-                :aria-label="`有 ${pendingCount} 条待审核预约`"
-              >{{ pendingCount }}</span>
-            </el-button>
+              <template #reference>
+                <el-button
+                  class="quick-btn notify-btn"
+                  :icon="Bell"
+                  circle
+                  :aria-label="unreadCount > 0 ? `消息中心，有 ${unreadCount} 条未读` : '消息中心'"
+                  @click="toggleNotifications"
+                >
+                  <span
+                    v-if="unreadCount > 0"
+                    class="pending-badge"
+                    role="status"
+                    :aria-label="`有 ${unreadCount} 条未读消息`"
+                  >{{ unreadCount }}</span>
+                </el-button>
+              </template>
+              <div class="notify-panel">
+                <div class="notify-panel-header">
+                  <span class="notify-panel-title">消息中心</span>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :disabled="unreadCount === 0"
+                    @click="handleMarkAllRead"
+                  >标记全部已读</el-button>
+                </div>
+                <div v-loading="notifyLoading" class="notify-list">
+                  <div
+                    v-for="item in notifications"
+                    :key="item.id"
+                    class="notify-item"
+                    :class="{ unread: !item.is_read }"
+                    @click="handleNotifyClick(item)"
+                  >
+                    <div class="notify-item-title">{{ item.title }}</div>
+                    <div class="notify-item-content">{{ item.content }}</div>
+                    <div class="notify-item-time">{{ formatNotifyTime(item.created_at) }}</div>
+                  </div>
+                  <el-empty
+                    v-if="!notifyLoading && notifications.length === 0"
+                    description="暂无消息"
+                    :image-size="56"
+                  />
+                </div>
+              </div>
+            </el-popover>
             <el-tag type="warning" effect="light">{{ roleLabel }}</el-tag>
             <el-dropdown @command="handleCommand">
               <span class="user-info">
@@ -150,6 +190,7 @@ import { Search, Bell } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { buildNavigation, getNavigationSectionForRoute } from '@/router/adminRoutes'
 import { getPendingCount } from '@/api/reservation'
+import { getNotifications, getUnreadCount, markRead, markAllRead } from '@/api/notification'
 import {
   createNavigationMenuSync,
   ensureActiveGroup,
@@ -167,6 +208,10 @@ const isCollapse = ref(false)
 const quickSearchVisible = ref(false)
 const quickKeyword = ref('')
 const pendingCount = ref(0)
+const notificationsVisible = ref(false)
+const notifications = ref([])
+const unreadCount = ref(0)
+const notifyLoading = ref(false)
 const openGroups = ref([])
 const menuRef = ref(null)
 const menuSync = createNavigationMenuSync()
@@ -216,7 +261,80 @@ async function loadPendingCount() {
   }
 }
 
+async function loadUnreadCount() {
+  if (!userStore.token) {
+    unreadCount.value = 0
+    return
+  }
+  try {
+    const res = await getUnreadCount()
+    unreadCount.value = (res.data && Number(res.data.count)) || 0
+  } catch {
+    unreadCount.value = 0
+  }
+}
+
+async function fetchNotifications() {
+  if (!userStore.token) {
+    notifications.value = []
+    return
+  }
+  notifyLoading.value = true
+  try {
+    const res = await getNotifications({ pageSize: 20 })
+    notifications.value = res.data?.list || []
+    await loadUnreadCount()
+  } catch {
+    notifications.value = []
+  } finally {
+    notifyLoading.value = false
+  }
+}
+
+function toggleNotifications() {
+  notificationsVisible.value = !notificationsVisible.value
+  if (notificationsVisible.value) fetchNotifications()
+}
+
+async function handleMarkAllRead() {
+  try {
+    await markAllRead()
+    notifications.value = notifications.value.map(function(item) {
+      return Object.assign({}, item, { is_read: 1 })
+    })
+    unreadCount.value = 0
+  } catch {
+    // 已由全局拦截器处理
+  }
+}
+
+async function handleNotifyClick(item) {
+  try {
+    if (!item.is_read) await markRead(item.id)
+  } catch {
+    // 标记已读失败不阻断跳转
+  }
+  const link = item.data && (item.data.link || item.data.route)
+  if (link) {
+    notificationsVisible.value = false
+    router.push(link)
+    return
+  }
+  item.is_read = 1
+  await loadUnreadCount()
+}
+
+function formatNotifyTime(value) {
+  if (!value) return ''
+  const date = new Date(String(value).replace(' ', 'T'))
+  if (Number.isNaN(date.getTime())) return String(value)
+  const pad = function(n) { return String(n).padStart(2, '0') }
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 watch(() => userStore.token, loadPendingCount, { immediate: true })
+watch(() => userStore.token, loadUnreadCount, { immediate: true })
+watch(() => userStore.userInfo && userStore.userInfo.id, loadUnreadCount)
 watch(() => route.fullPath, loadPendingCount)
 watch(
   navigationStateKey,
@@ -651,5 +769,89 @@ function handleCommand(command) {
   margin-top: 4px;
   font-size: 12px;
   color: var(--jy-text-secondary, #8C8C9A);
+}
+
+.notify-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+}
+
+.notify-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--jy-border, #ECECEF);
+}
+
+.notify-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--jy-text-primary, #1A1A2E);
+}
+
+.notify-list {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.notify-item {
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color var(--jy-motion-fast, 160ms) ease;
+}
+
+.notify-item + .notify-item {
+  border-top: 1px solid var(--jy-border, #F0F0F3);
+}
+
+.notify-item:hover {
+  background: var(--jy-primary-bg, rgba(0, 102, 204, 0.08));
+}
+
+.notify-item.unread {
+  background: rgba(0, 102, 204, 0.06);
+}
+
+.notify-item-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--jy-text-primary, #1A1A2E);
+  position: relative;
+  padding-left: 12px;
+}
+
+.notify-item.unread .notify-item-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--jy-danger, #FF4D4F);
+}
+
+.notify-item-content {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--jy-text-secondary, #8C8C9A);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notify-item-time {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #B5B5BE;
 }
 </style>

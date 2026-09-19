@@ -269,8 +269,11 @@ const reservationStats = async function(req, res) {
 const usageRate = async function(req, res) {
   try {
     const range = dateRange(req);
-    const hasRoomId = req.query && Object.prototype.hasOwnProperty.call(req.query, 'roomId');
-    const parsedRoomId = hasRoomId ? Number(req.query.roomId) : null;
+    // BUG#1a：将「空字符串 / 纯空白」视为「未选择房间」，不再误判为非法编号而返回 400。
+    // 仅当 roomId 确实存在且为非空值时，才做整数与正数校验。
+    const rawRoomId = req.query ? req.query.roomId : undefined;
+    const hasRoomId = rawRoomId !== undefined && rawRoomId !== null && String(rawRoomId).trim() !== '';
+    const parsedRoomId = hasRoomId ? Number(rawRoomId) : null;
     if (hasRoomId && (!Number.isInteger(parsedRoomId) || parsedRoomId <= 0)) {
       return response.error(res, '房间编号无效', 400);
     }
