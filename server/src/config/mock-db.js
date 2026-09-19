@@ -178,6 +178,18 @@ tables.credits_log = [
 ];
 tables.violations = [];
 tables.posters = [];
+// 张贴位置（poster_positions）：与 server/sql/migrations/20260920_poster_positions.sql 表名、
+// 字段严格一致。必须预置数据——mock 模式下 SELECT 对未注册的表只会返回空数组，
+// 页面会一片空白、无法验证。
+tables.poster_positions = [
+  { id: 1, name: 'B座一楼大厅公告栏', building_id: 1, floor: 1, max_posters: 6, current_posters: 2, status: 'active', description: 'B座一楼大厅主公告栏，人流量最大', created_at: now, updated_at: now },
+  { id: 2, name: 'B座二楼电梯口展板', building_id: 1, floor: 2, max_posters: 4, current_posters: 1, status: 'active', description: 'B座二楼电梯口，适合社团活动预告', created_at: now, updated_at: now },
+  { id: 3, name: 'B座五楼自习区走廊', building_id: 1, floor: 5, max_posters: 3, current_posters: 0, status: 'inactive', description: '走廊墙面整修中，暂停使用', created_at: now, updated_at: now },
+  { id: 4, name: 'C座一楼入口展板', building_id: 2, floor: 1, max_posters: 8, current_posters: 3, status: 'active', description: 'C座正门入口，双面展板', created_at: now, updated_at: now },
+  { id: 5, name: 'C座三楼公告栏', building_id: 2, floor: 3, max_posters: 4, current_posters: 0, status: 'active', description: 'C座三楼楼梯口', created_at: now, updated_at: now },
+  { id: 6, name: 'D座四楼自习室门口', building_id: 3, floor: 4, max_posters: 2, current_posters: 0, status: 'active', description: 'D418自习室门口小型展板', created_at: now, updated_at: now },
+  { id: 7, name: 'D座五楼共享空间', building_id: 3, floor: 5, max_posters: 5, current_posters: 1, status: 'active', description: 'D510共享空间外侧墙面', created_at: now, updated_at: now }
+];
 tables.feedbacks = loadFeedbacks();
 tables.reading_room_logs = [];
 tables.notifications = [
