@@ -590,7 +590,22 @@ const approveGroup = async function(groupId, adminId, role, options) {
   return loadGroup(groupId, group.created_by);
 };
 
-const rejectGroup = async function(groupId, adminId, role, reason) {
+/**
+ * 拒绝组团预约。
+ *
+ * 一致性约束（与常规预约拒绝 reservationApprovalController.reject 对齐，F2 收口）：
+ *  - R-02 乐观锁：槽位释放走 lifecycleService.releaseAndPromote，内部已 `version = version + 1`。
+ *  - R-08 审计：业务批注轨迹（reservation_audit_trail，用户可见）+ 防篡改审计链
+ *    （operation_logs 哈希链，合规取证）双写，与常规拒绝一致。
+ *
+ * @param {number} groupId 团队 id
+ * @param {number} adminId 操作管理员 id
+ * @param {string} role 操作人角色
+ * @param {string} reason 拒绝原因
+ * @param {object} [options] 可选上下文，目前仅携带 requestId 供审计链关联
+ */
+const rejectGroup = async function(groupId, adminId, role, reason, options) {
+  const settings = options || {};
   const allowed = allowedApprovalStatusesForRole(role);
   if (!allowed.length) throw httpError(403, '当前角色无权审批组团预约');
 
@@ -604,7 +619,9 @@ const rejectGroup = async function(groupId, adminId, role, reason) {
   }
   if (!group.reservation_id) throw httpError(409, '该组团缺少关联预约，无法审批');
 
-  // 拒绝需要释放槽位，走既有生命周期服务（含候补转正）。
+  const stage = reservationAuditTrailService.stageForStatus(group.status);
+
+  // 拒绝需要释放槽位，走既有生命周期服务（含候补转正 + R-02 version 自增）。
   await lifecycleService.releaseAndPromote({
     reservationId: group.reservation_id,
     nextStatus: 'rejected',
@@ -621,6 +638,42 @@ const rejectGroup = async function(groupId, adminId, role, reason) {
     "UPDATE reservation_group_members SET status = 'rejected' WHERE group_id = ?",
     [groupId]
   );
+
+  // R-08 双写轨迹（与 approveGroup 对齐）。
+  try {
+    await reservationAuditTrailService.record({
+      reservationId: group.reservation_id,
+      stage: stage,
+      actorId: adminId,
+      actorRole: role,
+      action: reservationAuditTrailService.ACTIONS.REJECT,
+      remark: text
+    });
+  } catch (err) {
+    logger.error('组团拒绝业务轨迹写入失败(group=' + groupId + '):', err);
+  }
+  try {
+    await auditTrailService.record({
+      operatorId: adminId,
+      requestId: settings.requestId || null,
+      actorRole: role,
+      action: 'reservation.reject',
+      targetTable: 'reservations',
+      targetId: group.reservation_id,
+      description: '组团预约已拒绝：' + (group.name || ''),
+      method: 'POST',
+      path: '/api/v1/groups/' + groupId + '/reject',
+      statusCode: 200,
+      metadata: {
+        groupId: Number(groupId),
+        reservationId: Number(group.reservation_id),
+        stage: stage,
+        reason: text
+      }
+    });
+  } catch (err) {
+    logger.error('组团拒绝审计链写入失败(group=' + groupId + '):', err);
+  }
 
   await notifySafely(group.created_by, 'group_rejected', '组团预约未通过', '你的组团预约「' + (group.name || '') + '」未通过，原因：' + text, { groupId });
   return loadGroup(groupId, group.created_by);

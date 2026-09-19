@@ -118,6 +118,24 @@ const run = async function() {
   } catch (err) {
     check('重复审批抛 409（已被处理）', err.httpStatus === 409, 'got=' + (err.httpStatus || err.message));
   }
+
+  // ---------- 拒绝场景：R-08 双写轨迹（与审批对称） ----------
+  resetTables();
+  const rejResult = await groupService.rejectGroup(10, 2, 'admin', '与课程冲突');
+  check('拒绝返回组团（id=10）', rejResult && Number(rejResult.id) === 10);
+
+  const rejRes = findReservation();
+  eq('R-02(拒绝)：主预约 version 自增为 2', rejRes.version, 2);
+  eq('主预约状态 rejected', rejRes.status, 'rejected');
+  eq('主预约 reject_reason 写入', rejRes.reject_reason, '与课程冲突');
+  eq('团队状态 rejected', findGroup().status, 'rejected');
+
+  const rejTrail = tables.reservation_audit_trail.filter(function(t) { return Number(t.reservation_id) === 100; });
+  eq('R-08(拒绝)：业务轨迹写入 1 条', rejTrail.length, 1);
+  check('业务轨迹 action = reject', rejTrail[0] && rejTrail[0].action === 'reject', rejTrail[0] && rejTrail[0].action);
+  const rejLogs = tables.operation_logs.filter(function(o) { return Number(o.target_id) === 100; });
+  eq('R-08(拒绝)：审计链写入 1 条', rejLogs.length, 1);
+  check('审计链 action = reservation.reject', rejLogs[0] && rejLogs[0].action === 'reservation.reject', rejLogs[0] && rejLogs[0].action);
 };
 
 run().then(function() {

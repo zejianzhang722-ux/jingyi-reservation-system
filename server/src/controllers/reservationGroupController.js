@@ -166,7 +166,8 @@ const reject = async function(req, res) {
       groupId,
       req.user.id,
       req.user.role,
-      (req.body && req.body.reason) || ''
+      (req.body && req.body.reason) || '',
+      { requestId: req.requestId }
     );
     return response.success(res, group, '已拒绝');
   } catch (err) {
