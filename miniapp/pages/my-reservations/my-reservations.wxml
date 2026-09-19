@@ -1,4 +1,12 @@
 <view class="container">
+  <view class="group-entry" bindtap="onGoGroups">
+    <view class="group-entry-left">
+      <text class="group-entry-title">我的组团预约</text>
+      <text class="group-entry-desc">按整房组团，成员登记参与</text>
+    </view>
+    <text class="group-entry-arrow">›</text>
+  </view>
+
   <scroll-view class="tabs-scroll" scroll-x="true" enhanced="true" show-scrollbar="{{false}}">
     <view class="tabs">
       <view class="tab-item {{currentTab === item.key ? 'tab-active' : ''}}"

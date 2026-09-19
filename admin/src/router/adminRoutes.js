@@ -11,9 +11,10 @@ export const roleGroups = {
 export const adminChildren = [
   { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/Dashboard/Index.vue'), meta: { title: '工作台', icon: 'DataBoard', roles: roleGroups.allAdmins, description: '今日运营概览、待办事项与关键指标' } },
 
-  { path: 'reservation/pending', name: 'ReservationPending', component: () => import('@/views/Reservation/PendingList.vue'), meta: { title: '预约审核', icon: 'Clock', roles: roleGroups.ordinaryReviewers, description: '处理待审核预约申请' } },
+  { path: 'reservation/pending', name: 'ReservationPending', component: () => import('@/views/Reservation/ReviewQueue.vue'), meta: { title: '预约审核', icon: 'Clock', roles: roleGroups.ordinaryReviewers, description: '处理待审核预约申请' } },
   { path: 'reservation/all', name: 'ReservationAll', component: () => import('@/views/Reservation/AllList.vue'), meta: { title: '全部预约', icon: 'List', roles: roleGroups.allAdmins, description: '查询和追踪全部预约记录' } },
   { path: 'reservation/counselor', name: 'CounselorPending', component: () => import('@/views/Reservation/CounselorPending.vue'), meta: { title: '辅导员审核', icon: 'UserFilled', roles: roleGroups.counselorPlus, description: '处理需要辅导员确认的预约' } },
+  { path: 'reservation/groups', name: 'ReservationGroups', component: () => import('@/views/Group/PendingList.vue'), meta: { title: '组团审核', icon: 'User', roles: roleGroups.ordinaryReviewers, description: '审核组团预约申请与成员名单' } },
   { path: 'checkin/manage', name: 'CheckinManage', component: () => import('@/views/Checkin/Manage.vue'), meta: { title: '签到核销', icon: 'Check', roles: roleGroups.allAdmins, description: '核验签到、处理迟到与爽约' } },
   { path: 'reading-room/logs', name: 'ReadingRoomLogs', component: () => import('@/views/ReadingRoom/Logs.vue'), meta: { title: '阅览室记录', icon: 'Reading', roles: roleGroups.allAdmins, description: '查看阅览室出入与使用记录' } },
 
@@ -41,7 +42,7 @@ export const adminChildren = [
 
 export const navSections = [
   { key: 'today', title: '今日工作', icon: 'DataBoard', children: ['Dashboard'] },
-  { key: 'reservation', title: '预约与使用', icon: 'Calendar', children: ['CounselorPending', 'ReservationPending', 'ReservationAll', 'CheckinManage', 'ReadingRoomLogs'] },
+  { key: 'reservation', title: '预约与使用', icon: 'Calendar', children: ['CounselorPending', 'ReservationPending', 'ReservationGroups', 'ReservationAll', 'CheckinManage', 'ReadingRoomLogs'] },
   { key: 'space', title: '空间管理', icon: 'Monitor', children: ['RoomMonitor', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig'] },
   { key: 'governance', title: '宿生与信用', icon: 'UserFilled', children: ['CreditViolations', 'CreditBlacklist', 'AccountManage', 'CreditConfig'] },
   { key: 'statistics', title: '数据与报表', icon: 'TrendCharts', children: ['StatsOverview', 'StatsExport'] },

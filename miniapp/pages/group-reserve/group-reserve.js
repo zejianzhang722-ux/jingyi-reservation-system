@@ -120,6 +120,22 @@ Page({
     })
   },
 
+  onDissolveGroup: function () {
+    var that = this
+    wx.showModal({
+      title: '解散组团',
+      content: '解散后将取消关联预约并释放时段，确定吗？',
+      confirmColor: '#FF4D4F',
+      success: function (res) {
+        if (!res.confirm) return
+        request.del('/groups/' + that.data.groupId).then(function () {
+          wx.showToast({ title: '已解散', icon: 'success' })
+          setTimeout(function () { wx.navigateBack() }, 800)
+        })
+      }
+    })
+  },
+
   onShareAppMessage: function () {
     return {
       title: '邀请你加入组团预约 - ' + (this.data.group ? this.data.group.title : ''),

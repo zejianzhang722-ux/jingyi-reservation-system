@@ -82,7 +82,8 @@
     <view class="group-actions">
       <view class="action-btn btn-primary" wx:if="{{mode === 'join' && group && group.status === 'open'}}" bindtap="onJoinGroup">加入组团</view>
       <button class="action-btn btn-outline share-btn" wx:if="{{mode === 'detail'}}" open-type="share">邀请成员</button>
-      <view class="action-btn btn-danger" wx:if="{{mode === 'detail'}}" bindtap="onLeaveGroup">退出组团</view>
+      <view class="action-btn btn-danger" wx:if="{{mode === 'detail' && group && !group.isCreator}}" bindtap="onLeaveGroup">退出组团</view>
+      <view class="action-btn btn-danger" wx:if="{{mode === 'detail' && group && group.isCreator}}" bindtap="onDissolveGroup">解散组团</view>
     </view>
   </view>
 

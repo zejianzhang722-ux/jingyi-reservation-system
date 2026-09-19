@@ -20,6 +20,7 @@
     "pages/network-settings/network-settings",
     "pages/subscribe-settings/subscribe-settings",
     "pages/group-reserve/group-reserve",
+    "pages/group-list/group-list",
     "pages/qrcode/qrcode",
     "pages/login/login",
     "pages/profile-edit/profile-edit",

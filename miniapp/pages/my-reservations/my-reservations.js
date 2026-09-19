@@ -50,6 +50,10 @@ Page({
     wx.stopPullDownRefresh()
   },
 
+  onGoGroups: function () {
+    wx.navigateTo({ url: '/pages/group-list/group-list' })
+  },
+
   loadReservations: function () {
     var that = this
     var status = this.data.currentTab

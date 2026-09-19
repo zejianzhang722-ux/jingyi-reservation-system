@@ -1,0 +1,45 @@
+<view class="container">
+  <view class="page-tip">
+    <text>组团预约按整房占用，发起人承担签到与爽约责任。成员加入即登记，不单独占座。</text>
+  </view>
+
+  <view class="loading" wx:if="{{loading && !groups.length}}">加载中...</view>
+
+  <view class="error" wx:if="{{loadError && !loading}}">
+    <text>{{loadError}}</text>
+    <view class="retry-btn" bindtap="loadGroups">重试</view>
+  </view>
+
+  <view class="empty" wx:if="{{!loading && !groups.length && !loadError}}">
+    <text class="empty-text">还没有参与的组团预约</text>
+    <view class="empty-btn" bindtap="onGoRoomList">去发起组团</view>
+  </view>
+
+  <view class="group-list" wx:if="{{groups.length}}">
+    <view class="group-card" wx:for="{{groups}}" wx:key="id"
+          data-id="{{item.id}}" bindtap="onGroupTap">
+      <view class="card-header">
+        <text class="card-title">{{item.title}}</text>
+        <text class="card-status" style="color:{{item.statusColor}}">{{item.statusText}}</text>
+      </view>
+      <view class="card-body">
+        <view class="info-row">
+          <text class="info-label">功能房</text>
+          <text class="info-value">{{item.roomName}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">时间</text>
+          <text class="info-value">{{item.date}} {{item.startHour}}-{{item.endHour}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">人数</text>
+          <text class="info-value">{{item.memberCount}}/{{item.maxMembers}}</text>
+        </view>
+      </view>
+      <view class="card-footer">
+        <text class="role-tag">{{item.roleText}}</text>
+        <text class="enter-hint">查看详情 ›</text>
+      </view>
+    </view>
+  </view>
+</view>

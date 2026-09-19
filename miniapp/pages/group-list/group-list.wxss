@@ -1,0 +1,144 @@
+.container {
+  padding: 16rpx 24rpx 40rpx;
+  min-height: 100vh;
+  background: #F5F6FA;
+  box-sizing: border-box;
+}
+
+.page-tip {
+  background: #FFF7E6;
+  border-left: 6rpx solid #FA8C16;
+  border-radius: 8rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.page-tip text {
+  font-size: 24rpx;
+  color: #8C6E2A;
+  line-height: 1.5;
+}
+
+.loading {
+  text-align: center;
+  color: #999;
+  padding: 80rpx 0;
+  font-size: 28rpx;
+}
+
+.error {
+  text-align: center;
+  color: #FF4D4F;
+  padding: 60rpx 0;
+  font-size: 28rpx;
+}
+
+.retry-btn {
+  margin: 20rpx auto 0;
+  width: 200rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  text-align: center;
+  background: #0066CC;
+  color: #fff;
+  border-radius: 32rpx;
+  font-size: 26rpx;
+}
+
+.empty {
+  text-align: center;
+  padding: 120rpx 0;
+}
+
+.empty-text {
+  display: block;
+  color: #999;
+  font-size: 28rpx;
+  margin-bottom: 32rpx;
+}
+
+.empty-btn {
+  display: inline-block;
+  padding: 16rpx 48rpx;
+  background: #0066CC;
+  color: #fff;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+}
+
+.group-card {
+  background: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  padding: 28rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #303133;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-status {
+  font-size: 24rpx;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.card-body {
+  border-top: 1rpx solid #F0F0F0;
+  padding-top: 20rpx;
+}
+
+.info-row {
+  display: flex;
+  margin-bottom: 12rpx;
+}
+
+.info-label {
+  width: 100rpx;
+  color: #909399;
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+
+.info-value {
+  color: #303133;
+  font-size: 26rpx;
+  flex: 1;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #F0F0F0;
+}
+
+.role-tag {
+  font-size: 24rpx;
+  color: #0066CC;
+  background: #E6F0FF;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.enter-hint {
+  font-size: 24rpx;
+  color: #C0C4CC;
+}

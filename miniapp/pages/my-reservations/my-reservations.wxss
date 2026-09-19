@@ -1,3 +1,36 @@
+.group-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16rpx 24rpx 0;
+  padding: 24rpx 28rpx;
+  background: var(--bg-card, #fff);
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+.group-entry-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.group-entry-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #303133;
+}
+
+.group-entry-desc {
+  font-size: 24rpx;
+  color: #909399;
+  margin-top: 6rpx;
+}
+
+.group-entry-arrow {
+  font-size: 40rpx;
+  color: #C0C4CC;
+}
+
 .tabs-scroll {
   width: 100%;
   white-space: nowrap;
