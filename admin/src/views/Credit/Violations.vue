@@ -1,29 +1,26 @@
 <template>
   <div class="page-container">
-    <el-card shadow="never" class="filter-card">
-      <el-form :model="filters" inline>
-        <el-form-item label="违规类型">
-          <el-select v-model="filters.type" placeholder="全部" clearable style="width: 140px">
-            <el-option label="爽约" value="noshow" />
-            <el-option label="超时未签退" value="overtime" />
-            <el-option label="损坏设施" value="damage" />
-            <el-option label="违规使用" value="misuse" />
-            <el-option label="海报违规" value="poster" />
-            <el-option label="其他" value="other" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="学号">
-          <el-input v-model="filters.studentId" placeholder="输入学号" clearable style="width: 140px" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadData">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
-        </el-form-item>
-        <el-form-item class="create-item">
-          <el-button type="primary" @click="handleCreate">创建违规记录</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <ListToolbar
+      v-model:keyword="filters.keyword"
+      keyword-placeholder="搜索学号/姓名"
+      export-file-name="导出_违规记录"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    >
+      <el-select v-model="filters.type" placeholder="违规类型" clearable style="width: 150px" @change="onSearch">
+        <el-option label="爽约" value="noshow" />
+        <el-option label="超时未签退" value="overtime" />
+        <el-option label="损坏设施" value="damage" />
+        <el-option label="违规使用" value="misuse" />
+        <el-option label="海报违规" value="poster" />
+        <el-option label="其他" value="other" />
+      </el-select>
+
+      <template #actions>
+        <el-button type="primary" @click="handleCreate">创建违规记录</el-button>
+      </template>
+    </ListToolbar>
 
     <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" />
 
@@ -31,7 +28,7 @@
       <AsyncState
         :loading="loading"
         :error="!!loadError && !tableData.length"
-        :empty="!loading && !loadError && !tableData.length"
+        :empty="!loading && !loadError && !filteredTableData.length"
         empty-description="暂无违规记录"
         @retry="loadData"
       >
@@ -39,7 +36,7 @@
           <el-button type="primary" @click="resetFilters">重置筛选</el-button>
         </template>
 
-        <el-table :data="tableData" stripe>
+        <el-table :data="filteredTableData" stripe>
           <el-table-column prop="userName" label="学生姓名" width="100" />
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="type" label="违规类型" width="110">
@@ -102,10 +99,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getViolations, createViolation } from '@/api/credit'
 import { ElMessage } from 'element-plus'
 import AsyncState from '@/components/admin/AsyncState.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 
 const loading = ref(false)
 const loadError = ref('')
@@ -123,7 +122,18 @@ const typeMap = {
   other: { label: '其他', tagType: 'info' }
 }
 
-const filters = reactive({ type: '', studentId: '' })
+// 导出列：与表格展示字段一一对应；R-14 仅导出后端已按数据域脱敏的返回值，不调用任何解掩码接口。
+const exportColumns = [
+  { header: '学生姓名', key: 'userName' },
+  { header: '学号', key: 'studentId' },
+  { header: '违规类型', key: 'type', formatter: row => typeMap[row.type]?.label || '其他违规' },
+  { header: '描述', key: 'description' },
+  { header: '扣分', key: 'deduction', formatter: row => `-${row.deduction}` },
+  { header: '记录时间', key: 'createdAt' },
+  { header: '操作人', key: 'operatorName' }
+]
+
+const filters = reactive({ type: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const form = reactive({ studentId: '', type: '', deduction: 10, description: '' })
 const rules = {
@@ -133,11 +143,28 @@ const rules = {
   description: [{ required: true, message: '请输入描述', trigger: 'blur' }]
 }
 
+// 🔧 后端 GET /credit/violations 只支持 type / userId / page / pageSize，不支持 keyword，
+// 关键词改为对已加载数据做前端过滤；表格渲染与导出共用同一份过滤逻辑。
+function matchKeyword(row, keyword) {
+  if (!keyword) return true
+  const text = keyword.trim().toLowerCase()
+  if (!text) return true
+  return String(row.studentId || '').toLowerCase().includes(text) ||
+    String(row.userName || '').toLowerCase().includes(text)
+}
+
+const filteredTableData = computed(() => tableData.value.filter(row => matchKeyword(row, filters.keyword)))
+
+// 列表查询参数单一来源；后端只认 type，keyword 不进请求参数。
+function buildParams() {
+  return { type: filters.type }
+}
+
 async function loadData() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await getViolations({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+    const res = await getViolations({ ...buildParams(), page: pagination.page, pageSize: pagination.pageSize }, { silentError: true })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
@@ -147,9 +174,14 @@ async function loadData() {
   }
 }
 
+function onSearch() {
+  pagination.page = 1
+  loadData()
+}
+
 function resetFilters() {
   filters.type = ''
-  filters.studentId = ''
+  filters.keyword = ''
   pagination.page = 1
   loadData()
 }
@@ -176,6 +208,23 @@ async function confirmCreate() {
   }
 }
 
+// 导出「筛选后全量」：type 由服务端过滤，keyword 在拉全量后按同一套前端规则过滤。
+// 该路由挂载了 paginationRules（pageSize<=100），必须按页循环拉取，不能一次性请求超大 pageSize。
+async function handleExport() {
+  try {
+    const list = await fetchAllPages(getViolations, buildParams(), {
+      pageSize: 100,
+      maxPages: 50,
+      options: { silentError: true }
+    })
+    const rows = list.filter(row => matchKeyword(row, filters.keyword))
+    if (!exportXlsx(exportColumns, rows, '导出_违规记录')) return
+    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
+}
+
 onMounted(() => {
   loadData()
 })
@@ -186,17 +235,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.filter-card :deep(.el-card__body) {
-  padding-bottom: 0;
-}
-
-/* 写操作与查询筛选视觉分区：以竖分隔线拉开「查询/重置」与「创建违规记录」 */
-.filter-card :deep(.create-item) {
-  margin-left: 16px;
-  padding-left: 16px;
-  border-left: 1px solid var(--el-border-color-lighter, #EBEEF5);
 }
 
 .pagination-wrap {

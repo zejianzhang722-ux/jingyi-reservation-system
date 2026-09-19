@@ -1,14 +1,20 @@
 <template>
   <div class="page-container">
-    <el-card shadow="never" class="filter-card">
-      <el-form :model="filters" inline>
-        <el-form-item label="功能房">
-          <el-select v-model="filters.roomId" placeholder="请选择功能房" style="width: 200px" @change="loadSeats">
-            <el-option v-for="r in roomOptions" :key="r.id" :label="r.name" :value="r.id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <ListToolbar
+      v-model:status="filters.status"
+      v-model:keyword="filters.keyword"
+      :status-options="statusOptions"
+      status-placeholder="状态"
+      keyword-placeholder="搜索座位号"
+      export-file-name="导出_座位列表"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    >
+      <el-select v-model="filters.roomId" placeholder="请选择功能房" clearable filterable style="width: 200px" @change="loadSeats">
+        <el-option v-for="r in roomOptions" :key="r.id" :label="r.name" :value="r.id" />
+      </el-select>
+    </ListToolbar>
 
     <el-card shadow="never">
       <div class="table-header">
@@ -23,15 +29,15 @@
         </div>
       </div>
 
-      <el-table :data="seatList" v-loading="loading" stripe @selection-change="handleSelectionChange">
+      <el-table :data="filteredSeatList" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" />
         <el-table-column prop="seat_number" label="座位号" width="120" />
         <el-table-column prop="row_num" label="行" width="80" />
         <el-table-column prop="col_num" label="列" width="80" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'available' ? 'success' : row.status === 'maintenance' ? 'warning' : row.status === 'disabled' ? 'danger' : 'info'" size="small">
-              {{ row.status === 'available' ? '可用' : row.status === 'maintenance' ? '维护中' : row.status === 'disabled' ? '停用' : '占用' }}
+            <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">
+              {{ statusMap[row.status]?.label || '占用' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -79,9 +85,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getSeats, createSeats, updateSeat, deleteSeat, getList as getRoomList } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx } from '@/utils/exportXlsx'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -90,8 +98,42 @@ const roomOptions = ref([])
 const selectedIds = ref([])
 const batchDialogVisible = ref(false)
 
-const filters = reactive({ roomId: '' })
+// 列表工具条的状态下拉（🔧 后端 GET /room/:id/seats 不支持筛选，状态由前端兜底过滤）
+const statusOptions = [
+  { label: '可用', value: 'available' },
+  { label: '停用', value: 'disabled' },
+  { label: '维护中', value: 'maintenance' }
+]
+
+const statusMap = {
+  available: { label: '可用', type: 'success' },
+  disabled: { label: '停用', type: 'danger' },
+  maintenance: { label: '维护中', type: 'warning' },
+  occupied: { label: '占用', type: 'info' }
+}
+
+// 导出列：与表格展示字段一致（座位无 PII）
+const exportColumns = [
+  { header: '座位号', key: 'seat_number' },
+  { header: '行', key: 'row_num' },
+  { header: '列', key: 'col_num' },
+  { header: '状态', key: 'status', formatter: row => statusMap[row.status]?.label || '占用' },
+  { header: '电源', key: 'has_power', formatter: row => (row.has_power ? '有' : '无') }
+]
+
+const filters = reactive({ roomId: '', status: '', keyword: '' })
 const batchForm = reactive({ rows: 5, cols: 6, startNumber: 1 })
+
+// 🔧 座位接口既不分页也不支持 status / keyword，因此在已加载行上做前端过滤，
+// 表格渲染与导出都基于同一份 filteredSeatList，保证「导出结果 == 当前筛选视图」。
+const filteredSeatList = computed(() => {
+  const keyword = String(filters.keyword || '').trim().toLowerCase()
+  return seatList.value.filter(seat => {
+    if (filters.status && seat.status !== filters.status) return false
+    if (keyword && !String(seat.seat_number || '').toLowerCase().includes(keyword)) return false
+    return true
+  })
+})
 
 async function loadRooms() {
   try {
@@ -110,12 +152,25 @@ async function loadSeats() {
   loading.value = true
   try {
     const res = await getSeats(filters.roomId, { pageSize: 200 })
-    seatList.value = res.data?.list || res.data || []
+    const payload = res.data
+    seatList.value = Array.isArray(payload?.list) ? payload.list : (Array.isArray(payload) ? payload : [])
   } catch (e) {
-    // handled
+    seatList.value = []
   } finally {
     loading.value = false
   }
+}
+
+// 状态/关键词均为纯前端过滤，computed 会自动生效，无需重新请求；
+// 这里仅承接 ListToolbar 的 search 事件以保持工具条语义一致。
+function onSearch() {
+  // no-op: 过滤由 filteredSeatList 计算属性驱动
+}
+
+// 重置只清状态与关键词：功能房是本页的数据来源而非普通筛选项，清空会让整个列表消失。
+function resetFilters() {
+  filters.status = ''
+  filters.keyword = ''
 }
 
 function handleSelectionChange(rows) {
@@ -178,6 +233,18 @@ async function handleBatchDelete() {
   }
 }
 
+// 非分页接口（GET /room/:id/seats 一次性返回该房间全部座位，后端既不接受 status/keyword
+// 也不提供分页游标），因此导出「当前已加载 + 已筛选」的行，不能走 fetchAllPages 翻页。
+function handleExport() {
+  try {
+    const list = filteredSeatList.value
+    if (!exportXlsx(exportColumns, list, '导出_座位列表')) return
+    ElMessage.success(`导出成功，共 ${list.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
+}
+
 onMounted(() => {
   loadRooms()
 })
@@ -188,10 +255,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.filter-card :deep(.el-card__body) {
-  padding-bottom: 0;
 }
 
 .table-header {

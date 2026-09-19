@@ -1,15 +1,16 @@
 import request from '@/utils/request'
 
-export function getViolations(params) {
-  return request.get('/credit/violations', { params })
+// options：透传给 request 的额外配置（如 { silentError: true } 关闭全局错误 toast）。
+export function getViolations(params, options = {}) {
+  return request.get('/credit/violations', { ...options, params })
 }
 
 export function createViolation(data) {
   return request.post('/credit/violation', data)
 }
 
-export function getBlacklist(params) {
-  return request.get('/credit/blacklist', { params })
+export function getBlacklist(params, options = {}) {
+  return request.get('/credit/blacklist', { ...options, params })
 }
 
 export function toggleBan(data) {

@@ -10,7 +10,7 @@
 
     <el-row :gutter="16">
       <el-col :xs="24" :sm="8">
-        <MetricCard label="当前名单" :value="pagination.total" caption="受限、封禁或低信用宿生" icon="CircleCloseFilled" tone="danger" />
+        <MetricCard label="当前名单" :value="total" caption="受限、封禁或低信用宿生" icon="CircleCloseFilled" tone="danger" />
       </el-col>
       <el-col :xs="24" :sm="8">
         <MetricCard label="处理方式" value="人工 + 自动" caption="支持学号封禁和列表解封" icon="Operation" tone="warning" />
@@ -20,9 +20,17 @@
       </el-col>
     </el-row>
 
-    <FilterBar @search="loadData" @reset="resetFilters">
-      <el-input v-model="filters.keyword" placeholder="搜索学号/姓名" clearable style="width: 220px" @keyup.enter="loadData" />
-    </FilterBar>
+    <ListToolbar
+      v-model:status="filters.status"
+      v-model:keyword="filters.keyword"
+      :status-options="statusOptions"
+      status-placeholder="状态"
+      keyword-placeholder="搜索学号/姓名"
+      export-file-name="导出_黑名单列表"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    />
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
@@ -53,11 +61,9 @@
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
-          :total="pagination.total"
+          :total="total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
-          @current-change="loadData"
         />
       </div>
     </el-card>
@@ -84,24 +90,25 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getBlacklist, toggleBan } from '@/api/credit'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createActionLock } from '@/utils/approvalState'
 import PageShell from '@/components/admin/PageShell.vue'
-import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx } from '@/utils/exportXlsx'
 
 const loading = ref(false)
 const submitLoading = ref(false)
 const actionSubmitting = ref(false)
 const actionLock = createActionLock()
-const tableData = ref([])
+const allRows = ref([])
 const banDialogVisible = ref(false)
 const formRef = ref(null)
 
-const filters = reactive({ keyword: '' })
-const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
+const filters = reactive({ status: '', keyword: '' })
+const pagination = reactive({ page: 1, pageSize: 10 })
 const banForm = reactive({ studentId: '', reason: '', days: 7 })
 const rules = {
   studentId: [{ required: true, message: '请输入学号', trigger: 'blur' }],
@@ -109,29 +116,79 @@ const rules = {
   days: [{ required: true, message: '请输入封禁天数', trigger: 'blur' }]
 }
 
+// 🔧 后端 GET /credit/blacklist 不支持 status 筛选，状态下拉由前端兜底
+const statusOptions = [
+  { label: '封禁', value: 'banned' },
+  { label: '受限', value: 'restricted' },
+  { label: '低信用', value: 'active' }
+]
+
 const statusMap = {
   banned: { label: '封禁', type: 'danger' },
   restricted: { label: '受限', type: 'warning' },
   active: { label: '低信用', type: 'info' }
 }
 
+// 导出列：与表格展示字段一致；R-14 取的是后端经 privacyAuditService 按数据域脱敏后的值，
+// 绝不解掩码或拼接 PII。
+const exportColumns = [
+  { header: '学生姓名', key: 'userName' },
+  { header: '学号', key: 'studentId' },
+  { header: '信用分', key: 'creditScore', formatter: row => (row.creditScore ?? '-') },
+  { header: '状态', key: 'status', formatter: row => statusMap[row.status]?.label || '状态待确认' },
+  { header: '进入原因', key: 'reason' },
+  { header: '处理时间', key: 'bannedAt' },
+  { header: '预计恢复', key: 'banExpiresAt' },
+  { header: '违规次数', key: 'violationCount' }
+]
+
+function matchKeyword(row, keyword) {
+  if (!keyword) return true
+  const text = keyword.trim().toLowerCase()
+  if (!text) return true
+  return String(row.studentId || '').toLowerCase().includes(text) ||
+    String(row.userName || '').toLowerCase().includes(text)
+}
+
+// 黑名单接口既不分页也不支持任何筛选（服务端一次性返回全量），
+// 因此状态 / 关键词过滤与分页都在前端完成，保证「导出结果 == 当前筛选视图」。
+const filteredRows = computed(() => allRows.value.filter(row => {
+  if (filters.status && row.status !== filters.status) return false
+  return matchKeyword(row, filters.keyword)
+}))
+
+const total = computed(() => filteredRows.value.length)
+
+const tableData = computed(() => {
+  const start = (pagination.page - 1) * pagination.pageSize
+  return filteredRows.value.slice(start, start + pagination.pageSize)
+})
+
 async function loadData() {
   loading.value = true
   try {
-    const res = await getBlacklist({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
-    tableData.value = res.data?.list || []
-    pagination.total = res.data?.total || 0
+    const res = await getBlacklist({}, { silentError: true })
+    // 该接口用 response.success 直接回数组（不是 { list, total }），这里两种形态都兜住。
+    const payload = res.data
+    allRows.value = Array.isArray(payload?.list) ? payload.list : (Array.isArray(payload) ? payload : [])
+    // 过滤/翻页都是前端行为，页码越界时回退到最后一页有效位置
+    const maxPage = Math.max(1, Math.ceil(total.value / pagination.pageSize))
+    if (pagination.page > maxPage) pagination.page = maxPage
   } catch (e) {
-    // Keep the last successful snapshot visible during a transient refresh failure.
+    // 失败时保留上一次成功快照，避免列表闪烁为空
   } finally {
     loading.value = false
   }
 }
 
+function onSearch() {
+  pagination.page = 1
+}
+
 function resetFilters() {
+  filters.status = ''
   filters.keyword = ''
   pagination.page = 1
-  loadData()
 }
 
 function handleManualBan() {
@@ -182,6 +239,18 @@ async function handleUnban(row) {
   }
 }
 
+// 非分页接口：服务端一次性返回全部黑名单成员，已加载行即全量，
+// 无需（也无法）再用 fetchAllPages 翻页，导出直接基于 filteredRows。
+function handleExport() {
+  try {
+    const rows = filteredRows.value
+    if (!exportXlsx(exportColumns, rows, '导出_黑名单列表')) return
+    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
+}
+
 onMounted(() => {
   loadData()
 })
@@ -207,4 +276,3 @@ onMounted(() => {
   color: var(--jy-danger, #FF4D4F);
 }
 </style>
-

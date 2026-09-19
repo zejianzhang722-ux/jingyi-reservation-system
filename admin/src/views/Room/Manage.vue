@@ -22,20 +22,24 @@
       </el-col>
     </el-row>
 
-    <FilterBar @search="loadData" @reset="resetFilters">
-      <el-input v-model="filters.keyword" placeholder="搜索名称/描述" clearable style="width: 220px" @keyup.enter="loadData" />
-      <el-select v-model="filters.type" placeholder="类型" clearable style="width: 180px">
+    <ListToolbar
+      v-model:status="filters.status"
+      v-model:keyword="filters.keyword"
+      :status-options="statusOptions"
+      status-placeholder="状态"
+      keyword-placeholder="搜索名称/描述"
+      export-file-name="导出_功能房列表"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    >
+      <el-select v-model="filters.type" placeholder="类型" clearable style="width: 180px" @change="onSearch">
         <el-option v-for="item in roomTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
-      <el-select v-model="filters.buildingId" placeholder="楼栋" clearable style="width: 160px">
+      <el-select v-model="filters.buildingId" placeholder="楼栋" clearable style="width: 160px" @change="onSearch">
         <el-option v-for="b in buildingOptions" :key="b.id" :label="b.name" :value="b.id" />
       </el-select>
-      <el-select v-model="filters.status" placeholder="状态" clearable style="width: 140px">
-        <el-option label="开放" value="open" />
-        <el-option label="关闭" value="closed" />
-        <el-option label="维护中" value="maintenance" />
-      </el-select>
-    </FilterBar>
+    </ListToolbar>
 
     <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" class="load-alert" />
 
@@ -183,10 +187,11 @@ import { getList, create, update, deleteRoom, getBuildings, updateSeat, deleteSe
 import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
-import FilterBar from '@/components/admin/FilterBar.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
 import AsyncState from '@/components/admin/AsyncState.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
 import { createLatestRequestCoordinator } from '@/utils/latestRequest'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 
 const loading = ref(false)
 const loadError = ref('')
@@ -220,6 +225,24 @@ const roomTypeOptions = [
 
 const typeLabels = roomTypeOptions.reduce((map, item) => ({ ...map, [item.value]: item.label }), {})
 const statusMap = { open: { label: '开放', type: 'success' }, closed: { label: '关闭', type: 'info' }, maintenance: { label: '维护中', type: 'danger' } }
+
+// 列表工具条的状态下拉（后端 GET /admin/rooms 原生支持 status 筛选）
+const statusOptions = [
+  { label: '开放', value: 'open' },
+  { label: '关闭', value: 'closed' },
+  { label: '维护中', value: 'maintenance' }
+]
+
+// 导出列：与表格展示字段一一对应，枚举用页面既有 label map 映射
+const exportColumns = [
+  { header: '名称', key: 'name' },
+  { header: '类型', key: 'type', formatter: row => typeLabels[row.type] || '类型待确认' },
+  { header: '楼栋', key: 'building_name' },
+  { header: '楼层', key: 'floor' },
+  { header: '容量', key: 'capacity' },
+  { header: '状态', key: 'status', formatter: row => statusMap[row.status]?.label || '状态待确认' },
+  { header: '描述', key: 'description' }
+]
 
 const filters = reactive({ keyword: '', type: '', buildingId: '', status: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
@@ -258,8 +281,29 @@ const roomListRequest = createLatestRequestCoordinator({
   onFinish: () => { loading.value = false }
 })
 
+// 列表查询参数单一来源：列表加载与导出共用，保证「导出结果 == 当前筛选视图」。
+// 后端 GET /admin/rooms 原生支持 keyword / type / buildingId / status 四项筛选。
+function buildParams() {
+  return {
+    keyword: filters.keyword,
+    type: filters.type,
+    buildingId: filters.buildingId,
+    status: filters.status
+  }
+}
+
 async function loadData() {
-  return roomListRequest.run({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+  return roomListRequest.run({
+    ...buildParams(),
+    page: pagination.page,
+    pageSize: pagination.pageSize
+  })
+}
+
+// 任一筛选条件变更后回到第 1 页再查询（服务端筛选）
+function onSearch() {
+  pagination.page = 1
+  loadData()
 }
 
 function resetFilters() {
@@ -413,6 +457,22 @@ async function saveSeatChanges() {
     // handled by interceptor
   } finally {
     seatSaving.value = false
+  }
+}
+
+// R-14：导出列只取「屏幕上已展示」的功能房字段，无 PII，不调用任何解掩码接口。
+// 后端 paginationRules + controller 均限制 pageSize<=100，故按页循环拉取，禁止一次性请求超大 pageSize。
+async function handleExport() {
+  try {
+    const list = await fetchAllPages(getList, buildParams(), {
+      pageSize: 100,
+      maxPages: 50,
+      options: { silentError: true }
+    })
+    if (!exportXlsx(exportColumns, list, '导出_功能房列表')) return
+    ElMessage.success(`导出成功，共 ${list.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
   }
 }
 
