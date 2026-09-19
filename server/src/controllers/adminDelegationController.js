@@ -1,9 +1,10 @@
 /**
- * 管理端「临时授权 + 岗位交接」控制器（R-06）。
+ * 管理端「临时授权 + 岗位交接」控制器（R-06 · 一步式交接）。
  *
  * 鉴权约定（沿用仓库既有风格）：
- *  - 路由层已保证 `auth` + `requireAdmin`（admin / super_admin / counselor）；
- *  - 细粒度授权在控制器内判断：能力授予/撤销仅限 super_admin；交接仅限当事人或 super_admin。
+ *  - 路由层已保证 auth + requireAdmin（admin / super_admin / counselor）；
+ *  - 细粒度授权在控制器内判断：能力授予/撤销仅限 super_admin；
+ *    岗位交接改为一步式，仅限 super_admin（会长团）在后台操作。
  */
 
 const response = require('../utils/response');
@@ -139,75 +140,32 @@ const listHandovers = async function(req, res) {
   }
 };
 
-/** POST /admin/delegations/handovers —— 发起岗位交接。 */
-const initiateHandover = async function(req, res) {
+/** POST /admin/delegations/handovers —— 一步式岗位交接（仅 super_admin / 会长团）。 */
+const reassignHandover = async function(req, res) {
   try {
+    if (!isSuperAdmin(req)) {
+      return response.errorWithCode(res, 403, errorCodes.ERROR_CODES.PERMISSION_DENIED, {
+        message: '仅超级管理员（会长团）可操作岗位交接'
+      });
+    }
     const body = req.body || {};
-    const requestedFrom = body.fromAdminId === undefined || body.fromAdminId === null
+    const fromAdminId = body.fromAdminId === undefined || body.fromAdminId === null
       ? null
       : Number(body.fromAdminId);
-    const fromAdminId = requestedFrom && Number.isInteger(requestedFrom) && requestedFrom > 0
-      ? requestedFrom
-      : Number(req.user.id);
-    if (fromAdminId !== Number(req.user.id) && !isSuperAdmin(req)) {
-      return response.errorWithCode(res, 403, errorCodes.ERROR_CODES.PERMISSION_DENIED, {
-        message: '仅超级管理员可代他人发起交接'
-      });
-    }
-    const toAdminId = body.toAdminId === undefined ? body.toUserId : body.toAdminId;
-    const created = await adminHandoverService.initiate({
+    const toAdminId = body.toAdminId === undefined || body.toAdminId === null
+      ? null
+      : Number(body.toAdminId);
+    const note = body.note === undefined || body.note === null ? undefined : String(body.note);
+    const result = await adminHandoverService.reassign({
+      operatorId: Number(req.user.id),
       fromAdminId: fromAdminId,
       toAdminId: toAdminId,
-      initiatedBy: req.user.id
-    });
-    return response.success(res, created, '交接已发起，待接受');
-  } catch (err) {
-    return respondError(res, err, '发起交接失败', 400);
-  }
-};
-
-/** POST /admin/delegations/handovers/:id/accept —— 接受交接（事务化）。 */
-const acceptHandover = async function(req, res) {
-  try {
-    const result = await adminHandoverService.accept({
-      handoverId: req.params.id,
-      actorId: Number(req.user.id),
-      actorRole: req.user.role,
+      note: note,
       requestContext: requestContextOf(req)
     });
-    return response.success(res, result, '交接完成');
+    return response.success(res, result, '岗位交接完成');
   } catch (err) {
-    return respondError(res, err, '接受交接失败', 400);
-  }
-};
-
-/** POST /admin/delegations/handovers/:id/revoke —— 撤销进行中的交接。 */
-const revokeHandover = async function(req, res) {
-  try {
-    const actorId = Number(req.user.id);
-    if (!isSuperAdmin(req)) {
-      const pending = await adminHandoverService.list({ status: permissions.HANDOVER_STATUSES.PENDING });
-      const target = pending.filter(function(record) { return Number(record.id) === Number(req.params.id); })[0];
-      const isParty = target && (Number(target.from_user) === actorId || Number(target.to_user) === actorId);
-      if (!isParty) {
-        return response.errorWithCode(res, 403, errorCodes.ERROR_CODES.PERMISSION_DENIED, {
-          message: '无权撤销该交接'
-        });
-      }
-    }
-    const revoked = await adminHandoverService.revoke({
-      handoverId: req.params.id,
-      actorId: actorId,
-      actorRole: req.user.role
-    });
-    if (!revoked) {
-      return response.errorWithCode(res, 409, errorCodes.ERROR_CODES.HANDOVER_CONFLICT, {
-        message: '交接不存在或已结束，无法撤销'
-      });
-    }
-    return response.success(res, null, '已撤销交接');
-  } catch (err) {
-    return respondError(res, err, '撤销交接失败', 400);
+    return respondError(res, err, '岗位交接失败', 400);
   }
 };
 
@@ -217,7 +175,5 @@ module.exports = {
   grantCapability,
   revokeCapability,
   listHandovers,
-  initiateHandover,
-  acceptHandover,
-  revokeHandover
+  reassignHandover
 };

@@ -9,10 +9,8 @@ router.get('/capabilities', auth, requireAdmin, controller.listCapabilities);
 router.post('/capabilities', auth, requireAdmin, controller.grantCapability);
 router.delete('/capabilities/:id', auth, requireAdmin, controller.revokeCapability);
 
-// 岗位交接（R-06）
+// 岗位交接（R-06 · 一步式，仅 super_admin / 会长团）
 router.get('/handovers', auth, requireAdmin, controller.listHandovers);
-router.post('/handovers', auth, requireAdmin, controller.initiateHandover);
-router.post('/handovers/:id/accept', auth, requireAdmin, controller.acceptHandover);
-router.post('/handovers/:id/revoke', auth, requireAdmin, controller.revokeHandover);
+router.post('/handovers', auth, requireAdmin, controller.reassignHandover);
 
 module.exports = router;

@@ -5,8 +5,8 @@
  *   ① 迁移脚本幂等（静态断言 + 真实 MySQL 尝试，后者本环境无凭据 -> 如实标注未复验）
  *   ② listActive 对“已过期 / 未生效”返回空
  *   ③ revoke 后立即失效
- *   ④ 交接 accept 中途失败整体回滚（用可注入的事务假连接制造第二步失败）
- *   ⑤ 交接后旧 refresh 令牌被删（token:admin:<id>）
+ *   ④ reassign 中途失败整体回滚（用可注入的事务假连接制造第二步失败）
+ *   ⑤ reassign 后旧 refresh 令牌被删（token:admin:<id>）
  *   ⑥ capabilities 读取失败不阻断既有接口
  *
  * 强制 mock 模式（MySQL 端口=1、Redis 端口=1），不依赖本机 数据库/Redis。
@@ -169,16 +169,17 @@ const main = async function() {
   eq('revoke 非法 id 抛错', await (async function() { try { await capabilityService.revoke({ grantId: 0 }); return 'no-throw'; } catch (e) { return e.businessCode; } })(), 'PERMISSION_DENIED');
   eq('listByAdmin 返回全部历史记录(含 revoked)', (await capabilityService.listByAdmin(1)).length, 2);
 
-  // ---------- 岗位交接：校验 ----------
+  // ---------- 岗位交接（一步式 reassign）：校验 ----------
   resetTables();
-  await expectThrow('initiate 同一账号', function() { return handoverService.initiate({ fromAdminId: 4, toAdminId: 4 }); }, 'HANDOVER_CONFLICT');
-  await expectThrow('initiate 离任方不存在', function() { return handoverService.initiate({ fromAdminId: 999, toAdminId: 1 }); }, 'HANDOVER_CONFLICT');
-  await expectThrow('initiate 新任方不存在', function() { return handoverService.initiate({ fromAdminId: 4, toAdminId: 999 }); }, 'HANDOVER_CONFLICT');
+  await expectThrow('reassign 同一账号', function() { return handoverService.reassign({ operatorId: 2, fromAdminId: 4, toAdminId: 4 }); }, 'HANDOVER_CONFLICT');
+  await expectThrow('reassign 离任方不存在', function() { return handoverService.reassign({ operatorId: 2, fromAdminId: 999, toAdminId: 1 }); }, 'HANDOVER_CONFLICT');
+  await expectThrow('reassign 新任方不存在', function() { return handoverService.reassign({ operatorId: 2, fromAdminId: 4, toAdminId: 999 }); }, 'HANDOVER_CONFLICT');
+  // 越权：非 super_admin 操作被拒（operatorId=3 为 counselor）
+  await expectThrow('reassign 非超管被拒', function() { return handoverService.reassign({ operatorId: 3, fromAdminId: 4, toAdminId: 1 }); }, 'PERMISSION_DENIED');
 
-  // ---------- ④ accept 中途失败整体回滚（制造第二步失败） ----------
+  // ---------- ④ reassign 中途失败整体回滚（制造第二步失败：离任方角色非法） ----------
   tables.admins.push({ id: 903, username: 'qa_bad_from', real_name: '异常离任', role: 'weird_role', building_id: 1, scope_type: 'building', status: 'active' });
   tables.admins.push({ id: 904, username: 'qa_to', real_name: '新任职', role: 'admin', building_id: 1, scope_type: 'building', status: 'active' });
-  const badHo = await handoverService.initiate({ fromAdminId: 903, toAdminId: 904, initiatedBy: 2 });
   eq('回滚用例：903 初始为 active', findAdmin(903).status, 'active');
 
   const realGetConnection = db.getConnection;
@@ -192,68 +193,43 @@ const main = async function() {
     release: function() {}
   };
   db.getConnection = async function() { return fakeConn; };
-  await expectThrow('accept 第二步(角色非法)失败', function() {
-    return handoverService.accept({ handoverId: badHo.id, actorId: 904, actorRole: 'admin' });
+  await expectThrow('reassign 第二步(角色非法)失败', function() {
+    return handoverService.reassign({ operatorId: 2, fromAdminId: 903, toAdminId: 904 });
   }, 'HANDOVER_CONFLICT');
   db.getConnection = realGetConnection;
 
   eq('回滚后 903 仍为 active（第一步被回滚）', findAdmin(903).status, 'active');
   eq('回滚后 904 未被激活为离任方角色', findAdmin(904).role, 'admin');
-  eq('回滚后交接记录仍为 pending',
-    (tables.admin_handover.filter(function(h) { return Number(h.id) === Number(badHo.id); })[0] || {}).status, 'pending');
+  eq('回滚后未产生交接记录',
+    (tables.admin_handover.filter(function(h) { return Number(h.from_user) === 903; })).length, 0);
 
-  // ---------- ⑤ accept 成功路径 + 旧 refresh 令牌被删 ----------
+  // ---------- ⑤ reassign 成功路径 + 旧 refresh 令牌被删 ----------
   resetTables();
   tables.admins.push({ id: 901, username: 'qa_from', real_name: '离任', role: 'admin', building_id: 2, scope_type: 'building', status: 'active' });
   tables.admins.push({ id: 902, username: 'qa_new', real_name: '新任', role: 'admin', building_id: 1, scope_type: 'building', status: 'active' });
-  const ho = await handoverService.initiate({ fromAdminId: 901, toAdminId: 902, initiatedBy: 2 });
   await redis.set('token:admin:901', 'REFRESH-901', 'EX', 100);
   await redis.set('token:901', 'STUDENT-TOKEN-901', 'EX', 100);
 
-  const accepted = await handoverService.accept({ handoverId: ho.id, actorId: 902, actorRole: 'admin' });
-  eq('accept 返回 sessionRevoked', accepted.sessionRevoked, true);
-  eq('accept 继承角色', accepted.inheritedRole, 'admin');
-  eq('accept 继承数据域 building', accepted.inheritedBuildingId, 2);
+  const reassignResult = await handoverService.reassign({ operatorId: 2, fromAdminId: 901, toAdminId: 902, note: '换届交接' });
+  eq('reassign 返回 sessionRevoked', reassignResult.sessionRevoked, true);
+  eq('reassign 返回数字 handoverId', typeof reassignResult.handoverId === 'number' && reassignResult.handoverId > 0, true);
+  eq('reassign 继承角色', reassignResult.inheritedRole, 'admin');
+  eq('reassign 继承数据域 building', reassignResult.inheritedBuildingId, 2);
   eq('离任方 901 -> disabled', findAdmin(901).status, 'disabled');
   eq('新任方 902 -> active', findAdmin(902).status, 'active');
   eq('新任方 902 接续 role', findAdmin(902).role, 'admin');
   eq('新任方 902 接续 scope_type', findAdmin(902).scope_type, 'building');
   eq('新任方 902 接续 building_id', Number(findAdmin(902).building_id), 2);
-  eq('交接记录 -> accepted', (tables.admin_handover.filter(function(h) { return Number(h.id) === Number(ho.id); })[0] || {}).status, 'accepted');
+  eq('交接记录 -> accepted', (tables.admin_handover.filter(function(h) { return Number(h.id) === Number(reassignResult.handoverId); })[0] || {}).status, 'accepted');
   eq('旧 refresh 令牌 token:admin:901 已删除', await redis.get('token:admin:901'), null);
-  // 疑似越界副作用：from_user 是“管理员 id”，而 token:<id> 是“学生端”刷新令牌键位
+  // 越界副作用防护：from_user 是“管理员 id”，token:<id> 是“学生端”刷新令牌键位，不得误删
   const studentKeyLeft = await redis.get('token:901');
   if (studentKeyLeft === 'STUDENT-TOKEN-901') pass++;
   else gap('交接删除了学生端刷新令牌键 token:901（与“学生端登录不受影响”的设计语义冲突）', 'token:901 期望保留，实际=' + JSON.stringify(studentKeyLeft));
 
-  await expectThrow('重复 accept 已完成的交接', function() {
-    return handoverService.accept({ handoverId: ho.id, actorId: 902, actorRole: 'admin' });
-  }, 'HANDOVER_CONFLICT');
-
-  // 越权：非当事人、非超管
-  resetTables();
-  const ho2 = await handoverService.initiate({ fromAdminId: 1, toAdminId: 4, initiatedBy: 1 });
-  await expectThrow('非当事人 accept 被拒', function() {
-    return handoverService.accept({ handoverId: ho2.id, actorId: 3, actorRole: 'counselor' });
-  }, 'PERMISSION_DENIED');
-
-  // ---------- 交接撤销 ----------
-  const revokeOk = await handoverService.revoke({ handoverId: ho2.id, actorId: 1, actorRole: 'admin' });
-  eq('revoke 待交接成功', revokeOk, true);
-  eq('revoke 后不可再 accept', await (async function() { try { await handoverService.accept({ handoverId: ho2.id, actorId: 4, actorRole: 'admin' }); return 'accepted'; } catch (e) { return e.businessCode; } })(), 'HANDOVER_CONFLICT');
-  eq('重复 revoke 返回 false', await handoverService.revoke({ handoverId: ho2.id, actorId: 1, actorRole: 'admin' }), false);
-
-  // 重复发起：存在 pending 时应拒绝
-  resetTables();
-  await handoverService.initiate({ fromAdminId: 4, toAdminId: 1, initiatedBy: 4 });
-  await expectThrow('存在 pending 时重复发起被拒', function() {
-    return handoverService.initiate({ fromAdminId: 4, toAdminId: 2, initiatedBy: 4 });
-  }, 'HANDOVER_CONFLICT');
-  // 已禁用账号不可发起
-  findAdmin(4).status = 'disabled';
-  tables.admin_handover = [];
-  await expectThrow('离任方非 active 不可发起', function() {
-    return handoverService.initiate({ fromAdminId: 4, toAdminId: 1, initiatedBy: 4 });
+  // 已禁用账号不可再次交接
+  await expectThrow('已禁用账号不可重复交接', function() {
+    return handoverService.reassign({ operatorId: 2, fromAdminId: 901, toAdminId: 902 });
   }, 'HANDOVER_CONFLICT');
 
   // ---------- ⑥ capabilities 读取失败降级为 []，不阻断接口 ----------
