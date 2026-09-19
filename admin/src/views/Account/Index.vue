@@ -19,19 +19,23 @@
         <el-tab-pane label="管理账号" name="manager" />
       </el-tabs>
 
-      <FilterBar @search="loadData" @reset="resetFilters">
-        <el-input v-model="filters.keyword" placeholder="搜索账号/姓名/学号" clearable style="width: 220px" @keyup.enter="loadData" />
-        <el-select v-if="activeTab === 'manager'" v-model="filters.role" placeholder="角色筛选" clearable style="width: 180px">
+      <ListToolbar
+        v-model:status="filters.status"
+        v-model:keyword="filters.keyword"
+        :status-options="statusOptions"
+        status-placeholder="状态筛选"
+        keyword-placeholder="搜索账号/姓名/学号"
+        :export-file-name="exportFileName"
+        @search="onSearch"
+        @reset="resetFilters"
+        @export="handleExport"
+      >
+        <el-select v-if="activeTab === 'manager'" v-model="filters.role" placeholder="角色筛选" clearable style="width: 180px" @change="onSearch">
           <el-option label="超级管理员" value="super_admin" />
           <el-option label="导生管理员" value="admin" />
           <el-option label="辅导员" value="counselor" />
         </el-select>
-        <el-select v-model="filters.status" placeholder="状态筛选" clearable style="width: 150px">
-          <el-option label="正常" value="active" />
-          <el-option label="停用/封禁" value="disabled" />
-          <el-option label="受限" value="restricted" v-if="activeTab === 'student'" />
-        </el-select>
-      </FilterBar>
+      </ListToolbar>
 
       <el-table :data="tableData" v-loading="loading" stripe class="account-table">
         <el-table-column prop="username" :label="activeTab === 'student' ? '学号' : '账号'" width="150" />
@@ -183,10 +187,11 @@ import { getBuildings } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import PageShell from '@/components/admin/PageShell.vue'
-import FilterBar from '@/components/admin/FilterBar.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
 import { createActionLock, runLockedConfirmedAction } from '@/utils/approvalState'
 import { createLatestRequest } from '@/utils/latestRequest'
 import { normalizeAccountImportRows, readAccountImportWorkbook } from '@/utils/accountImport'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 
 const userStore = useUserStore()
 const currentRole = computed(() => userStore.userInfo?.role || 'admin')
@@ -240,6 +245,48 @@ const roleOptions = computed(() => {
   return []
 })
 
+// 状态下拉随当前 Tab 变化：仅宿生账号存在「受限」状态。
+const statusOptions = computed(() => {
+  const options = [
+    { label: '正常', value: 'active' },
+    { label: '停用/封禁', value: 'disabled' }
+  ]
+  if (activeTab.value === 'student') options.push({ label: '受限', value: 'restricted' })
+  return options
+})
+
+// 导出文件名随当前 Tab 切换，避免宿生/管理两类数据混在一个文件名下。
+const exportFileName = computed(() => (activeTab.value === 'manager' ? '导出_管理账号' : '导出_宿生账号'))
+
+/**
+ * 导出列随当前 Tab 切换：宿生看学号/信用分/所属楼栋，管理看账号/角色/联系电话/管理范围。
+ * R-14：全部字段取自后端 /admin/accounts 出口已按请求者身份脱敏后的行
+ *（accountController.getAccounts → privacyAuditService.maskRowsForRequest），
+ * 与表格展示字段完全一致，不做任何解掩码或 PII 拼接。
+ */
+const exportColumns = computed(() => {
+  if (activeTab.value === 'manager') {
+    return [
+      { header: '账号', key: 'username', width: 18 },
+      { header: '姓名', key: 'realName' },
+      { header: '角色', formatter: row => roleMap[row.role]?.label || '角色待确认' },
+      { header: '联系电话', formatter: row => row.phone || '-' },
+      { header: '状态', formatter: row => statusMap[row.status]?.label || '状态待确认' },
+      { header: '管理范围', formatter: row => row.scopeLabel || '待设置' },
+      { header: '最近登录', formatter: row => row.lastLoginAt || '暂无记录', width: 20 },
+      { header: '创建时间', key: 'createdAt', width: 20 }
+    ]
+  }
+  return [
+    { header: '学号', key: 'username', width: 18 },
+    { header: '姓名', key: 'realName' },
+    { header: '状态', formatter: row => statusMap[row.status]?.label || '状态待确认' },
+    { header: '所属楼栋', formatter: row => row.buildingName || '未分配' },
+    { header: '信用分', formatter: row => (row.creditScore === null || row.creditScore === undefined ? '-' : row.creditScore) },
+    { header: '创建时间', key: 'createdAt', width: 20 }
+  ]
+})
+
 const rules = computed(() => ({
   username: [{ required: true, message: activeTab.value === 'student' ? '请输入学号' : '请输入账号', trigger: 'blur' }],
   realName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
@@ -249,15 +296,27 @@ const rules = computed(() => ({
   buildingId: [{ required: activeTab.value === 'student' || (form.role === 'admin' && form.scopeType === 'building'), message: '请选择楼栋', trigger: 'change' }]
 }))
 
+/**
+ * 列表查询参数单一来源：列表加载与导出共用，保证「导出结果 == 当前筛选视图」。
+ * accountType 随当前 Tab 切换；后端 /admin/accounts 支持 keyword + role + status
+ *（见 server/src/controllers/accountController.js getAccounts）。
+ * @returns {{accountType: string, role: string, status: string, keyword: string}}
+ */
+function buildParams() {
+  return {
+    accountType: activeTab.value === 'manager' ? 'manager' : 'student',
+    role: activeTab.value === 'student' ? 'student' : (filters.role || ''),
+    status: filters.status || '',
+    keyword: filters.keyword || ''
+  }
+}
+
 async function loadData() {
   loading.value = true
   const params = {
+    ...buildParams(),
     page: pagination.page,
-    pageSize: pagination.pageSize,
-    accountType: activeTab.value === 'manager' ? 'manager' : 'student',
-    role: activeTab.value === 'student' ? 'student' : (filters.role || undefined),
-    status: filters.status || undefined,
-    keyword: filters.keyword || undefined
+    pageSize: pagination.pageSize
   }
   return accountRequest.run(getList(params), res => {
     tableData.value = res.data?.list || []
@@ -268,8 +327,15 @@ async function loadData() {
   })
 }
 
+// 状态/角色/关键词变更后回到第 1 页再查询（服务端筛选）
+function onSearch() {
+  pagination.page = 1
+  loadData()
+}
+
 function handleTabChange() {
   filters.role = ''
+  filters.status = ''
   pagination.page = 1
   resetForm()
   loadData()
@@ -281,6 +347,25 @@ function resetFilters() {
   filters.status = ''
   pagination.page = 1
   loadData()
+}
+
+/**
+ * 导出当前筛选条件下的全量账号。
+ * 后端 paginationRules 限制 pageSize<=100，且 accountController 内 paginateRows 二次
+ * Math.min(100, pageSize) 钳制，故必须按页循环拉取，不能一次性请求超大 pageSize（会被打回 400）。
+ */
+async function handleExport() {
+  try {
+    const list = await fetchAllPages(getList, buildParams(), {
+      pageSize: 100,
+      maxPages: 50,
+      options: { silentError: true }
+    })
+    if (!exportXlsx(exportColumns.value, list, exportFileName.value)) return
+    ElMessage.success(`导出成功，共 ${list.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 function defaultRole() {

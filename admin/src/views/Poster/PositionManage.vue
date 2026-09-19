@@ -1,5 +1,17 @@
 <template>
   <div class="page-container">
+    <ListToolbar
+      v-model:status="filters.status"
+      v-model:keyword="filters.keyword"
+      :status-options="statusOptions"
+      status-placeholder="状态"
+      keyword-placeholder="搜索位置名称"
+      export-file-name="导出_海报位置"
+      @search="loadData"
+      @reset="resetFilters"
+      @export="handleExport"
+    />
+
     <el-card shadow="never">
       <div class="table-header">
         <span class="table-title">海报位置管理</span>
@@ -8,7 +20,7 @@
         </el-button>
       </div>
 
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table :data="filteredRows" v-loading="loading" stripe>
         <el-table-column prop="name" label="位置名称" width="180" />
         <el-table-column prop="building" label="所在楼栋" width="140" />
         <el-table-column prop="floor" label="楼层" width="80" />
@@ -64,9 +76,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getPositions, createPosition, updatePosition, deletePosition } from '@/api/poster'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx } from '@/utils/exportXlsx'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -81,6 +95,40 @@ const rules = {
   building: [{ required: true, message: '请输入楼栋', trigger: 'blur' }]
 }
 
+// 海报位置是配置类小表：后端不提供位置筛选参数（且无独立的位置分页接口），
+// 状态与名称筛选统一由前端对已加载行兜底（🔧）。
+const statusOptions = [
+  { label: '启用', value: 'active' },
+  { label: '停用', value: 'inactive' }
+]
+
+// R-14：位置为公共配置数据，不含任何个人敏感信息。
+const exportColumns = [
+  { header: '位置名称', key: 'name', width: 20 },
+  { header: '所在楼栋', key: 'building' },
+  { header: '楼层', key: 'floor' },
+  { header: '最大海报数', key: 'maxPosters' },
+  { header: '当前海报数', key: 'currentPosters' },
+  { header: '状态', formatter: row => (row.status === 'active' ? '启用' : '停用') },
+  { header: '描述', key: 'description', width: 30 }
+]
+
+const filters = reactive({ status: '', keyword: '' })
+
+/**
+ * 前端兜底筛选：状态精确匹配 + 名称包含匹配。
+ * @param {object} row 位置行
+ * @returns {boolean} 是否命中
+ */
+function matchFilters(row) {
+  const keyword = String(filters.keyword || '').trim().toLowerCase()
+  const statusOk = !filters.status || row.status === filters.status
+  const keywordOk = !keyword || String(row.name || '').toLowerCase().includes(keyword)
+  return statusOk && keywordOk
+}
+
+const filteredRows = computed(() => tableData.value.filter(matchFilters))
+
 async function loadData() {
   loading.value = true
   try {
@@ -90,6 +138,27 @@ async function loadData() {
     // handled
   } finally {
     loading.value = false
+  }
+}
+
+// 重置筛选后重新拉取一次，保证与后端最新数据一致
+function resetFilters() {
+  filters.status = ''
+  filters.keyword = ''
+  loadData()
+}
+
+/**
+ * 非分页小表导出：后端一次以 pageSize:100 返回全部位置，且无分页/筛选参数，
+ * 因此直接导出「当前已加载 + 已前端筛选」的行，无需分页循环拉取。
+ */
+async function handleExport() {
+  try {
+    const rows = filteredRows.value
+    if (!exportXlsx(exportColumns, rows, '导出_海报位置')) return
+    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
   }
 }
 

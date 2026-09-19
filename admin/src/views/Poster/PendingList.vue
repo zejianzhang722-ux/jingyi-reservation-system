@@ -1,27 +1,23 @@
 <template>
   <div class="page-container">
-    <el-card shadow="never" class="filter-card">
-      <el-form :model="filters" inline>
-        <el-form-item label="状态">
-          <el-select v-model="filters.status" placeholder="全部" clearable style="width: 120px">
-            <el-option label="待审核" value="pending" />
-            <el-option label="已通过" value="approved" />
-            <el-option label="已驳回" value="rejected" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadData">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <ListToolbar
+      v-model:status="filters.status"
+      v-model:keyword="filters.keyword"
+      :status-options="statusOptions"
+      status-placeholder="状态"
+      keyword-placeholder="搜索申请人/学号"
+      export-file-name="导出_海报审核列表"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    />
 
     <el-card shadow="never">
       <div class="table-header">
         <span class="table-title">海报审核列表</span>
       </div>
 
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table :data="filteredRows" v-loading="loading" stripe>
         <el-table-column prop="userName" label="申请人" width="100" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="title" label="海报标题" min-width="150" show-overflow-tooltip />
@@ -72,9 +68,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getPending, approve, reject, markClean, markViolation } from '@/api/poster'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -86,14 +84,58 @@ const statusMap = {
   rejected: { label: '已驳回', type: 'danger' }
 }
 
-const filters = reactive({ status: '' })
+// GET /poster 后端仅支持 status 过滤（scopedQueryController.posters），不支持 keyword → 关键词前端兜底（🔧）。
+const statusOptions = [
+  { label: '待审核', value: 'pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已驳回', value: 'rejected' }
+]
+
+// R-14：导出字段与表格展示字段一致，均取自后端出口已脱敏的海报行
+//（scopedQueryController.posters → privacyAuditService.maskRowsForRequest），
+// 不调用任何解掩码接口、不拼接 PII。
+const exportColumns = [
+  { header: '申请人', key: 'userName' },
+  { header: '学号', key: 'studentId', width: 16 },
+  { header: '海报标题', key: 'title', width: 24 },
+  { header: '张贴位置', key: 'position' },
+  { header: '开始日期', key: 'startDate' },
+  { header: '结束日期', key: 'endDate' },
+  { header: '状态', formatter: row => statusMap[row.status]?.label || row.status || '' },
+  { header: '申请时间', key: 'createdAt', width: 20 }
+]
+
+const filters = reactive({ status: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const rejectForm = reactive({ reason: '', id: null })
+
+/**
+ * 关键词前端兜底：后端 /poster 无 keyword 参数，只能对已加载数据做包含匹配。
+ * @param {object} row 海报行
+ * @param {string} keyword 关键词
+ * @returns {boolean} 是否命中
+ */
+function matchKeyword(row, keyword) {
+  const text = String(keyword || '').trim().toLowerCase()
+  if (!text) return true
+  return [row.userName, row.studentId, row.title, row.position]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .includes(text)
+}
+
+const filteredRows = computed(() => tableData.value.filter(row => matchKeyword(row, filters.keyword)))
+
+// 列表查询参数单一来源：只带后端支持的 status；keyword 由前端兜底。
+function buildParams() {
+  return { status: filters.status || '' }
+}
 
 async function loadData() {
   loading.value = true
   try {
-    const res = await getPending({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+    const res = await getPending({ ...buildParams(), page: pagination.page, pageSize: pagination.pageSize })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
@@ -103,10 +145,37 @@ async function loadData() {
   }
 }
 
-function resetFilters() {
-  filters.status = ''
+// 状态/关键词变更后回到第 1 页再查询
+function onSearch() {
   pagination.page = 1
   loadData()
+}
+
+function resetFilters() {
+  filters.status = ''
+  filters.keyword = ''
+  pagination.page = 1
+  loadData()
+}
+
+/**
+ * 导出当前筛选条件下的全量海报申请。
+ * 后端 paginationRules 限制 pageSize<=100（scopedQueryController.pagination 亦二次 Math.min(100, ...)），
+ * 故按页循环拉取；keyword 后端不支持，导出时对全量结果套用同一套前端过滤，保证「导出 == 当前筛选视图」。
+ */
+async function handleExport() {
+  try {
+    const list = await fetchAllPages(getPending, buildParams(), {
+      pageSize: 100,
+      maxPages: 50,
+      options: { silentError: true }
+    })
+    const rows = list.filter(row => matchKeyword(row, filters.keyword))
+    if (!exportXlsx(exportColumns, rows, '导出_海报审核列表')) return
+    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 async function handleApprove(row) {
@@ -173,10 +242,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.filter-card :deep(.el-card__body) {
-  padding-bottom: 0;
 }
 
 .table-header {
