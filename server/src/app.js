@@ -25,6 +25,7 @@ const auditSchemaService = require('./services/auditSchemaService');
 const backupSchemaService = require('./services/backupSchemaService');
 const performanceSchemaService = require('./services/performanceSchemaService');
 const productionConfigGuard = require('./services/productionConfigGuard');
+const runtimeConfigService = require('./services/runtimeConfigService');
 
 const app = express();
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
@@ -96,8 +97,11 @@ app.set('io', io);
 
 const startServer = async function() {
   try {
-    productionConfigGuard.validate();
+    productionConfigGuard.validate({ dbMock: db.isMock() });
     const readiness = await dataReadinessService.checkDataReadiness();
+    productionConfigGuard.assertNoMockDatabase(db.isMock());
+    const runtimeConfig = await runtimeConfigService.loadRuntimeConfig();
+    runtimeConfigService.startAutoRefresh();
     const auditSchema = await auditSchemaService.assertReady();
     const backupSchema = await backupSchemaService.assertReady();
     const performanceSchema = await performanceSchemaService.assertReady();
@@ -175,6 +179,7 @@ const shutdown = async function(signal) {
     logger.error('停止通知Outbox失败:', err);
   }
   try { await schedulerService.stopScheduler(); } catch (err) { logger.error('停止定时任务失败:', err); }
+  try { runtimeConfigService.stopAutoRefresh(); } catch (err) { logger.error('停止运行时配置刷新失败:', err); }
   try { await closeSocketServer(); } catch (err) { logger.error('关闭HTTP与WebSocket服务失败:', err); }
   try { await socketRedisAdapterService.closeSocketAdapter(); } catch (err) { logger.error('关闭实时广播适配器失败:', err); }
   try { await db.close(); } catch (err) { logger.error('关闭MySQL连接池失败:', err); }

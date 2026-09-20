@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const dayjs = require('dayjs');
 const helpers = require('../utils/helpers');
 const operationLogPresenter = require('../utils/operationLogPresenter');
+const runtimeConfigService = require('../services/runtimeConfigService');
 
 const getAccounts = async function(req, res) {
   try {
@@ -437,7 +438,8 @@ const getConfig = async function(req, res) {
 
     const configMap = {};
     configs.forEach(function(c) {
-      configMap[c.config_key] = c.config_value;
+      // 历史数据以 JSON 字符串存储，直接返回会让前端拿到字符串而非对象或数字。
+      configMap[c.config_key] = runtimeConfigService.parseValue(c.config_value);
     });
 
     return response.success(res, configMap);
@@ -447,20 +449,59 @@ const getConfig = async function(req, res) {
   }
 };
 
+// 返回当前进程内实际生效的参数，用于确认配置是否已刷新。
+const getEffectiveConfig = async function(req, res) {
+  try {
+    return response.success(res, runtimeConfigService.snapshot());
+  } catch (err) {
+    logger.error('获取生效配置异常:', err);
+    return response.error(res, err.message);
+  }
+};
+
+const sanitizeConfigSection = function(section, allowedKeys) {
+  const result = {};
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return result;
+  allowedKeys.forEach(function(key) {
+    if (section[key] === undefined || section[key] === null || section[key] === '') return;
+    result[key] = section[key];
+  });
+  return result;
+};
+
 const updateConfig = async function(req, res) {
   try {
-    const configs = req.body;
+    const configs = req.body || {};
 
-    for (const [key, value] of Object.entries(configs)) {
+    // 信用与预约参数按分组存储，更新后立即刷新运行时配置使其生效。
+    const grouped = {
+      credit: sanitizeConfigSection(configs.credit, runtimeConfigService.CREDIT_KEYS),
+      reservation: sanitizeConfigSection(
+        configs.reservation,
+        runtimeConfigService.RESERVATION_NUMERIC_KEYS.concat(runtimeConfigService.RESERVATION_STRING_KEYS)
+      )
+    };
+
+    const entries = Object.entries(configs).filter(function(pair) {
+      return pair[0] !== 'credit' && pair[0] !== 'reservation';
+    });
+    Object.keys(grouped).forEach(function(key) {
+      if (Object.keys(grouped[key]).length) entries.push([key, grouped[key]]);
+    });
+
+    if (!entries.length) return response.error(res, '没有需要保存的配置项', 400);
+
+    for (const [key, value] of entries) {
       await db.query(
         'INSERT INTO system_config (config_key, config_value, updated_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE config_value = ?, updated_at = NOW()',
         [key, JSON.stringify(value), JSON.stringify(value)]
       );
     }
 
+    const refreshResult = await runtimeConfigService.loadRuntimeConfig();
     await logOperation(req.user.id, 'update_config', 'system_config', null, '更新系统配置');
 
-    return response.success(res, null, '配置更新成功');
+    return response.success(res, { appliedFields: refreshResult.loaded }, '配置更新成功');
   } catch (err) {
     logger.error('更新系统配置异常:', err);
     return response.error(res, err.message);
@@ -748,7 +789,7 @@ module.exports = {
   getRooms, getRoomDetail, getSeatsByRoom,
   createRoom, updateRoom, deleteRoom,
   batchCreateSeats, updateSeat, deleteSeat,
-  getConfig, updateConfig,
+  getConfig, getEffectiveConfig, updateConfig,
   getBuildings,
   createBuilding, updateBuilding, deleteBuilding,
   createManager, updateManager, deleteManager,

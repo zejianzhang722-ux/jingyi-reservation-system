@@ -31,6 +31,7 @@ router.put('/seats/:id', auth, requireRole('super_admin'), adminController.updat
 router.delete('/seats/:id', auth, requireRole('super_admin'), adminController.deleteSeat);
 
 router.get('/config', auth, requireRole('super_admin'), adminController.getConfig);
+router.get('/config/effective', auth, requireRole('super_admin'), adminController.getEffectiveConfig);
 router.put('/config', auth, requireRole('super_admin'), adminController.updateConfig);
 
 router.get('/buildings', auth, requireAdmin, adminScope.loadAdminScope, adminScope.ownBuildingList, adminController.getBuildings);

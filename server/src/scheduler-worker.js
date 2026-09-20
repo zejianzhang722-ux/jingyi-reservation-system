@@ -7,11 +7,15 @@ const performanceSchemaService = require('./services/performanceSchemaService');
 const schedulerService = require('./services/schedulerService');
 const notificationOutboxPumpService = require('./services/notificationOutboxPumpService');
 const backupScheduleService = require('./services/backupScheduleService');
+const runtimeConfigService = require('./services/runtimeConfigService');
 
 let shuttingDown = false;
 
 const startWorker = async function() {
   const readiness = await dataReadinessService.checkDataReadiness();
+  // Worker 依赖爽约检测与提醒参数，必须加载 system_config 中的运行时配置。
+  const runtimeConfig = await runtimeConfigService.loadRuntimeConfig();
+  runtimeConfigService.startAutoRefresh();
   const backupSchema = await backupSchemaService.assertReady();
   const performanceSchema = await performanceSchemaService.assertReady();
   const schedulerState = await schedulerService.initScheduler();
@@ -34,6 +38,7 @@ const shutdownWorker = async function(signal) {
   shuttingDown = true;
   logger.info('定时任务Worker收到' + signal + '，开始停止');
   try { backupScheduleService.stop(); } catch (err) { logger.error('停止自动备份任务失败:', err); }
+  try { runtimeConfigService.stopAutoRefresh(); } catch (err) { logger.error('停止运行时配置刷新失败:', err); }
   try {
     const outboxStop = await notificationOutboxPumpService.stop({ timeoutMs: 10000 });
     if (!outboxStop.drained) logger.warn('通知Outbox仍有任务未在关闭窗口内完成');

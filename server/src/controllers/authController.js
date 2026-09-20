@@ -339,77 +339,10 @@ const studentLogin = async function(req, res) {
   }
 };
 
-const refreshToken = async function(req, res) {
-  try {
-    const authHeaderForRefresh = req.headers.authorization || '';
-    const oldAccessToken = authHeaderForRefresh.startsWith('Bearer ') ? authHeaderForRefresh.substring(7) : '';
-    const providedRefreshToken = req.body && req.body.refreshToken;
-    let decodedRefresh = null;
-    if (providedRefreshToken) {
-      decodedRefresh = jwt.verify(providedRefreshToken, config.jwt.secret);
-    }
-    const decodedAccess = oldAccessToken ? jwt.verify(oldAccessToken, config.jwt.secret, { ignoreExpiration: true }) : null;
-    const refreshDecoded = decodedRefresh || decodedAccess;
-    if (!refreshDecoded) {
-      return response.error(res, '请重新登录', 401);
-    }
-    if (decodedRefresh && decodedAccess && Number(decodedRefresh.id) !== Number(decodedAccess.id)) {
-      return response.error(res, '请重新登录', 401);
-    }
-    const refreshRedisKey = refreshDecoded.role === 'student' ? 'token:' + refreshDecoded.id : 'token:admin:' + refreshDecoded.id;
-    let currentRefreshToken = null;
-    try {
-      currentRefreshToken = await redis.get(refreshRedisKey);
-    } catch(e) {}
-    if (currentRefreshToken && providedRefreshToken && currentRefreshToken !== providedRefreshToken) {
-      return response.error(res, '请重新登录', 401);
-    }
-    const refreshedTokens = generateTokens({
-      id: refreshDecoded.id,
-      openid: refreshDecoded.openid,
-      role: refreshDecoded.role
-    });
-    try {
-      await redis.set(refreshRedisKey, refreshedTokens.refreshToken, 'EX', 7 * 24 * 3600);
-    } catch(e) {}
-    return response.success(res, {
-      token: refreshedTokens.token,
-      refreshToken: refreshedTokens.refreshToken
-    });
+// refreshToken 函数已删除：经 Grep 核实在 server/src 中无调用点（死代码），
+// /auth/refresh 路由实际使用 tokenController.refresh（已安全实现 fail-closed + rotation）。
+// 如需恢复，请参照 tokenController.refresh 的安全实现，而非历史版本。
 
-    const authHeader = req.headers.authorization;
-    const oldToken = authHeader.substring(7);
-
-    const decoded = jwt.verify(oldToken, config.jwt.secret, { ignoreExpiration: true });
-    let storedRefresh = null;
-    try {
-      storedRefresh = await redis.get('token:' + decoded.id) || await redis.get('token:admin:' + decoded.id);
-    } catch(e) {}
-
-    if (!storedRefresh) {
-      return response.error(res, '请重新登录', 401);
-    }
-
-    const tokens = generateTokens({
-      id: decoded.id,
-      openid: decoded.openid,
-      role: decoded.role
-    });
-
-    try {
-      const key = decoded.role === 'student' ? 'token:' + decoded.id : 'token:admin:' + decoded.id;
-      await redis.set(key, tokens.refreshToken, 'EX', 7 * 24 * 3600);
-    } catch(e) {}
-
-    return response.success(res, {
-      token: tokens.token,
-      refreshToken: tokens.refreshToken
-    });
-  } catch (err) {
-    logger.error('刷新Token异常:', err);
-    return response.error(res, '刷新Token失败', 401);
-  }
-};
 
 const logout = async function(req, res) {
   try {
@@ -434,4 +367,4 @@ const logout = async function(req, res) {
   }
 };
 
-module.exports = { wechatLogin, adminLogin, adminMiniappLogin, studentLogin, refreshToken, logout };
+module.exports = { wechatLogin, adminLogin, adminMiniappLogin, studentLogin, logout };

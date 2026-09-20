@@ -8,8 +8,33 @@ const fail = function(message, code) {
   throw err;
 };
 
-const validate = function() {
-  if (process.env.NODE_ENV !== 'production') return { valid: true, production: false };
+// 危险调试开关：模拟微信登录仅允许在测试环境开启。
+const assertNoDangerousSwitches = function(production) {
+  if (process.env.ALLOW_MOCK_WECHAT_LOGIN !== 'true') return;
+  if (production) {
+    fail('生产环境禁止开启模拟微信登录', 'MOCK_LOGIN_FORBIDDEN');
+  }
+  if (process.env.NODE_ENV !== 'test') {
+    fail('仅测试环境允许开启模拟微信登录', 'MOCK_LOGIN_FORBIDDEN');
+  }
+};
+
+// 生产环境禁止以模拟数据库启动。
+const assertNoMockDatabase = function(isMock, env) {
+  const production = (env || process.env.NODE_ENV) === 'production';
+  if (production && isMock) {
+    fail('生产环境检测到模拟数据库，禁止启动', 'MOCK_DB_FORBIDDEN');
+  }
+  return { valid: true };
+};
+
+const validate = function(options) {
+  const production = process.env.NODE_ENV === 'production';
+  assertNoDangerousSwitches(production);
+  if (production && options && options.dbMock === true) {
+    fail('生产环境禁止使用模拟数据库', 'MOCK_DB_FORBIDDEN');
+  }
+  if (!production) return { valid: true, production: false };
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     fail('生产环境必须配置至少32字符的JWT_SECRET', 'JWT_SECRET_REQUIRED');
   }
@@ -50,4 +75,4 @@ const validate = function() {
   return { valid: true, production: true };
 };
 
-module.exports = { validate };
+module.exports = { validate, assertNoMockDatabase };

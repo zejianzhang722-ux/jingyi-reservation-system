@@ -99,7 +99,7 @@ const getMockReservationRows = function(options) {
 
 const paginateRows = function(rows, page, pageSize) {
   const currentPage = Math.max(1, Number(page || 1));
-  const size = Math.min(100, Math.max(1, Number(pageSize || 20)));
+  const size = Math.min(100, Math.max(1, Number(pageSize || 10)));
   const start = (currentPage - 1) * size;
   return {
     page: currentPage,
