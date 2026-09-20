@@ -1,21 +1,18 @@
 <template>
   <div class="page-container">
-    <el-card shadow="never" class="filter-card">
-      <el-form :model="filters" inline>
-        <el-form-item label="楼栋">
-          <el-select v-model="filters.buildingId" placeholder="全部" clearable style="width: 140px">
-            <el-option v-for="b in buildingOptions" :key="b.id" :label="b.name" :value="b.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="日期">
-          <el-date-picker v-model="filters.date" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" style="width: 160px" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadData">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <ListToolbar
+      v-model:keyword="filters.keyword"
+      keyword-placeholder="搜索学生姓名/学号"
+      export-file-name="导出_辅导员审批列表"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    >
+      <el-select v-model="filters.buildingId" placeholder="楼栋" clearable style="width: 140px" @change="onSearch">
+        <el-option v-for="b in buildingOptions" :key="b.id" :label="b.name" :value="b.id" />
+      </el-select>
+      <el-date-picker v-model="filters.date" type="date" placeholder="预约日期" value-format="YYYY-MM-DD" style="width: 160px" @change="onSearch" />
+    </ListToolbar>
 
     <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" />
     <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
@@ -28,7 +25,7 @@
       <AsyncState
         :loading="loading"
         :error="!!loadError && !tableData.length"
-        :empty="!loading && !loadError && !tableData.length"
+        :empty="!loading && !loadError && !filteredRows.length"
         empty-description="暂无待辅导员审批的预约"
         @retry="loadData"
       >
@@ -36,7 +33,7 @@
           <el-button type="primary" @click="resetFilters">重置筛选</el-button>
         </template>
 
-        <el-table :data="tableData" stripe>
+        <el-table :data="filteredRows" stripe>
           <el-table-column prop="userName" label="学生姓名" width="100" />
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="roomName" label="功能房" width="130" />
@@ -122,12 +119,25 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getCounselorPending, approve, reject, getReservationTrail } from '@/api/reservation'
 import { getBuildings } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AsyncState from '@/components/admin/AsyncState.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '@/utils/approvalState'
+
+// 导出列：与表格展示字段一一对应（R-14：只导出页面已展示、后端已脱敏的字段）。
+const exportColumns = [
+  { header: '学生姓名', key: 'userName' },
+  { header: '学号', key: 'studentId' },
+  { header: '功能房', key: 'roomName' },
+  { header: '预约日期', key: 'date' },
+  { header: '时间段', key: 'timeSlot' },
+  { header: '用途', key: 'purpose' },
+  { header: '辅导员', key: 'counselorName' }
+]
 
 const loading = ref(false)
 const loadError = ref('')
@@ -153,15 +163,36 @@ const trailActionLabel = action => TRAIL_ACTION_LABELS[action] || '记录'
 const trailActionType = action => TRAIL_ACTION_TYPES[action] || 'info'
 const trailRoleLabel = role => TRAIL_ROLE_LABELS[role] || '系统'
 
-const filters = reactive({ buildingId: '', date: '' })
+const filters = reactive({ buildingId: '', date: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const rejectForm = reactive({ reason: '', id: null })
+
+// 查询参数单一来源：列表加载与导出共用，保证「导出结果 == 当前筛选视图」。
+// 实测后端 GET /audit/counselor/pending 仅认 buildingId / date / page / pageSize
+// （type 由 URL 推导为 counselor），**不认 keyword**，故关键词走前端兜底。
+function buildParams() {
+  return {
+    buildingId: filters.buildingId,
+    date: filters.date
+  }
+}
+
+// 前端兜底过滤：后端不支持 keyword，按学生姓名 / 学号在本地数据里匹配。
+function matchFilters(row) {
+  const keyword = String(filters.keyword || '').trim().toLowerCase()
+  if (!keyword) return true
+  return String(row.userName || '').toLowerCase().includes(keyword) ||
+    String(row.studentId || '').toLowerCase().includes(keyword)
+}
+
+// 表格数据源：服务端筛选后的当页数据 + 关键词前端过滤。
+const filteredRows = computed(() => tableData.value.filter(row => matchFilters(row)))
 
 async function loadData() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await getCounselorPending({ ...filters, page: pagination.page, pageSize: pagination.pageSize })
+    const res = await getCounselorPending({ ...buildParams(), page: pagination.page, pageSize: pagination.pageSize })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
@@ -195,11 +226,36 @@ async function loadTrail(id) {
   }
 }
 
+// 筛选条件变化后回到第 1 页（buildingId / date 为服务端筛选，keyword 为前端过滤）。
+function onSearch() {
+  pagination.page = 1
+  loadData()
+}
+
 function resetFilters() {
   filters.buildingId = ''
   filters.date = ''
+  filters.keyword = ''
   pagination.page = 1
   loadData()
+}
+
+// 导出「筛选后全量」：后端 paginationRules 限制 pageSize<=100，不能一次性要 10000，
+// 必须按页循环拉取；keyword 后端不认，拉全量后套用与列表完全一致的 matchFilters。
+async function handleExport() {
+  try {
+    const list = await fetchAllPages(getCounselorPending, buildParams(), {
+      pageSize: 100,
+      maxPages: 50,
+      // 注：getCounselorPending 当前签名只有 (params)，options 暂不生效；保留以对齐其他页面约定。
+      options: { silentError: true }
+    })
+    const rows = list.filter(row => matchFilters(row))
+    if (!exportXlsx(exportColumns, rows, '导出_辅导员审批列表')) return
+    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 async function handleApprove(row) {
@@ -266,10 +322,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.filter-card :deep(.el-card__body) {
-  padding-bottom: 0;
 }
 
 .table-header {

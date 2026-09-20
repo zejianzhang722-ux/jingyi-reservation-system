@@ -129,14 +129,16 @@ const statusOptions = [
 ]
 
 /**
- * R-14（红线）：feedbackController.list 未经过 privacyAuditService.maskRowsForRequest，
- * 返回的 contact（联系方式）是没有任何脱敏层的明文 PII，因此【导出不含联系方式】。
- * 其余列与表格展示字段一致。是否放开需后端先补齐脱敏 + 产品确认。
+ * 后端 feedbackController.list 现已接入 privacyAuditService.maskRowsForRequest（统一脱敏出口），
+ * 且 contact 已纳入 maskPresenter 的 PHONE_KEYS 受保护清单：
+ * 管理员在数据域内看明文会自动落审计，域外/无权限则自动掩码。
+ * 因此导出可直接沿用「屏幕已展示、服务端已处理过」的字段，无需再手工剔除联系方式。
  */
 const exportColumns = [
   { header: '用户', key: 'userName' },
   { header: '类型', formatter: row => typeMap[row.type] || '类型待确认' },
   { header: '内容', key: 'content', width: 40 },
+  { header: '联系方式', key: 'contact', width: 16 },
   { header: '状态', formatter: row => (row.status === 'resolved' ? '已处理' : '待处理') },
   { header: '提交时间', key: 'createdAt', width: 20 }
 ]

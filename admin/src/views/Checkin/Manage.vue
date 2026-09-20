@@ -8,7 +8,16 @@
             <el-tag type="success">当前在用 {{ currentList.length }} 人</el-tag>
           </div>
 
-          <el-table :data="currentList" v-loading="loading" stripe>
+          <ListToolbar
+            v-model:keyword="keyword"
+            keyword-placeholder="搜索学号/姓名"
+            export-file-name="导出_在场签到"
+            @search="handleSearch"
+            @reset="handleReset"
+            @export="handleExport"
+          />
+
+          <el-table :data="filteredList" v-loading="loading" stripe>
             <el-table-column prop="userName" label="学生姓名" width="100" />
             <el-table-column prop="studentId" label="学号" width="130" />
             <el-table-column prop="roomName" label="功能房" width="130" />
@@ -107,10 +116,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { manualCheckin, manualCheckout, getCurrentList, submitPatrol } from '@/api/checkin'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
 
 const loading = ref(false)
 const patrolSubmitting = ref(false)
@@ -132,6 +143,52 @@ function computeDuration(checkinTime) {
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
   return hours > 0 ? `${hours}小时${minutes}分` : `${minutes}分`
+}
+
+// 关键词搜索：后端 GET /checkin/current 仅支持分页、不支持 keyword，
+// 因此对当前已加载列表做前端过滤（该路由未挂 paginationRules，pageSize 可自由取值）。
+const keyword = ref('')
+const filteredList = computed(function() {
+  const kw = keyword.value.trim().toLowerCase()
+  if (!kw) return currentList.value
+  return currentList.value.filter(function(item) {
+    return String(item.userName || '').toLowerCase().indexOf(kw) >= 0 ||
+      String(item.studentId || '').toLowerCase().indexOf(kw) >= 0
+  })
+})
+
+function handleSearch() {
+  pagination.page = 1
+  loadCurrentList()
+}
+
+function handleReset() {
+  keyword.value = ''
+  pagination.page = 1
+  loadCurrentList()
+}
+
+// R-14：导出列仅使用页面已展示、且后端已脱敏的字段。
+const exportColumns = [
+  { header: '学生姓名', key: 'userName' },
+  { header: '学号', key: 'studentId' },
+  { header: '功能房', key: 'roomName' },
+  { header: '座位号', key: 'seatNumber' },
+  { header: '签到时间', key: 'checkinTime' },
+  { header: '已用时', formatter: row => computeDuration(row.checkinTime) }
+]
+
+async function handleExport() {
+  try {
+    const rows = await fetchAllPages(getCurrentList, {}, { pageSize: 100, maxPages: 20 })
+    const list = rows.map(function(item) {
+      return Object.assign({}, item, { duration: computeDuration(item.checkinTime) })
+    })
+    if (!exportXlsx(exportColumns, list, '导出_在场签到')) return
+    ElMessage.success(`导出成功，共 ${list.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 async function loadCurrentList() {

@@ -1,37 +1,30 @@
 <template>
   <div class="page-container">
-    <el-card shadow="never" class="filter-card">
-      <el-form :model="filters" inline>
-        <el-form-item label="状态">
-          <el-select v-model="filters.status" placeholder="全部" clearable style="width: 120px">
-            <el-option label="待审核" value="pending" />
-            <el-option label="辅导员审核" value="counselor_pending" />
-            <el-option label="已通过" value="approved" />
-            <el-option label="已驳回" value="rejected" />
-            <el-option label="使用中" value="checked_in" />
-            <el-option label="已完成" value="completed" />
-            <el-option label="已爽约" value="noshow" />
-            <el-option label="已取消" value="cancelled" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="功能房">
-          <el-select v-model="filters.roomId" placeholder="全部" clearable style="width: 150px">
-            <el-option v-for="r in roomOptions" :key="r.id" :label="r.name" :value="r.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="预约人">
-          <el-input v-model="filters.keyword" placeholder="姓名/学号" clearable style="width: 140px" />
-        </el-form-item>
-        <el-form-item label="日期范围">
-          <el-date-picker v-model="filters.dateRange" type="daterange" range-separator="至" start-placeholder="开始" end-placeholder="结束" value-format="YYYY-MM-DD" style="width: 240px" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadData">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
-          <el-button type="success" @click="handleExport">导出Excel</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <ListToolbar
+      v-model:status="filters.status"
+      v-model:keyword="filters.keyword"
+      :status-options="statusOptions"
+      status-placeholder="状态"
+      keyword-placeholder="搜索姓名/学号"
+      export-file-name="导出_预约列表"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    >
+      <el-select v-model="filters.roomId" placeholder="功能房" clearable filterable style="width: 150px" @change="onSearch">
+        <el-option v-for="r in roomOptions" :key="r.id" :label="r.name" :value="r.id" />
+      </el-select>
+      <el-date-picker
+        v-model="filters.dateRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="开始"
+        end-placeholder="结束"
+        value-format="YYYY-MM-DD"
+        style="width: 240px"
+        @change="onSearch"
+      />
+    </ListToolbar>
 
     <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" class="stale-alert" />
 
@@ -108,7 +101,33 @@ import { getList as getRoomList } from '@/api/room'
 import { ElMessage } from 'element-plus'
 import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 import { reservationStatusLabel, reservationStatusType } from '@/utils/reservationStatus'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 import AsyncState from '@/components/admin/AsyncState.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+
+// 9 项预约状态（与 @/utils/reservationStatus 保持一致）
+const statusOptions = [
+  { label: '待审核', value: 'pending' },
+  { label: '辅导员审核', value: 'counselor_pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已驳回', value: 'rejected' },
+  { label: '使用中', value: 'checked_in' },
+  { label: '已完成', value: 'completed' },
+  { label: '已爽约', value: 'noshow' },
+  { label: '已取消', value: 'cancelled' }
+]
+
+// 导出列（状态用 reservationStatusLabel 映射，与列表展示一致；R-14：仅用页面已展示字段）
+const exportColumns = [
+  { header: '预约人', key: 'userName' },
+  { header: '学号', key: 'studentId' },
+  { header: '功能房', key: 'roomName' },
+  { header: '预约日期', key: 'date' },
+  { header: '时间段', key: 'timeSlot' },
+  { header: '状态', key: 'status', formatter: row => reservationStatusLabel(row.status) },
+  { header: '用途', key: 'purpose' },
+  { header: '创建时间', key: 'createdAt' }
+]
 
 const loading = ref(false)
 const loadError = ref('')
@@ -135,16 +154,29 @@ const listRequest = createLatestRequestCoordinator({
   onFinish: () => { loading.value = false }
 })
 
-async function loadData() {
-  return listRequest.run({
+// 列表查询参数单一来源：列表加载与导出均复用，保证导出结果与当前筛选视图一致。
+function buildParams() {
+  return {
     status: filters.status,
     roomId: filters.roomId,
     keyword: filters.keyword,
     startDate: filters.dateRange?.[0] || '',
-    endDate: filters.dateRange?.[1] || '',
+    endDate: filters.dateRange?.[1] || ''
+  }
+}
+
+async function loadData() {
+  return listRequest.run({
+    ...buildParams(),
     page: pagination.page,
     pageSize: pagination.pageSize
   })
+}
+
+// 状态/关键词/功能房/日期变更后回到第 1 页再查询（服务端筛选）
+function onSearch() {
+  pagination.page = 1
+  loadData()
 }
 
 async function loadRooms() {
@@ -167,41 +199,19 @@ function handleDetail(row) {
   detailDialogVisible.value = true
 }
 
+// R-14：导出仅使用「服务端已脱敏 + 屏幕已展示」的字段。
+// 导出「筛选后全量」：后端 paginationRules 限制 pageSize<=100，故按页循环拉取，不能一次性要 10000。
 async function handleExport() {
   try {
-    const params = {
-      status: filters.status,
-      roomId: filters.roomId,
-      keyword: filters.keyword,
-      startDate: filters.dateRange?.[0] || '',
-      endDate: filters.dateRange?.[1] || '',
-      pageSize: 10000,
-      page: 1
-    }
-    const res = await getAll(params)
-    const list = res.data?.list || []
-    if (list.length === 0) {
-      ElMessage.warning('暂无数据可导出')
-      return
-    }
-    const XLSX = await import('xlsx')
-    const exportData = list.map(row => ({
-      '预约人': row.userName,
-      '学号': row.studentId,
-      '功能房': row.roomName,
-      '预约日期': row.date,
-      '时间段': row.timeSlot,
-      '状态': reservationStatusLabel(row.status),
-      '用途': row.purpose || '',
-      '创建时间': row.createdAt
-    }))
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '预约记录')
-    XLSX.writeFile(wb, `预约记录_${new Date().toISOString().slice(0, 10)}.xlsx`)
-    ElMessage.success('导出成功')
+    const list = await fetchAllPages(getAll, buildParams(), {
+      pageSize: 100,
+      maxPages: 50,
+      options: { silentError: true }
+    })
+    if (!exportXlsx(exportColumns, list, '导出_预约列表')) return
+    ElMessage.success(`导出成功，共 ${list.length} 条`)
   } catch (e) {
-    ElMessage.error('导出失败')
+    ElMessage.error('导出失败，请重试')
   }
 }
 
@@ -217,10 +227,6 @@ onBeforeUnmount(() => { listRequest.invalidate() })
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.filter-card :deep(.el-card__body) {
-  padding-bottom: 0;
 }
 
 .pagination-wrap {

@@ -48,8 +48,10 @@
         <el-form-item label="位置名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入位置名称" />
         </el-form-item>
-        <el-form-item label="所在楼栋" prop="building">
-          <el-input v-model="form.building" placeholder="请输入楼栋" />
+        <el-form-item label="所在楼栋" prop="buildingId">
+          <el-select v-model="form.buildingId" placeholder="请选择楼栋" style="width: 100%">
+            <el-option v-for="b in buildingOptions" :key="b.id" :label="b.name" :value="b.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="楼层" prop="floor">
           <el-input-number v-model="form.floor" :min="1" :max="30" />
@@ -78,6 +80,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getPositions, createPosition, updatePosition, deletePosition } from '@/api/poster'
+import { getBuildings } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ListToolbar from '@/components/admin/ListToolbar.vue'
 import { exportXlsx } from '@/utils/exportXlsx'
@@ -89,10 +92,14 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
 
-const form = reactive({ id: null, name: '', building: '', floor: 1, maxPosters: 4, status: 'active', description: '' })
+// 楼栋改用下拉选择并只提交 buildingId：后端 resolveBuildingId 优先按 ID 定位，
+// 文本框手输楼栋名在改名或输错时会匹配不上，故不再依赖名称模糊匹配。
+const buildingOptions = ref([])
+
+const form = reactive({ id: null, name: '', buildingId: null, floor: 1, maxPosters: 4, status: 'active', description: '' })
 const rules = {
   name: [{ required: true, message: '请输入位置名称', trigger: 'blur' }],
-  building: [{ required: true, message: '请输入楼栋', trigger: 'blur' }]
+  buildingId: [{ required: true, message: '请选择楼栋', trigger: 'change' }]
 }
 
 // 海报位置是配置类小表：后端不提供位置筛选参数（且无独立的位置分页接口），
@@ -169,7 +176,7 @@ function handleAdd() {
 
 function handleEdit(row) {
   isEdit.value = true
-  Object.assign(form, { id: row.id, name: row.name, building: row.building, floor: row.floor, maxPosters: row.maxPosters, status: row.status, description: row.description || '' })
+  Object.assign(form, { id: row.id, name: row.name, buildingId: row.buildingId, floor: row.floor, maxPosters: row.maxPosters, status: row.status, description: row.description || '' })
   dialogVisible.value = true
 }
 
@@ -185,7 +192,16 @@ async function handleDelete(row) {
 }
 
 function resetForm() {
-  Object.assign(form, { id: null, name: '', building: '', floor: 1, maxPosters: 4, status: 'active', description: '' })
+  Object.assign(form, { id: null, name: '', buildingId: null, floor: 1, maxPosters: 4, status: 'active', description: '' })
+}
+
+async function loadBuildings() {
+  try {
+    const res = await getBuildings({ pageSize: 100 })
+    buildingOptions.value = res.data?.list || res.data || []
+  } catch (e) {
+    buildingOptions.value = []
+  }
 }
 
 async function handleSubmit() {
@@ -212,6 +228,7 @@ async function handleSubmit() {
 
 onMounted(() => {
   loadData()
+  loadBuildings()
 })
 </script>
 

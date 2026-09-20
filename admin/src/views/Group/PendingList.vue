@@ -27,12 +27,22 @@
       </el-col>
     </el-row>
 
-    <FilterBar @search="loadData" @reset="resetFilters">
-      <el-select v-model="filters.roomId" placeholder="功能房" clearable filterable style="width: 220px">
+    <ListToolbar
+      v-model:status="filters.status"
+      v-model:keyword="filters.keyword"
+      :status-options="statusOptions"
+      status-placeholder="审批状态"
+      keyword-placeholder="搜索发起人/标题"
+      export-file-name="导出_组团预约列表"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    >
+      <el-select v-model="filters.roomId" placeholder="功能房" clearable filterable style="width: 220px" @change="onSearch">
         <el-option v-for="r in roomOptions" :key="r.id" :label="r.name" :value="r.id" />
       </el-select>
-      <el-date-picker v-model="filters.date" type="date" placeholder="预约日期" value-format="YYYY-MM-DD" style="width: 180px" />
-    </FilterBar>
+      <el-date-picker v-model="filters.date" type="date" placeholder="预约日期" value-format="YYYY-MM-DD" style="width: 180px" @change="onSearch" />
+    </ListToolbar>
 
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
       <template #default><el-button link type="primary" @click="loadData">重试</el-button></template>
@@ -40,7 +50,7 @@
     <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
 
     <el-card shadow="never">
-      <el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" stripe>
+      <el-table :data="filteredRows" v-loading="loading" @selection-change="handleSelectionChange" stripe>
         <el-table-column type="selection" width="50" />
         <el-table-column prop="title" label="组团标题" min-width="160" show-overflow-tooltip />
         <el-table-column prop="creatorName" label="发起人" width="110" />
@@ -142,12 +152,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { listPending, approve, reject as rejectGroup } from '@/api/group'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
-import FilterBar from '@/components/admin/FilterBar.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 import MetricCard from '@/components/admin/MetricCard.vue'
 import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '@/utils/approvalState'
 
@@ -175,6 +186,27 @@ const approvalTagType = function(status) {
   return APPROVAL_TAG[status] || 'info'
 }
 
+// 审批状态下拉（后端不认 status，前端兜底过滤）
+const statusOptions = [
+  { label: '待审核', value: 'pending' },
+  { label: '待辅导员审核', value: 'counselor_pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已拒绝', value: 'rejected' },
+  { label: '已取消', value: 'cancelled' }
+]
+
+// 导出列：仅组团级字段，与表格展示一致。
+// R-14：不含成员姓名/学号 —— 成员明细属更敏感 PII，详情抽屉内可看但不随列表导出。
+const exportColumns = [
+  { header: '组团标题', key: 'title' },
+  { header: '发起人', key: 'creatorName' },
+  { header: '功能房', key: 'roomName' },
+  { header: '日期', key: 'date' },
+  { header: '时间段', key: 'startHour', formatter: row => `${row.startHour} - ${row.endHour}` },
+  { header: '人数', key: 'memberCount', formatter: row => `${row.memberCount}/${row.maxMembers}` },
+  { header: '审批状态', key: 'approvalStatus', formatter: row => approvalText(row.approvalStatus) }
+]
+
 const loading = ref(false)
 const loadError = ref('')
 const actionSubmitting = ref(false)
@@ -189,16 +221,38 @@ const detailVisible = ref(false)
 const currentRow = ref(null)
 const rejectTemplate = ref('')
 
-const filters = reactive({ roomId: '', date: '' })
+const filters = reactive({ roomId: '', date: '', status: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const rejectForm = reactive({ reason: '', id: null })
+
+// 查询参数单一来源：列表加载与导出共用，保证「导出结果 == 当前筛选视图」。
+// 实测后端 GET /groups/pending 仅认 roomId / date / page / pageSize，
+// status 与 keyword **都不认**，二者一律前端兜底。
+function buildParams() {
+  return {
+    roomId: filters.roomId,
+    date: filters.date
+  }
+}
+
+// 前端兜底过滤：审批状态 + 关键词（组团标题 / 发起人）。
+function matchFilters(row) {
+  if (filters.status && row.approvalStatus !== filters.status) return false
+  const keyword = String(filters.keyword || '').trim().toLowerCase()
+  if (!keyword) return true
+  return String(row.title || '').toLowerCase().includes(keyword) ||
+    String(row.creatorName || '').toLowerCase().includes(keyword)
+}
+
+// 表格数据源：服务端筛选后的当页数据 + status/keyword 前端过滤。
+const filteredRows = computed(() => tableData.value.filter(row => matchFilters(row)))
 
 async function loadData() {
   loading.value = true
   loadError.value = ''
   try {
     const res = await listPending({
-      ...filters,
+      ...buildParams(),
       page: pagination.page,
       pageSize: pagination.pageSize
     })
@@ -220,11 +274,39 @@ async function loadRooms() {
   }
 }
 
+// 筛选条件变化后回到第 1 页（roomId / date 服务端筛选，status / keyword 前端过滤）。
+function onSearch() {
+  pagination.page = 1
+  loadData()
+}
+
 function resetFilters() {
   filters.roomId = ''
   filters.date = ''
+  filters.status = ''
+  filters.keyword = ''
   pagination.page = 1
   loadData()
+}
+
+// 导出「筛选后全量」：后端 paginationRules 限制 pageSize<=100，不能一次性要 10000；
+// 且 /groups/pending 的 controller 与 service 都把 pageSize 钳到 50，
+// 故这里按 50/页循环拉取（若传 100 会被服务端缩成 50，反而被 fetchAllPages 误判为最后一页而截断）。
+// status / keyword 后端不认，拉全量后套用与列表完全一致的 matchFilters。
+async function handleExport() {
+  try {
+    const list = await fetchAllPages(listPending, buildParams(), {
+      pageSize: 50,
+      maxPages: 50,
+      // 注：listPending 当前签名只有 (params)，options 暂不生效；保留以对齐其他页面约定。
+      options: { silentError: true }
+    })
+    const rows = list.filter(row => matchFilters(row))
+    if (!exportXlsx(exportColumns, rows, '导出_组团预约列表')) return
+    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 function handleSelectionChange(rows) {

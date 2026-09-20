@@ -6,12 +6,12 @@ export const ROLE_LABELS = {
 
 export const ROLE_NAV_PRIORITY = {
   super_admin: [
-    'Dashboard', 'ReservationPending', 'CounselorPending', 'RoomMonitor',
+    'Dashboard', 'ReservationPending', 'CounselorPending', 'ReservationGroups', 'RoomMonitor',
     'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig', 'AccountManage',
     'CreditConfig', 'PosterPosition', 'SystemAnnouncements', 'SystemLogs', 'SystemBackup'
   ],
-  admin: ['Dashboard', 'ReservationPending', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs', 'RoomMonitor'],
-  counselor: ['Dashboard', 'CounselorPending', 'ReservationPending', 'CheckinManage', 'ReservationAll']
+  admin: ['Dashboard', 'ReservationPending', 'ReservationGroups', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs', 'RoomMonitor'],
+  counselor: ['Dashboard', 'CounselorPending', 'ReservationPending', 'ReservationGroups', 'CheckinManage', 'ReservationAll']
 }
 
 export const ROLE_DASHBOARD_COPY = {

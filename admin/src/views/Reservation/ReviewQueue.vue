@@ -21,12 +21,19 @@
       </el-col>
     </el-row>
 
-    <FilterBar @search="loadData" @reset="resetFilters">
-      <el-select v-model="filters.roomId" placeholder="功能房" clearable filterable style="width: 220px">
+    <ListToolbar
+      v-model:keyword="filters.keyword"
+      keyword-placeholder="搜索预约人/学号"
+      export-file-name="导出_预约审核队列"
+      @search="onSearch"
+      @reset="resetFilters"
+      @export="handleExport"
+    >
+      <el-select v-model="filters.roomId" placeholder="功能房" clearable filterable style="width: 220px" @change="onSearch">
         <el-option v-for="r in roomOptions" :key="r.id" :label="r.name" :value="r.id" />
       </el-select>
-      <el-date-picker v-model="filters.date" type="date" placeholder="预约日期" value-format="YYYY-MM-DD" style="width: 180px" />
-    </FilterBar>
+      <el-date-picker v-model="filters.date" type="date" placeholder="预约日期" value-format="YYYY-MM-DD" style="width: 180px" @change="onSearch" />
+    </ListToolbar>
 
     <el-alert v-if="loadError && tableData.length" :title="loadError" type="warning" show-icon :closable="false" />
     <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
@@ -34,7 +41,7 @@
       <AsyncState
         :loading="loading"
         :error="!!loadError && !tableData.length"
-        :empty="!loading && !loadError && !tableData.length"
+        :empty="!loading && !loadError && !filteredRows.length"
         empty-description="暂无待处理预约"
         @retry="loadData"
       >
@@ -42,7 +49,7 @@
           <el-button type="primary" @click="resetFilters">重置筛选</el-button>
         </template>
 
-        <el-table :data="tableData" @selection-change="handleSelectionChange" stripe>
+        <el-table :data="filteredRows" @selection-change="handleSelectionChange" stripe>
           <el-table-column type="selection" width="50" />
           <el-table-column prop="userName" label="预约人" width="110" />
           <el-table-column prop="studentId" label="学号" width="130" />
@@ -143,15 +150,27 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getPending, approve, reject as returnReservation, batchAudit, getReservationTrail } from '@/api/reservation'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageShell from '@/components/admin/PageShell.vue'
-import FilterBar from '@/components/admin/FilterBar.vue'
+import ListToolbar from '@/components/admin/ListToolbar.vue'
+import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 import MetricCard from '@/components/admin/MetricCard.vue'
 import AsyncState from '@/components/admin/AsyncState.vue'
 import { createActionLock, isConfirmationCancel, normalizeRejectionReason } from '@/utils/approvalState'
+
+// 导出列：与表格展示字段一一对应（R-14：只导出页面已展示、后端已脱敏的字段）。
+const exportColumns = [
+  { header: '预约人', key: 'userName' },
+  { header: '学号', key: 'studentId' },
+  { header: '功能房', key: 'roomName' },
+  { header: '预约日期', key: 'date' },
+  { header: '时间段', key: 'timeSlot' },
+  { header: '用途', key: 'purpose' },
+  { header: '提交时间', key: 'createdAt' }
+]
 
 const loading = ref(false)
 const loadError = ref('')
@@ -179,15 +198,37 @@ const trailActionLabel = action => TRAIL_ACTION_LABELS[action] || '记录'
 const trailActionType = action => TRAIL_ACTION_TYPES[action] || 'info'
 const trailRoleLabel = role => TRAIL_ROLE_LABELS[role] || '系统'
 
-const filters = reactive({ roomId: '', date: '' })
+const filters = reactive({ roomId: '', date: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const returnForm = reactive({ reason: '', id: null, ids: [] })
+
+// 查询参数单一来源：列表加载与导出共用，保证「导出结果 == 当前筛选视图」。
+// 实测后端 GET /audit/pending（scopedQueryController.pendingAuditList）仅认
+// type / buildingId / roomId / date / page / pageSize，**不认 keyword**，故关键词走前端兜底。
+function buildParams() {
+  return {
+    type: 'admin',
+    roomId: filters.roomId,
+    date: filters.date
+  }
+}
+
+// 前端兜底过滤：后端不支持 keyword，按预约人 / 学号在本地数据里匹配。
+function matchFilters(row) {
+  const keyword = String(filters.keyword || '').trim().toLowerCase()
+  if (!keyword) return true
+  return String(row.userName || '').toLowerCase().includes(keyword) ||
+    String(row.studentId || '').toLowerCase().includes(keyword)
+}
+
+// 表格数据源：服务端筛选后的当页数据 + 关键词前端过滤。
+const filteredRows = computed(() => tableData.value.filter(row => matchFilters(row)))
 
 async function loadData() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await getPending({ ...filters, type: 'admin', page: pagination.page, pageSize: pagination.pageSize })
+    const res = await getPending({ ...buildParams(), page: pagination.page, pageSize: pagination.pageSize })
     tableData.value = res.data?.list || []
     pagination.total = res.data?.total || 0
   } catch (e) {
@@ -221,11 +262,36 @@ async function loadTrail(id) {
   }
 }
 
+// 筛选条件变化后回到第 1 页（roomId / date 为服务端筛选，keyword 为前端过滤）。
+function onSearch() {
+  pagination.page = 1
+  loadData()
+}
+
 function resetFilters() {
   filters.roomId = ''
   filters.date = ''
+  filters.keyword = ''
   pagination.page = 1
   loadData()
+}
+
+// 导出「筛选后全量」：后端 paginationRules 限制 pageSize<=100，不能一次性要 10000，
+// 必须按页循环拉取；keyword 后端不认，拉全量后套用与列表完全一致的 matchFilters。
+async function handleExport() {
+  try {
+    const list = await fetchAllPages(getPending, buildParams(), {
+      pageSize: 100,
+      maxPages: 50,
+      // 注：getPending 当前签名只有 (params)，options 暂不生效；保留以对齐其他页面约定。
+      options: { silentError: true }
+    })
+    const rows = list.filter(row => matchFilters(row))
+    if (!exportXlsx(exportColumns, rows, '导出_预约审核队列')) return
+    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+  } catch (e) {
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 function handleSelectionChange(rows) {

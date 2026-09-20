@@ -6,6 +6,14 @@
         <el-button type="primary" :loading="saveLoading" @click="handleSave">保存配置</el-button>
       </div>
 
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="tip"
+        title="保存后立即写入 system_config，并在 30 秒内对所有服务实例生效。扣分请填正数。"
+      />
+
       <el-form :model="form" label-width="180px" class="config-form">
         <el-divider content-position="left">基础设置</el-divider>
         <el-row :gutter="20">
@@ -15,7 +23,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="满分">
+            <el-form-item label="信用分上限">
               <el-input-number v-model="form.maxScore" :min="50" :max="200" style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -25,31 +33,54 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="爽约扣分">
-              <el-input-number v-model="form.noshowDeduction" :min="0" :max="50" style="width: 100%" />
+              <el-input-number v-model="form.noshowPenalty" :min="0" :max="100" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="超时未签退扣分">
-              <el-input-number v-model="form.overtimeDeduction" :min="0" :max="50" style="width: 100%" />
+            <el-form-item label="违规扣分">
+              <el-input-number v-model="form.violationPenalty" :min="0" :max="100" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">加分规则</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="表扬奖励分">
+              <el-input-number v-model="form.goodReward" :min="0" :max="50" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="有效反馈奖励分">
+              <el-input-number v-model="form.feedbackReward" :min="0" :max="50" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="损坏设施扣分">
-              <el-input-number v-model="form.damageDeduction" :min="0" :max="50" style="width: 100%" />
+            <el-form-item label="良好行为阈值">
+              <el-input-number v-model="form.goodThreshold" :min="0" :max="200" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">预警与限制</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="预警阈值">
+              <el-input-number v-model="form.warningThreshold" :min="0" :max="200" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="违规使用扣分">
-              <el-input-number v-model="form.misuseDeduction" :min="0" :max="50" style="width: 100%" />
+            <el-form-item label="限制预约阈值">
+              <el-input-number v-model="form.restrictThreshold" :min="0" :max="200" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="海报违规扣分">
-              <el-input-number v-model="form.posterDeduction" :min="0" :max="50" style="width: 100%" />
+            <el-form-item label="限制天数">
+              <el-input-number v-model="form.restrictDays" :min="0" :max="365" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -57,78 +88,105 @@
         <el-divider content-position="left">封禁规则</el-divider>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="封禁触发分数">
-              <el-input-number v-model="form.banThreshold" :min="0" :max="100" style="width: 100%" />
+            <el-form-item label="封禁阈值">
+              <el-input-number v-model="form.banThreshold" :min="0" :max="200" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="默认封禁天数">
-              <el-input-number v-model="form.defaultBanDays" :min="1" :max="365" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="爽约累计封禁次数">
-              <el-input-number v-model="form.noshowBanCount" :min="1" :max="10" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="永久封禁分数">
-              <el-input-number v-model="form.permanentBanScore" :min="0" :max="50" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">恢复规则</el-divider>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="每日自然恢复分">
-              <el-input-number v-model="form.dailyRecovery" :min="0" :max="10" :precision="1" :step="0.5" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="正常使用奖励分">
-              <el-input-number v-model="form.goodUsageBonus" :min="0" :max="5" :precision="1" :step="0.5" style="width: 100%" />
+            <el-form-item label="封禁天数">
+              <el-input-number v-model="form.banDays" :min="0" :max="365" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
       </el-form>
+
+      <el-divider content-position="left">当前生效值</el-divider>
+      <el-descriptions :column="3" border size="small">
+        <el-descriptions-item v-for="item in effectiveList" :key="item.key" :label="item.label">
+          {{ item.value }}
+        </el-descriptions-item>
+      </el-descriptions>
+      <div class="effective-tip">
+        刷新时间：{{ effectiveLoadedAt || '尚未加载' }}
+        <el-button link type="primary" @click="loadEffective">刷新</el-button>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getScoreConfig, updateScoreConfig } from '@/api/credit'
+import { snapshot as getEffectiveConfig } from '@/api/runtimeConfig'
 import { ElMessage } from 'element-plus'
 
+const CREDIT_FIELDS = [
+  'initialScore', 'maxScore',
+  'noshowPenalty', 'violationPenalty',
+  'goodReward', 'feedbackReward', 'goodThreshold',
+  'warningThreshold', 'restrictThreshold', 'restrictDays',
+  'banThreshold', 'banDays'
+]
+
+const FIELD_LABELS = {
+  initialScore: '初始信用分',
+  maxScore: '信用分上限',
+  noshowPenalty: '爽约扣分',
+  violationPenalty: '违规扣分',
+  goodReward: '表扬奖励分',
+  feedbackReward: '有效反馈奖励分',
+  goodThreshold: '良好行为阈值',
+  warningThreshold: '预警阈值',
+  restrictThreshold: '限制预约阈值',
+  restrictDays: '限制天数',
+  banThreshold: '封禁阈值',
+  banDays: '封禁天数'
+}
+
 const saveLoading = ref(false)
+const effective = ref({})
+const effectiveLoadedAt = ref('')
 
 const form = reactive({
   initialScore: 100,
-  maxScore: 100,
-  noshowDeduction: 10,
-  overtimeDeduction: 5,
-  damageDeduction: 20,
-  misuseDeduction: 15,
-  posterDeduction: 10,
+  maxScore: 120,
+  noshowPenalty: 20,
+  violationPenalty: 10,
+  goodReward: 5,
+  feedbackReward: 3,
+  goodThreshold: 10,
+  warningThreshold: 80,
+  restrictThreshold: 60,
+  restrictDays: 7,
   banThreshold: 30,
-  defaultBanDays: 7,
-  noshowBanCount: 3,
-  permanentBanScore: 0,
-  dailyRecovery: 1,
-  goodUsageBonus: 0.5
+  banDays: 30
+})
+
+const effectiveList = computed(() => {
+  return CREDIT_FIELDS
+    .filter((key) => effective.value[key] !== undefined)
+    .map((key) => ({ key, label: FIELD_LABELS[key], value: effective.value[key] }))
 })
 
 async function loadConfig() {
   try {
     const res = await getScoreConfig()
+    const credit = res.data && res.data.credit ? res.data.credit : {}
+    Object.assign(form, credit)
+  } catch (e) {
+    // handled by request interceptor
+  }
+}
+
+async function loadEffective() {
+  try {
+    const res = await getEffectiveConfig()
     if (res.data) {
-      Object.assign(form, res.data)
+      effective.value = res.data.credit || {}
+      effectiveLoadedAt.value = res.data.loadedAt || ''
     }
   } catch (e) {
-    // handled
+    // handled by request interceptor
   }
 }
 
@@ -136,10 +194,15 @@ async function handleSave() {
   if (saveLoading.value) return
   saveLoading.value = true
   try {
-    await updateScoreConfig(form)
-    ElMessage.success('保存成功')
+    const payload = {}
+    CREDIT_FIELDS.forEach((key) => {
+      payload[key] = form[key]
+    })
+    await updateScoreConfig({ credit: payload })
+    ElMessage.success('保存成功，正在生效')
+    await Promise.all([loadConfig(), loadEffective()])
   } catch (e) {
-    // handled
+    // handled by request interceptor
   } finally {
     saveLoading.value = false
   }
@@ -147,6 +210,7 @@ async function handleSave() {
 
 onMounted(() => {
   loadConfig()
+  loadEffective()
 })
 </script>
 
@@ -172,5 +236,15 @@ onMounted(() => {
 
 .config-form {
   max-width: 800px;
+}
+
+.tip {
+  margin-bottom: 16px;
+}
+
+.effective-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
 }
 </style>
