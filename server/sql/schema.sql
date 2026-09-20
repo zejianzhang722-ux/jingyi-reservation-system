@@ -271,6 +271,7 @@ CREATE TABLE reservation_waitlist (
   UNIQUE KEY uk_waitlist_user_slot (user_id, room_id, waiting_seat_scope, date, start_time, end_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 团队预约（组团预约）。status 需覆盖辅导员审核中间态，与主预约 reservations.status 保持一致。
 CREATE TABLE reservation_groups (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) DEFAULT '',
@@ -279,11 +280,22 @@ CREATE TABLE reservation_groups (
   start_time VARCHAR(10) NOT NULL,
   end_time VARCHAR(10) NOT NULL,
   purpose VARCHAR(500) DEFAULT '',
-  status ENUM('pending', 'approved', 'rejected', 'cancelled') DEFAULT 'pending',
+  max_members INT NOT NULL DEFAULT 4 COMMENT '团队人数上限（含创建者）',
+  reservation_id INT DEFAULT NULL COMMENT '关联的主预约，承载占槽/审批/签到/爽约',
+  status ENUM('pending', 'counselor_pending', 'approved', 'rejected', 'cancelled') DEFAULT 'pending',
+  reject_reason VARCHAR(500) DEFAULT '',
+  audited_by INT DEFAULT NULL,
+  audited_at DATETIME DEFAULT NULL,
   created_by INT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE SET NULL,
+  INDEX idx_groups_room_date (room_id, date),
+  INDEX idx_groups_status (status),
+  INDEX idx_groups_creator (created_by),
+  INDEX idx_groups_reservation (reservation_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE reservation_group_members (
@@ -294,7 +306,9 @@ CREATE TABLE reservation_group_members (
   status ENUM('pending', 'confirmed', 'rejected') DEFAULT 'pending',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (group_id) REFERENCES reservation_groups(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_group_user (group_id, user_id),
+  INDEX idx_group_members_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE admins (
