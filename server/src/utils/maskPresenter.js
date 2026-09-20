@@ -81,7 +81,9 @@ const maskName = function(value) {
 
 const STUDENT_ID_KEYS = ['studentId', 'student_id', 'student_no'];
 const NAME_KEYS = ['userName', 'user_name', 'real_name', 'nickname'];
-const PHONE_KEYS = ['phone', 'mobile', 'contact_phone', 'contactPhone'];
+// contact：feedbacks 表的联系方式字段（可能是手机号/邮箱/QQ），同样属于个人信息。
+// 全库仅 feedbacks 表使用该列名（见 server/sql/schema.sql），扩展此清单的影响面可控。
+const PHONE_KEYS = ['phone', 'mobile', 'contact_phone', 'contactPhone', 'contact'];
 
 /**
  * 将调用方身份标准化为内部结构。

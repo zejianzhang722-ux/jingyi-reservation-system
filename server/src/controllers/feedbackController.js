@@ -1,5 +1,6 @@
 var db = require('../config/database')
 var response = require('../utils/response')
+var privacyAuditService = require('../services/privacyAuditService')
 
 function toDto(row) {
   return {
@@ -82,7 +83,13 @@ exports.list = async function (req, res) {
       'SELECT *' + whereSql + ' ORDER BY created_at DESC LIMIT ? OFFSET ?',
       params.concat([pageSize, offset])
     )
-    return response.paginate(res, rows[0].map(toDto), countRows[0][0].total, page, pageSize)
+    // R-14 统一出口：contact（联系方式，可能是手机号/邮箱/QQ）属个人信息，
+    // 必须按请求者身份分级脱敏；管理员在数据域内看明文时会自动落一条审计。
+    var safeRows = await privacyAuditService.maskRowsForRequest(req, rows[0] || [], {
+      targetTable: 'feedbacks',
+      description: '意见反馈列表：查看明文联系方式'
+    })
+    return response.paginate(res, safeRows.map(toDto), countRows[0][0].total, page, pageSize)
   } catch (err) {
     return response.error(res, err.message)
   }

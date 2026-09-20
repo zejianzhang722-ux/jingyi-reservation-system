@@ -466,7 +466,11 @@ module.exports = {
   peakHours,
   noshowStats,
   userStats,
-  exportData
+  exportData,
+  // 楼栋数据域过滤工具，供其它 controller 复用（如 checkinController.currentCheckinsAll）。
+  // 注意：必须导出，否则外部 `const { buildingFilter } = require('./scopedStatsController')`
+  // 拿到的是 undefined，调用时报 TypeError 导致接口 500。
+  buildingFilter
 };
 
 

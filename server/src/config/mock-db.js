@@ -191,7 +191,18 @@ tables.poster_positions = [
   { id: 7, name: 'D座五楼共享空间', building_id: 3, floor: 5, max_posters: 5, current_posters: 1, status: 'active', description: 'D510共享空间外侧墙面', created_at: now, updated_at: now }
 ];
 tables.feedbacks = loadFeedbacks();
-tables.reading_room_logs = [];
+// 阅览室登记表（reading_room_logs）：必须预置数据——mvck 模式下空数组会让「阅览记录」页永远空白、
+// 无法验证。user_id 指向上方 tables.users 里真实存在的宿生（id 1 / 2），跨 B座(1)、C座(2) 两栋楼，
+// 并刻意混合 leave_time 为 NULL（在阅）与非 NULL（已离开）两种状态，
+// 以便同时验证：管理员跨用户可见、学生只看自己、在阅/已离开状态、以及日期与学号筛选。
+tables.reading_room_logs = [
+  { id: 1, user_id: 1, enter_time: yesterday + ' 09:05:00', leave_time: yesterday + ' 11:32:00', created_at: yesterday + ' 09:05:00' },
+  { id: 2, user_id: 2, enter_time: yesterday + ' 14:10:00', leave_time: yesterday + ' 16:48:00', created_at: yesterday + ' 14:10:00' },
+  { id: 3, user_id: 1, enter_time: today + ' 08:30:00', leave_time: null, created_at: today + ' 08:30:00' },
+  { id: 4, user_id: 2, enter_time: today + ' 10:15:00', leave_time: null, created_at: today + ' 10:15:00' },
+  { id: 5, user_id: 1, enter_time: today + ' 13:00:00', leave_time: today + ' 15:20:00', created_at: today + ' 13:00:00' },
+  { id: 6, user_id: 2, enter_time: today + ' 19:20:00', leave_time: today + ' 21:05:00', created_at: today + ' 19:20:00' }
+];
 tables.notifications = [
   { id: 1, user_id: 1, type: 'reservation', title: '预约确认', content: '您预约的B228自习室（今天 08:00-10:00）已确认', is_read: 0, created_at: now },
   { id: 2, user_id: 1, type: 'reservation', title: '预约待审核', content: '您预约的B102共享空间（明天 14:00-16:00）正在审核中', is_read: 0, created_at: now },
