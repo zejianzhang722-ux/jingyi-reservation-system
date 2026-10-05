@@ -1,9 +1,10 @@
 var auth = require('../../utils/auth')
+var pageMotion = require('../../utils/page-motion')
 
 var BASE_MENU = [
-  { key: 'account', name: '账号信息', desc: '查看当前管理员身份', icon: 'account', tone: 'blue' },
+  { key: 'account', name: '账号信息', desc: '查看当前管理员身份', icon: 'user', tone: 'blue' },
   { key: 'network', name: '连接检查', desc: '检查当前是否能正常连接预约服务', icon: 'network', tone: 'purple' },
-  { key: 'password', name: '账号安全', desc: '', icon: 'security', tone: 'gold' },
+  { key: 'password', name: '账号安全', desc: '', icon: 'shield', tone: 'gold' },
   { key: 'about', name: '关于系统', desc: '查看系统说明和版本', icon: 'info', tone: 'cyan' },
   { key: 'logout', name: '退出登录', desc: '退出当前管理员账号', icon: 'logout', tone: 'red' }
 ]
@@ -31,6 +32,7 @@ Page({
 
   onShow: function () {
     if (!this.ensureAdmin()) return
+    pageMotion.replayPageMotion(this)
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().switchTabList()
       this.getTabBar().setData({ selected: 2 })

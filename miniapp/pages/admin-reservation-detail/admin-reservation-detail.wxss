@@ -1,6 +1,6 @@
-page { background: #f4f7fb; color: #172033; }
+page { color: #172033; }
 .page { min-height: 100vh; box-sizing: border-box; padding: 28rpx 28rpx calc(180rpx + env(safe-area-inset-bottom)); }
-.summary-card, .detail-card, .state-card { background: #fff; border: 1rpx solid #e4eaf2; border-radius: 20rpx; padding: 30rpx; margin-bottom: 22rpx; box-shadow: 0 8rpx 24rpx rgba(22, 49, 86, .05); }
+.summary-card, .detail-card, .state-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1rpx solid var(--glass-border); border-radius: 20rpx; padding: 30rpx; margin-bottom: 22rpx; box-shadow: var(--glass-shadow), var(--glass-highlight); }
 .summary-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
 .eyebrow { display: block; color: #66758a; font-size: 24rpx; margin-bottom: 10rpx; }
 .room-name { display: block; color: #14213a; font-size: 36rpx; font-weight: 700; line-height: 1.35; }
@@ -21,8 +21,8 @@ page { background: #f4f7fb; color: #172033; }
 .error-card { border-color: #f0cfcc; }
 .retry-button { min-height: 88rpx; margin-top: 28rpx; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 14rpx; color: #fff; background: #0066cc; font-size: 28rpx; }
 .retry-button::after, .action-button::after { border: 0; }
-.action-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; gap: 20rpx; padding: 20rpx 28rpx calc(20rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, .98); border-top: 1rpx solid #e3e9f0; }
+.action-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; gap: 20rpx; padding: 20rpx 28rpx calc(20rpx + env(safe-area-inset-bottom)); background: var(--glass-bg-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-top: 1rpx solid var(--glass-border); }
 .action-button { flex: 1; min-height: 88rpx; display: flex; align-items: center; justify-content: center; border-radius: 14rpx; font-size: 29rpx; font-weight: 700; }
 .action-button[disabled] { opacity: .58; }
-.reject-button { color: #b42318; background: #fff; border: 2rpx solid #d92d20; }
+.reject-button { color: #b42318; background: rgba(255, 255, 255, 0.7); border: 2rpx solid #d92d20; }
 .approve-button { color: #fff; background: #0066cc; border: 2rpx solid #0066cc; }

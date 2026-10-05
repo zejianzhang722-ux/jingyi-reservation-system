@@ -31,6 +31,10 @@ function isPositiveInteger(value) {
   return Number.isInteger(n) && n > 0
 }
 
+function supportsGroupReservation(room) {
+  return !!room && ['study_room', 'study'].indexOf(String(room.type || '')) === -1
+}
+
 Page({
   data: {
     roomId: '',
@@ -47,6 +51,8 @@ Page({
     cardNo: '',
     agreedRules: false,
     submitting: false,
+    canGroupReserve: false,
+    reservationMode: 'personal',
     timeStr: '',
     durationStr: '',
     discussionFields: {
@@ -62,6 +68,11 @@ Page({
     competitionFields: {
       competitionName: '',
       participantCount: ''
+    },
+    groupFields: {
+      title: '',
+      maxMembers: '4',
+      description: ''
     },
     purposeCategories: ['学术讨论', '项目合作', '课程作业', '社团活动', '其他']
   },
@@ -84,6 +95,7 @@ Page({
       endMin: endMin,
       seatId: options.seatId || '',
       seatName: options.seatName ? decodeURIComponent(options.seatName) : '',
+      reservationMode: options.reservationMode === 'group' ? 'group' : 'personal',
       timeStr: formatTime(startHour, startMin) + ' - ' + formatTime(endHour, endMin),
       durationStr: formatDuration(startHour, startMin, endHour, endMin)
     })
@@ -98,14 +110,18 @@ Page({
       var resolvedId = localData.resolveRoomId(data.id || data.room_id || data.roomId || data.name || data.room_number || roomId)
       that.setData({
         roomId: resolvedId || roomId,
-        room: data
+        room: data,
+        canGroupReserve: supportsGroupReservation(data),
+        reservationMode: supportsGroupReservation(data) ? that.data.reservationMode : 'personal'
       })
     }).catch(function () {
       var data = localData.getRoomById(roomId)
       if (data) {
         that.setData({
           roomId: data.id || roomId,
-          room: data
+          room: data,
+          canGroupReserve: supportsGroupReservation(data),
+          reservationMode: supportsGroupReservation(data) ? that.data.reservationMode : 'personal'
         })
       }
     })
@@ -177,6 +193,24 @@ Page({
     this.setData({ 'discussionFields.hasOwnAppliance': e.detail.value })
   },
 
+  onReservationModeChange: function (e) {
+    var mode = e.currentTarget.dataset.mode
+    if (mode === 'group' && !this.data.canGroupReserve) return
+    this.setData({ reservationMode: mode === 'group' ? 'group' : 'personal' })
+  },
+
+  onGroupTitleInput: function (e) {
+    this.setData({ 'groupFields.title': e.detail.value })
+  },
+
+  onGroupMaxMembersInput: function (e) {
+    this.setData({ 'groupFields.maxMembers': String(e.detail.value || '').replace(/\D/g, '') })
+  },
+
+  onGroupDescriptionInput: function (e) {
+    this.setData({ 'groupFields.description': e.detail.value })
+  },
+
   validateForm: function () {
     if (!auth.getToken()) return '登录已过期，请重新登录后再预约'
     if (!Number(this.data.roomId)) return '房间信息异常，请返回重新选择功能房'
@@ -186,6 +220,14 @@ Page({
     var room = this.data.room
     var isStudyRoom = room && (room.type === 'study_room' || room.type === 'study')
     if (isStudyRoom && !this.data.seatId) return '请选择座位'
+    if (this.data.reservationMode === 'group') {
+      if (!this.data.canGroupReserve || !supportsGroupReservation(room)) return '当前功能房不支持组团预约'
+      if (!String(this.data.groupFields.title || '').trim()) return '请填写组团标题'
+      if (!isPositiveInteger(this.data.groupFields.maxMembers) || Number(this.data.groupFields.maxMembers) < 2) return '组团人数至少为2人'
+      if (Number(this.data.groupFields.maxMembers) > 50) return '组团人数不能超过50人'
+      if (room.capacity && Number(this.data.groupFields.maxMembers) > Number(room.capacity)) return '组团人数不能超过功能房容量'
+      return ''
+    }
     var roomType = room ? room.type : ''
     if (roomType === 'seminar_room' || roomType === 'shared_space' || roomType === 'seminar' || roomType === 'discussion') {
       if (!this.data.discussionFields.purposeCategory) return '请选择用途分类'
@@ -243,6 +285,18 @@ Page({
     return data
   },
 
+  buildGroupPayload: function () {
+    return {
+      roomId: normalizeId(this.data.roomId),
+      date: this.data.date,
+      startTime: formatTime(this.data.startHour, this.data.startMin),
+      endTime: formatTime(this.data.endHour, this.data.endMin),
+      title: String(this.data.groupFields.title || '').trim(),
+      maxMembers: Number(this.data.groupFields.maxMembers),
+      description: String(this.data.groupFields.description || '').trim()
+    }
+  },
+
   onSubmit: function () {
     if (this.data.submitting) return
     var error = this.validateForm()
@@ -264,12 +318,19 @@ Page({
 
     var that = this
     this.setData({ submitting: true })
-    request.post('/reservation', this.buildPayload()).then(function (res) {
+    var isGroup = this.data.reservationMode === 'group'
+    var endpoint = isGroup ? '/groups' : '/reservation'
+    var payload = isGroup ? this.buildGroupPayload() : this.buildPayload()
+    request.post(endpoint, payload).then(function (res) {
       that.setData({ submitting: false })
-      wx.showToast({ title: '预约成功', icon: 'success' })
+      wx.showToast({ title: isGroup ? '组团创建成功' : '预约成功', icon: 'success' })
       subscribeMessage.requestReservationSubscribe()
       setTimeout(function () {
-        wx.redirectTo({ url: '/pages/reservation-detail/reservation-detail?id=' + res.id })
+        wx.redirectTo({
+          url: isGroup
+            ? '/pages/group-reserve/group-reserve?mode=detail&groupId=' + res.id
+            : '/pages/reservation-detail/reservation-detail?id=' + res.id
+        })
       }, 1200)
     }).catch(function (err) {
       that.setData({ submitting: false })

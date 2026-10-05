@@ -181,8 +181,8 @@ const reassign = async function(input) {
       if (permissions.ADMIN_ROLES.indexOf(inheritedRole) === -1) {
         throw buildError('离任管理员角色无效，无法交接', errorCodes.ERROR_CODES.HANDOVER_CONFLICT, 409);
       }
-      const inheritedScopeType = inheritedRole === 'admin' ? (fromAdmin.scope_type || null) : 'global';
-      const inheritedBuildingId = inheritedRole === 'admin' ? fromAdmin.building_id : null;
+      const inheritedScopeType = ['admin', 'dorm_manager'].includes(inheritedRole) ? (fromAdmin.scope_type || null) : 'global';
+      const inheritedBuildingId = ['admin', 'dorm_manager'].includes(inheritedRole) ? fromAdmin.building_id : null;
       await runner.query(
         "UPDATE admins SET role = ?, scope_type = ?, building_id = ?, status = 'active' WHERE id = ?",
         [inheritedRole, inheritedScopeType, inheritedBuildingId, toAdminId]

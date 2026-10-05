@@ -218,6 +218,72 @@
   animation: jy-fade-up var(--jy-motion-normal) var(--jy-motion-ease) both;
 }
 
+/* 审核队列有节奏地入场，操作反馈只作用于当前行。 */
+.review-motion-table {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.review-motion-table::before {
+  content: '';
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--jy-accent-light), var(--jy-primary-light), transparent);
+  transform-origin: left;
+  animation: review-line-in 650ms var(--jy-motion-ease) both;
+  pointer-events: none;
+}
+
+.review-motion-table .el-table__body tr {
+  animation: jy-fade-up 420ms var(--jy-motion-spring) both;
+}
+
+.review-motion-table .el-table__body tr:nth-child(2) { animation-delay: 35ms; }
+.review-motion-table .el-table__body tr:nth-child(3) { animation-delay: 70ms; }
+.review-motion-table .el-table__body tr:nth-child(4) { animation-delay: 105ms; }
+.review-motion-table .el-table__body tr:nth-child(5) { animation-delay: 140ms; }
+.review-motion-table .el-table__body tr:nth-child(6) { animation-delay: 175ms; }
+.review-motion-table .el-table__body tr:nth-child(7) { animation-delay: 210ms; }
+.review-motion-table .el-table__body tr:nth-child(8) { animation-delay: 245ms; }
+
+.review-motion-table .el-table__body td {
+  transition: background-color 220ms ease, box-shadow 220ms ease;
+}
+
+.review-motion-table .el-table__body tr:hover td:first-child,
+.review-motion-table .el-table__body tr.current-row td:first-child {
+  box-shadow: inset 3px 0 var(--jy-accent);
+}
+
+.review-motion-table .el-table__body tr .el-button {
+  transition: transform 170ms ease, opacity 170ms ease, color 170ms ease;
+}
+
+.review-motion-table .el-table__body tr .el-button:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.review-motion-table .el-table__body tr:has(.el-checkbox.is-checked) td {
+  background-color: rgba(196, 148, 58, .075);
+}
+
+@keyframes review-line-in {
+  from { transform: scaleX(0); opacity: .25; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-motion-table::before,
+  .review-motion-table .el-table__body tr { animation: none !important; }
+  .review-motion-table .el-table__body td,
+  .review-motion-table .el-table__body tr .el-button { transition: none !important; }
+}
+
 .el-input__wrapper {
   border-radius: var(--jy-radius-sm);
 }

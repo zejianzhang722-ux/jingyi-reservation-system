@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-stack">
   <view class="header">
     <text class="title">功能房管理</text>
     <text class="subtitle">查看房间状态，按分类快速筛选</text>

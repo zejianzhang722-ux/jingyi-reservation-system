@@ -1,4 +1,4 @@
-<view class="container page-fade-in">
+<view class="container motion-page motion-tab {{pageMotionActive ? 'motion-active' : ''}}">
   <view class="profile-header">
     <view class="profile-avatar-wrap avatar-choose-button" bindtap="onAvatarTap">
       <image class="profile-avatar-img" src="{{avatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" wx:if="{{!avatarLoadError}}" />
@@ -30,15 +30,15 @@
     </view>
   </view>
 
-  <view class="menu-list">
+  <view class="menu-list stagger">
     <view class="menu-item" wx:for="{{menuList}}" wx:key="key" data-key="{{item.key}}" bindtap="onMenuTap">
       <view class="menu-item-left">
         <view class="menu-icon-wrap menu-icon-{{item.tone}}">
-          <view class="menu-symbol menu-symbol-{{item.icon}}"></view>
+          <view class="icon menu-icon-inner icon-{{item.icon}}"></view>
         </view>
         <text class="menu-name">{{item.name}}</text>
       </view>
-      <view class="menu-arrow"></view>
+      <view class="icon icon-chevron menu-arrow-icon"></view>
     </view>
   </view>
 </view>

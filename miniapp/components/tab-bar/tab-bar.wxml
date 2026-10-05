@@ -3,7 +3,7 @@
         wx:for="{{list}}" wx:key="pagePath"
         data-index="{{index}}"
         bindtap="onTabTap">
-    <view class="tab-bar-icon tab-bar-icon-{{item.icon}}"></view>
+    <view class="tab-bar-icon icon tab-icon-{{item.icon}} {{selected === index ? 'on' : ''}}"></view>
     <text class="tab-bar-text">{{item.text}}</text>
   </view>
 </view>

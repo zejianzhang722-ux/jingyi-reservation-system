@@ -46,7 +46,8 @@ const list = async function(req, res) {
   try {
     const rows = await supplementService.list({
       status: req.query ? req.query.status : undefined,
-      reservationId: req.query ? req.query.reservationId : undefined
+      reservationId: req.query ? req.query.reservationId : undefined,
+      adminScope: req.adminScope
     });
     const safeRows = await privacyAuditService.maskRowsForRequest(req, rows, {
       targetTable: 'supplement_requests',

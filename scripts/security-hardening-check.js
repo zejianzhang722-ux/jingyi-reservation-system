@@ -140,7 +140,7 @@ async function main() {
   assert(/posterFromParam/.test(posterRoutes), 'poster review must apply user building scope')
   assert(/blacklist[^\n]+requireRole\('counselor', 'super_admin'\)/.test(creditRoutes), 'blacklist management must require counselor or super administrator')
   assert(/requireRole\('super_admin'\)/.test(accountBatchRoutes), 'account batch import must require super administrator')
-  assert(/\/export[^\n]+requireRole\('counselor', 'super_admin'\)/.test(statsRoutesSource), 'statistics export must require counselor or super administrator')
+  assert(/router\.use\(auth, requireAdmin, adminScope\.loadAdminScope\)/.test(statsRoutesSource) && /\/export[^\n]+requireCapability\('data_export'\)/.test(statsRoutesSource), 'statistics export must require authenticated administrator scope and explicit export capability')
   assert(!/jingyi-reservation-jwt-secret-2026-dev/.test(configSource), 'legacy JWT default must be removed')
   assert(!/wx_test_secret/.test(configSource), 'legacy WeChat default must be removed')
   assert(!/password:\s*process\.env\.MYSQL_PASSWORD\s*\|\|\s*'123456'/.test(configSource), 'legacy database password default must be removed')

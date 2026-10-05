@@ -12,6 +12,12 @@ import { saveOpenGroups } from '@/utils/navigationState'
 vi.mock('@/api/reservation', () => ({
   getPendingCount: vi.fn().mockResolvedValue(0)
 }))
+vi.mock('@/api/notification', () => ({
+  getNotifications: vi.fn().mockResolvedValue({ data: { list: [] } }),
+  getUnreadCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+  markRead: vi.fn().mockResolvedValue({}),
+  markAllRead: vi.fn().mockResolvedValue({})
+}))
 
 const menuCalls = []
 
@@ -45,6 +51,11 @@ const SlotStub = defineComponent({
   inheritAttrs: false,
   setup(_, { attrs, slots }) {
     return () => h('div', attrs, [slots.title?.(), slots.default?.()])
+  }
+})
+const PopoverStub = defineComponent({
+  setup(_, { slots }) {
+    return () => h('div', slots.reference?.())
   }
 })
 
@@ -89,6 +100,7 @@ async function mountLayout() {
         ElDropdown: SlotStub,
         ElDropdownMenu: SlotStub,
         ElDropdownItem: SlotStub,
+        ElPopover: PopoverStub,
         ElDialog: SlotStub,
         ElInput: SlotStub,
         ElEmpty: SlotStub,
@@ -99,6 +111,9 @@ async function mountLayout() {
         SwitchButton: SlotStub,
         ArrowRight: SlotStub,
         Transition: false
+      },
+      directives: {
+        loading: () => {}
       }
     }
   })
@@ -119,9 +134,9 @@ describe('Layout navigation wiring', () => {
     menuCalls.length = 0
     await router.push('/room/monitor')
     await settle()
-    expect(menuCalls).toContainEqual(['open', 'space'])
-    expect(wrapper.text()).toContain('空间管理')
-    expect(wrapper.get('.breadcrumb').text()).toContain('空间管理')
+    expect(menuCalls).toContainEqual(['open', 'operations'])
+    expect(wrapper.text()).toContain('现场运营')
+    expect(wrapper.get('.breadcrumb').text()).toContain('现场运营')
 
     const collapseButton = wrapper.get('button.collapse-btn')
     expect(collapseButton.attributes('aria-label')).toBe('收起侧栏')
@@ -131,7 +146,7 @@ describe('Layout navigation wiring', () => {
     menuCalls.length = 0
     await collapseButton.trigger('click')
     await settle()
-    expect(menuCalls).toContainEqual(['open', 'space'])
+    expect(menuCalls).toContainEqual(['open', 'operations'])
 
     const counselor = { id: 22, username: 'counselor-a', role: 'counselor' }
     saveOpenGroups(localStorage, counselor, ['content'])

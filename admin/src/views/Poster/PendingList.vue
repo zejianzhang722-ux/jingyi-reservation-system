@@ -17,7 +17,7 @@
         <span class="table-title">海报审核列表</span>
       </div>
 
-      <el-table :data="filteredRows" v-loading="loading" stripe>
+      <el-table class="review-motion-table" :data="filteredRows" v-loading="loading" stripe>
         <el-table-column prop="userName" label="申请人" width="100" />
         <el-table-column prop="studentId" label="学号" width="130" />
         <el-table-column prop="title" label="海报标题" min-width="150" show-overflow-tooltip />

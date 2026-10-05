@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-form">
   <view class="form-card">
     <view class="form-section">
       <text class="form-section-title">海报信息</text>

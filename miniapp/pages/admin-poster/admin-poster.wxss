@@ -2,7 +2,7 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding: 28rpx 30rpx 56rpx;
-  background: #f5f7fa;
+  background: transparent;
 }
 
 .page-header {
@@ -28,10 +28,12 @@
   box-sizing: border-box;
   margin-bottom: 20rpx;
   padding: 28rpx;
-  border: 1rpx solid #edf0f5;
+  border: 1rpx solid var(--glass-border);
   border-radius: 20rpx;
-  background: #ffffff;
-  box-shadow: 0 8rpx 24rpx rgba(25, 48, 80, 0.05);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
 .card-heading {

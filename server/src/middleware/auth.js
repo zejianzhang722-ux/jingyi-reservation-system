@@ -67,6 +67,13 @@ const auth = async function(req, res, next) {
       return response.error(res, '账号已停用或不存在', 403);
     }
     req.user = currentPrincipal;
+    // 宿管是独立现场岗位。防止旧接口把管理账号编号误当作同编号宿生。
+    const routePath = String(req.originalUrl || '').split('?')[0];
+    if (currentPrincipal.role === 'dorm_manager' &&
+        !/^\/api\/v1\/verification(?:\/|$)/.test(routePath) &&
+        routePath !== '/api/v1/auth/logout') {
+      return response.error(res, '宿管仅可访问现场核验与本人会话功能', 403);
+    }
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {

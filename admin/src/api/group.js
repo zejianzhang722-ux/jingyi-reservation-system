@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 
 // 团队预约（组团预约）。学生端接口与小程序共用同一套后端路由 /api/v1/groups。
-// 注意：管理端目前还没有组团预约页面，本模块为下一步接入预留。
+// 学生端与管理端组团审核页共用。
 
 export function create(data) {
   return request.post('/groups', data)

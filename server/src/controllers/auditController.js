@@ -18,7 +18,7 @@ const normalizePagination = function(query) {
 };
 
 const getRequestedStatuses = function(req) {
-  const roleStatuses = allowedStatusesForRole(req.user && req.user.role);
+  const roleStatuses = allowedStatusesForRole(req.user && req.user.role, req.adminScope && req.adminScope.capabilities);
   const requestedType = req.query && req.query.type;
   if (requestedType === 'counselor') {
     return roleStatuses.filter(function(status) { return status === 'counselor_pending'; });
@@ -144,7 +144,7 @@ const batchAudit = async function(req, res) {
   const ids = Array.from(new Set((req.body.ids || []).map(Number))).sort(function(a, b) { return a - b; });
   const action = req.body.action;
   const reason = String(req.body.reason || '').trim();
-  const allowedStatuses = allowedStatusesForRole(req.user && req.user.role);
+  const allowedStatuses = allowedStatusesForRole(req.user && req.user.role, req.adminScope && req.adminScope.capabilities);
   let connection = null;
   let transactional = false;
   let reservations = [];

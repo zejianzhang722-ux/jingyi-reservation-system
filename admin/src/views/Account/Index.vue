@@ -121,12 +121,12 @@
         </el-form-item>
         <template v-if="activeTab === 'manager'">
           <el-form-item label="管理范围" prop="scopeType">
-            <el-select v-model="form.scopeType" style="width: 100%" :disabled="form.role !== 'admin'" @change="handleScopeChange">
-              <el-option label="全院" value="global" />
-              <el-option v-if="form.role === 'admin'" label="指定楼栋" value="building" />
+            <el-select v-model="form.scopeType" style="width: 100%" :disabled="!['admin', 'dorm_manager'].includes(form.role)" @change="handleScopeChange">
+              <el-option v-if="form.role !== 'dorm_manager'" label="全院" value="global" />
+              <el-option v-if="['admin', 'dorm_manager'].includes(form.role)" label="指定楼栋" value="building" />
             </el-select>
           </el-form-item>
-          <el-form-item v-if="form.role === 'admin' && form.scopeType === 'building'" label="指定楼栋" prop="buildingId">
+          <el-form-item v-if="['admin', 'dorm_manager'].includes(form.role) && form.scopeType === 'building'" label="指定楼栋" prop="buildingId">
             <el-select v-model="form.buildingId" style="width: 100%" placeholder="请选择楼栋">
               <el-option v-for="item in buildingOptions" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
@@ -219,6 +219,7 @@ const form = reactive({ id: null, username: '', realName: '', password: '', role
 const isEditingCurrentAccount = computed(() => isEdit.value && String(form.id) === `admin-${userStore.userInfo?.id}`)
 
 const roleMap = {
+  dorm_manager: { label: '宿管', type: 'warning' },
   super_admin: { label: '超级管理员', type: 'danger' },
   admin: { label: '导生管理员', type: '' },
   counselor: { label: '辅导员', type: 'success' },
@@ -236,6 +237,7 @@ const statusMap = {
 const roleOptions = computed(() => {
   if (activeTab.value === 'student') return [{ label: '宿生', value: 'student' }]
   const all = [
+    { label: '宿管', value: 'dorm_manager' },
     { label: '超级管理员', value: 'super_admin' },
     { label: '导生管理员', value: 'admin' },
     { label: '辅导员', value: 'counselor' }
@@ -293,7 +295,7 @@ const rules = computed(() => ({
   password: [{ required: !isEdit.value, message: activeTab.value === 'student' ? '请输入一卡通卡号' : '请输入密码', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
   scopeType: [{ required: activeTab.value === 'manager', message: '请选择管理范围', trigger: 'change' }],
-  buildingId: [{ required: activeTab.value === 'student' || (form.role === 'admin' && form.scopeType === 'building'), message: '请选择楼栋', trigger: 'change' }]
+  buildingId: [{ required: activeTab.value === 'student' || (['admin', 'dorm_manager'].includes(form.role) && form.scopeType === 'building'), message: '请选择楼栋', trigger: 'change' }]
 }))
 
 /**
@@ -408,6 +410,7 @@ function resetForm() {
 }
 
 function handleRoleChange(role) {
+  if (role === 'dorm_manager') { Object.assign(form, { scopeType: 'building', buildingId: null }); return }
   if (role !== 'admin') Object.assign(form, { scopeType: 'global', buildingId: null })
 }
 

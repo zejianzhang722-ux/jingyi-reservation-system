@@ -1,7 +1,11 @@
 .timeline-wrapper {
-  background-color: #FFFFFF;
-  border-radius: 12rpx;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
 .timeline-scroll-x {
@@ -20,8 +24,10 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: #FAFAFA;
-  border-bottom: 2rpx solid #E8E8E8;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 2rpx solid rgba(255, 255, 255, 0.6);
 }
 
 .timeline-header-label {
@@ -31,8 +37,8 @@
   color: #666666;
   font-weight: 600;
   text-align: center;
-  border-right: 2rpx solid #E8E8E8;
-  background-color: #FAFAFA;
+  border-right: 2rpx solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .timeline-header-hours {
@@ -72,8 +78,8 @@
   font-size: 22rpx;
   color: #666666;
   text-align: center;
-  background-color: #FAFAFA;
-  border-right: 2rpx solid #E8E8E8;
+  background: rgba(255, 255, 255, 0.5);
+  border-right: 2rpx solid rgba(255, 255, 255, 0.5);
   white-space: normal;
   word-break: break-all;
 }
@@ -149,8 +155,10 @@
   justify-content: center;
   padding: 16rpx 24rpx;
   gap: 32rpx;
-  border-top: 1rpx solid #F0F0F0;
-  background-color: #FFFFFF;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .legend-item {

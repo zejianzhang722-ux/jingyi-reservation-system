@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-stack">
   <view class="selected-rooms">
     <view class="selected-room" wx:for="{{selectedRooms}}" wx:key="id">
       <text class="selected-room-name">{{item.name}}</text>
@@ -34,7 +34,7 @@
     <scroll-view class="picker-list" scroll-y="true">
       <view class="picker-item" wx:for="{{allRooms}}" wx:key="id"
             data-index="{{index}}" bindtap="onPickerSelect">
-        <view class="picker-item-icon picker-item-icon-{{item.iconKey || 'room'}}"></view>
+        <view class="picker-item-icon cat-icon cat-icon-{{item.iconKey || 'room'}}"></view>
         <text class="picker-item-name">{{item.name}}</text>
         <text class="picker-item-number">{{item.roomNumber || item.room_number}}</text>
       </view>

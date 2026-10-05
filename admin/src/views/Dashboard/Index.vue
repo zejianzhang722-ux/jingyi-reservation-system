@@ -9,6 +9,16 @@
       <el-button type="primary" :icon="Refresh" @click="loadData">刷新数据</el-button>
     </template>
 
+    <section class="dashboard-stage" aria-label="书院空间展示">
+      <div class="dashboard-stage__intro">
+        <span class="dashboard-stage__eyebrow">JINGYI / SPACE NETWORK</span>
+        <h2>一座书院<br><em>无限可能</em></h2>
+        <p>从阅览到研讨，预约流转中的每一个空间都在被点亮。</p>
+        <div class="dashboard-stage__chips"><span>实时预约流转</span><span>空间状态可视</span></div>
+      </div>
+      <SpaceScene variant="compact" class="dashboard-space-scene" />
+    </section>
+
     <el-row :gutter="16" class="stat-cards">
       <el-col :xs="12" :sm="6" v-for="item in statCards" :key="item.key">
         <MetricCard :label="item.label" :value="item.value" :caption="item.caption" :icon="item.icon" :tone="item.tone" />
@@ -87,6 +97,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { getDashboard } from '@/api/stats'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
+import SpaceScene from '@/components/space/SpaceScene.vue'
 import { useUserStore } from '@/store/user'
 import { ROLE_DASHBOARD_COPY, ROLE_SHORTCUTS, mergeDashboardPayload } from '@/utils/adminRolePolicy'
 import { createLatestRequest } from '@/utils/latestRequest'
@@ -241,6 +252,45 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.dashboard-stage {
+  display: grid;
+  grid-template-columns: minmax(280px, .85fr) minmax(0, 1.75fr);
+  min-height: 330px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(115deg, #092846, #082641 52%, #123e66);
+  box-shadow: 0 14px 38px rgba(10, 42, 74, .16);
+}
+.dashboard-stage__intro {
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 30px 14px 30px 38px;
+  color: #fff;
+}
+.dashboard-stage__eyebrow { font-size: 11px; color: #e8b866; font-weight: 800; letter-spacing: .18em; }
+.dashboard-stage__intro h2 { margin: 16px 0 10px; font-size: clamp(28px, 3vw, 42px); line-height: 1.18; letter-spacing: .04em; }
+.dashboard-stage__intro h2 em { color: #f1c477; font-style: normal; }
+.dashboard-stage__intro p { max-width: 270px; margin: 0; color: rgba(227,244,255,.76); font-size: 13px; line-height: 1.85; }
+.dashboard-stage__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.dashboard-stage__chips span { padding: 6px 10px; border: 1px solid rgba(117,207,246,.32); border-radius: 999px; color: #caedff; background: rgba(50,145,194,.12); font-size: 11px; }
+.dashboard-space-scene {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+@media (max-width: 800px) {
+  .dashboard-stage { grid-template-columns: 1fr; }
+  .dashboard-stage__intro { padding: 24px 26px 0; }
+  .dashboard-stage__intro h2 { margin: 8px 0; }
+  .dashboard-stage__intro h2 br { display: none; }
+  .dashboard-stage__intro p, .dashboard-stage__chips { display: none; }
+}
+
 .stat-cards,
 .content-row {
   margin-bottom: 16px;

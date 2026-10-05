@@ -15,6 +15,7 @@ const resolveScope = function(admin) {
   const role = normalizeRole(admin.role);
   const scopeType = role === 'super_admin' || role === 'counselor' ? 'global' : admin.scope_type;
   const buildingId = admin.building_id ? Number(admin.building_id) : null;
+  if (role === 'dorm_manager' && scopeType !== 'building') return null;
   if (scopeType === 'global' && buildingId === null) return { scopeType, isGlobal: true, buildingId: null };
   if (scopeType === 'building' && Number.isInteger(buildingId) && buildingId > 0) return { scopeType, isGlobal: false, buildingId };
   return null;
@@ -28,7 +29,7 @@ const resolveScope = function(admin) {
  */
 const loadAdminScope = async function(req, res, next) {
   try {
-    if (!req.user || !['super_admin', 'admin', 'counselor', 'superadmin'].includes(req.user.role)) {
+    if (!req.user || !['super_admin', 'admin', 'counselor', 'superadmin', 'dorm_manager'].includes(req.user.role)) {
       return scopeError(res, '管理员身份无效', 403);
     }
     const [rows] = await db.query('SELECT id, role, building_id, scope_type, status FROM admins WHERE id = ?', [req.user.id]);
@@ -48,7 +49,7 @@ const loadAdminScope = async function(req, res, next) {
       buildingId: scope.buildingId,
       capabilities: []
     };
-    req.adminScope.capabilities = await loadCapabilities(admin.id);
+    req.adminScope.capabilities = databaseRole === 'dorm_manager' ? [] : await loadCapabilities(admin.id);
     next();
   } catch (err) {
     next(err);
@@ -147,6 +148,52 @@ const loadPosterScope = async function(posterId) {
   const [users] = await db.query('SELECT * FROM users WHERE id = ?', [Number(posters[0].user_id)]);
   if (!users || !users.length) return null;
   return { id: Number(posters[0].id), building_id: users[0].building_id ? Number(users[0].building_id) : null };
+};
+
+const loadUserScope = async function(userId) {
+  const [rows] = await db.query('SELECT id, building_id FROM users WHERE id = ?', [Number(userId)]);
+  return rows && rows.length ? rows[0] : null;
+};
+
+const verifyUser = async function(req, res, next, userId) {
+  try {
+    if (!Number.isInteger(Number(userId)) || Number(userId) <= 0) return scopeError(res, '用户编号无效', 400);
+    const user = await loadUserScope(userId);
+    if (!user) return scopeError(res, '用户不存在', 404);
+    if (!assertBuilding(req.adminScope, user.building_id)) return scopeError(res, '无权操作其他楼栋用户', 403);
+    req.scopedUser = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+const userFromBody = function(fieldName) {
+  const name = fieldName || 'userId';
+  return function(req, res, next) { return verifyUser(req, res, next, req.body && req.body[name]); };
+};
+
+const BASE_CAPABILITIES = Object.freeze({
+  checkin: ['admin', 'counselor', 'super_admin'],
+  data_export: ['counselor', 'super_admin'],
+  rule_config: ['super_admin'],
+  audit: ['counselor', 'super_admin']
+});
+
+const hasEffectiveCapability = function(req, capability) {
+  if (!req.adminScope) return false;
+  if (req.adminScope.role === 'dorm_manager') return false;
+  const baseRoles = BASE_CAPABILITIES[capability] || [];
+  return baseRoles.includes(req.adminScope.role) ||
+    (req.adminScope.capabilities || []).includes(capability);
+};
+
+const requireCapability = function(capability) {
+  return function(req, res, next) {
+    if (!req.adminScope) return scopeError(res, '管理员数据范围未初始化', 500);
+    if (!hasEffectiveCapability(req, capability)) return scopeError(res, '权限不足', 403);
+    next();
+  };
 };
 
 const verifyRoom = async function(req, res, next, roomId) {
@@ -274,6 +321,10 @@ module.exports = {
   loadReservationScope,
   loadSeatScope,
   loadPosterScope,
+  loadUserScope,
+  userFromBody,
+  hasEffectiveCapability,
+  requireCapability,
   roomFromParam,
   roomFromBody,
   reservationFromParam,

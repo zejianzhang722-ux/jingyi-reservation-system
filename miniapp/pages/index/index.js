@@ -2,6 +2,7 @@ var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var util = require('../../utils/util')
 var localData = require('../../utils/local-data')
+var pageMotion = require('../../utils/page-motion')
 
 Page({
   data: {
@@ -22,7 +23,7 @@ Page({
       return
     }
     if (auth.isAdmin()) {
-      wx.reLaunch({ url: '/pages/admin-home/admin-home' })
+      wx.reLaunch({ url: auth.getAdminHome() })
       return
     }
     this.loadUserInfo()
@@ -32,9 +33,10 @@ Page({
 
   onShow: function () {
     if (auth.isLoggedIn() && auth.isAdmin()) {
-      wx.reLaunch({ url: '/pages/admin-home/admin-home' })
+      wx.reLaunch({ url: auth.getAdminHome() })
       return
     }
+    pageMotion.replayPageMotion(this)
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().switchTabList()
       this.getTabBar().setData({ selected: 0 })

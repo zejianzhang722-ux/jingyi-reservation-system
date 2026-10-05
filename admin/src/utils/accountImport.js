@@ -1,4 +1,5 @@
 const roleMap = {
+  '宿管': 'dorm_manager',
   '\u8d85\u7ea7\u7ba1\u7406\u5458': 'super_admin',
   '\u5bfc\u751f\u7ba1\u7406\u5458': 'admin',
   '\u4e66\u9662\u8f85\u5bfc\u5458': 'counselor',

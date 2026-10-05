@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-detail">
   <view class="qrcode-page" wx:if="{{reservation && !loading}}">
     <view class="qrcode-card {{isExpired ? 'qrcode-expired' : ''}}">
       <view class="qrcode-header">
@@ -15,7 +15,7 @@
           <text class="qrcode-placeholder-id" wx:if="{{credentialError}}">{{credentialError}}</text>
         </view>
         <view class="expired-mask" wx:if="{{isExpired}}">
-          <text class="expired-text">已失效</text>
+          <text class="expired-text">{{checkedIn || reservation.status === 'checked_in' || reservation.status === 'completed' ? '已签到' : '已失效'}}</text>
         </view>
       </view>
 

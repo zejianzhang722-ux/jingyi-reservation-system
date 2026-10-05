@@ -188,7 +188,9 @@ const AsyncState = {
     loading: Boolean,
     error: Boolean,
     empty: Boolean,
-    errorMessage: { type: String, default: '加载失败，请稍后重试' }
+    errorTitle: { type: String, default: '加载失败' },
+    errorMessage: { type: String, default: '加载失败，请稍后重试' },
+    emptyDescription: { type: String, default: '暂无数据' }
   },
   emits: ['retry'],
   render: asyncRender
@@ -244,7 +246,6 @@ const layout = await readFile(new URL('../admin/src/components/Layout.vue', impo
 const dashboard = await readFile(new URL('../admin/src/views/Dashboard/Index.vue', import.meta.url), 'utf8')
 const reservationApi = await readFile(new URL('../admin/src/api/reservation.js', import.meta.url), 'utf8')
 const reviewQueue = await readFile(new URL('../admin/src/views/Reservation/ReviewQueue.vue', import.meta.url), 'utf8')
-const pendingList = await readFile(new URL('../admin/src/views/Reservation/PendingList.vue', import.meta.url), 'utf8')
 const counselorPending = await readFile(new URL('../admin/src/views/Reservation/CounselorPending.vue', import.meta.url), 'utf8')
 const statsOverview = await readFile(new URL('../admin/src/views/Stats/Overview.vue', import.meta.url), 'utf8')
 const statsExport = await readFile(new URL('../admin/src/views/Stats/Export.vue', import.meta.url), 'utf8')
@@ -266,7 +267,6 @@ for (const [name, source] of [['scoped stats', scopedStatsController], ['global 
 // Credit/Blacklist: preserve rows / guarded ban and restore / named ban form and restore confirmation / ban button reachable.
 // Credit/ScoreConfig: preserve current config / guarded save / no destructive action / save button reachable.
 // Credit/Violations: preserve rows / guarded create / explicit violation form / create button reachable.
-// System/Admins: preserve rows / guarded submit and delete / named delete confirmation / add button reachable.
 // System/Announcements: preserve rows / guarded publish/archive/delete/submit / archive and named delete confirmations / add button reachable.
 // System/Backup: preserve records / guarded create and verify / no destructive restore exposed / backup and verify buttons reachable.
 // System/Logs: preserve rows / read-only / no dangerous write / search and reset buttons reachable.
@@ -316,8 +316,7 @@ const executablePageEvidence = [
   ['Room/BuildingManage', '../admin/src/views/Room/BuildingManage.vue', /async function loadData/, /async function handleSubmit/, /ElMessageBox\.confirm/, /@click="handleAdd"/],
   ['Room/SeatManage', '../admin/src/views/Room/SeatManage.vue', /async function loadSeats/, /async function confirmBatchAdd/, /ElMessageBox\.confirm/, /@click="handleBatchAdd"/],
   ['Credit/Violations', '../admin/src/views/Credit/Violations.vue', /async function loadData/, /async function confirmCreate/, /function confirmCreate/, /@click="handleCreate"/],
-  ['System/Admins', '../admin/src/views/System/Admins.vue', /async function loadData/, /async function handleSubmit/, /ElMessageBox\.confirm/, /@click="handleAdd"/],
-  ['System/Logs', '../admin/src/views/System/Logs.vue', /async function loadData/, /getLogs/, /does-not-exist/, /@click="loadData"/]
+  ['System/Logs', '../admin/src/views/System/Logs.vue', /function loadData/, /getLogs/, /does-not-exist/, /@search="onSearch"/]
 ]
 for (const [name, path, loadEvidence, writeEvidence, dangerEvidence, primaryEvidence] of executablePageEvidence) {
   const source = await readFile(new URL(path, import.meta.url), 'utf8')
@@ -398,7 +397,7 @@ assert.match(statsExport, /:disabled="exporting"/, 'export action must be disabl
 assert.match(statsExport, /currentRangeLabel/, 'export page must show the currently selected range')
 assert.match(statsExport, /exportResult/, 'export page must show the latest export result')
 
-assert.match(pendingList, /<ReviewQueue\s*\/>/, 'pending list should inherit the safe review queue')
+assert.match(await readFile(new URL('../admin/src/router/adminRoutes.js', import.meta.url), 'utf8'), /name: 'ReservationPending'[^\n]*ReviewQueue\.vue/, 'pending route should directly use the safe review queue')
 for (const [name, source] of [['review queue', reviewQueue], ['counselor pending', counselorPending]]) {
   assert.match(source, /actionSubmitting/, `${name} must guard approval submissions`)
   assert.match(source, /actionLock\.acquire\(\)/, `${name} must allow only one approval request in flight`)
@@ -407,7 +406,7 @@ for (const [name, source] of [['review queue', reviewQueue], ['counselor pending
   assert.match(source, /:disabled="actionSubmitting/, `${name} must disable related actions while submitting`)
   assert.doesNotMatch(source, /catch\s*\([^)]*\)\s*\{\s*tableData\.value\s*=\s*\[\]/, `${name} must preserve rows when loading fails`)
   assert.match(source, /loadError/, `${name} must expose a retryable loading failure`)
-  assert.match(source, /@click="loadData"/, `${name} must offer retry`)
+  assert.match(source, /@retry="loadData"/, `${name} must offer retry`)
 }
 assert.match(reviewQueue, /batchReject/, 'batch rejection must collect a reason before submission')
 assert.match(reviewQueue, /const ids = \[\.\.\.selectedIds\.value\]/, 'batch approval must snapshot selected ids before confirmation')
@@ -418,8 +417,8 @@ assert.doesNotMatch(reviewQueue, /reason:\s*action\s*===\s*['"]reject['"]\s*\?\s
 assert.match(reviewQueue, /selectedIds\.value\s*=\s*\[\][\s\S]*await\s+loadData|await\s+loadData\([\s\S]*selectedIds\.value\s*=\s*\[\]/, 'selection may clear only after a successful action')
 
 assert.doesNotMatch(layout, /\.notify-btn::after/, 'notification button must not show an unconditional red dot')
-assert.match(layout, /v-if="pendingCount > 0"[^>]*class="pending-badge"[^>]*role="status"[^>]*aria-label=/)
-assert.match(layout, /\{\{\s*pendingCount\s*\}\}/, 'notification badge must show the actionable count')
+assert.match(layout, /v-if="unreadCount > 0"[^>]*class="pending-badge"[^>]*role="status"[^>]*aria-label=/)
+assert.match(layout, /\{\{\s*unreadCount\s*\}\}/, 'notification badge must show the unread message count')
 assert.match(reservationApi, /request\.get\(['"]\/reservation\/pending-count['"]\s*,\s*\{\s*params\s*\}\s*\)/, 'reminders must use the role-scoped pending count endpoint with the current role scope')
 assert.doesNotMatch(layout, /getPendingReminderCount|@\/api\/stats/, 'layout must not load the full dashboard for one reminder')
 assert.match(layout, /getPendingCount/, 'layout must use the reservation count API')

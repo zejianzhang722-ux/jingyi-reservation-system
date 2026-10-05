@@ -1,4 +1,5 @@
 var ROLE_CAPABILITIES = {
+  dorm_manager: ['scanCheckin'],
   admin: [
     'ordinaryApproval',
     'reservationView',

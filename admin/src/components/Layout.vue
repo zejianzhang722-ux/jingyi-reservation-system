@@ -78,6 +78,7 @@
           <div class="header-right">
             <el-button class="quick-btn" :icon="Search" circle @click="quickSearchVisible = true" />
             <el-popover
+              v-if="userStore.userInfo.role !== 'dorm_manager'"
               v-model:visible="notificationsVisible"
               placement="bottom-end"
               :width="348"
@@ -223,7 +224,7 @@ const currentTitle = computed(() => route.meta.title || '工作台')
 const currentDescription = computed(() => route.meta.description || '功能房预约管理后台')
 const currentParent = computed(() => getNavigationSectionForRoute(route.name) || route.meta.parent || '')
 const collapseButtonLabel = computed(() => isCollapse.value ? '展开侧栏' : '收起侧栏')
-const navigation = computed(() => buildNavigation(userStore.userInfo.role || 'admin'))
+const navigation = computed(() => buildNavigation(userStore.userInfo.role || 'admin', userStore.userInfo.capabilities || []))
 const workspaceLabel = computed(() => getWorkspaceLabel(userStore.userInfo.role))
 const navigationStateKey = computed(() => getNavigationStorageKey(userStore.userInfo))
 const quickEntries = computed(() => navigation.value.flatMap(section => section.children))
@@ -238,6 +239,7 @@ const avatarText = computed(() => {
 })
 
 const roleMap = {
+  dorm_manager: '宿管',
   super_admin: '超级管理员',
   admin: '导生管理员',
   counselor: '辅导员'
@@ -246,6 +248,7 @@ const roleMap = {
 const roleLabel = computed(() => roleMap[userStore.userInfo.role] || '管理员')
 
 async function loadPendingCount() {
+  if (userStore.userInfo.role === 'dorm_manager') { pendingCount.value = 0; return }
   const requestVersion = ++pendingRequestVersion
   if (!userStore.token) {
     pendingCount.value = 0
@@ -262,6 +265,7 @@ async function loadPendingCount() {
 }
 
 async function loadUnreadCount() {
+  if (userStore.userInfo.role === 'dorm_manager') { unreadCount.value = 0; return }
   if (!userStore.token) {
     unreadCount.value = 0
     return
@@ -275,6 +279,7 @@ async function loadUnreadCount() {
 }
 
 async function fetchNotifications() {
+  if (userStore.userInfo.role === 'dorm_manager') { notifications.value = []; return }
   if (!userStore.token) {
     notifications.value = []
     return

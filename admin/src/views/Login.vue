@@ -31,27 +31,7 @@
           <p>面向书院空间运营的统一后台：预约审核、签到核销、信用治理、空间维护与运营统计在一个界面内完成。</p>
         </div>
 
-        <div class="brand-orbit" aria-hidden="true">
-          <div class="orbit-ring ring-main"></div>
-          <div class="orbit-ring ring-inner"></div>
-          <div class="orbit-core">敬</div>
-          <div class="orbit-node node-a"></div>
-          <div class="orbit-node node-b"></div>
-          <div class="orbit-node node-c"></div>
-          <span class="orbit-label label-a">审核</span>
-          <span class="orbit-label label-b">签到</span>
-          <span class="orbit-label label-c">统计</span>
-        </div>
-
-        <div class="feature-stack">
-          <div class="feature-card" v-for="(item, index) in featureCards" :key="item.title" :style="{ animationDelay: `${260 + index * 90}ms` }">
-            <el-icon><component :is="item.icon" /></el-icon>
-            <div>
-              <strong>{{ item.title }}</strong>
-              <span>{{ item.desc }}</span>
-            </div>
-          </div>
-        </div>
+        <SpaceScene class="login-scene" />
       </section>
 
       <section class="login-card" :class="{ shake: loginError, loading: loading }">
@@ -116,6 +96,7 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage } from 'element-plus'
+import SpaceScene from '@/components/space/SpaceScene.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -129,12 +110,6 @@ const rules = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
-
-const featureCards = [
-  { title: '预约运营', desc: '审核、签到、冲突处理', icon: 'Calendar' },
-  { title: '空间管理', desc: '楼栋、功能房、座位维护', icon: 'OfficeBuilding' },
-  { title: '信用治理', desc: '信用分、限制与审计', icon: 'TrendCharts' }
-]
 
 const dots = Array.from({ length: 26 }).map((_, index) => ({
   id: index,
@@ -352,6 +327,11 @@ async function handleLogin() {
   transform: translate3d(calc(var(--mx, 0px) * -0.009), calc(var(--my, 0px) * -0.009), 0);
   transition: transform 220ms ease-out;
   isolation: isolate;
+}
+
+.login-scene {
+  margin-top: 26px;
+  animation: panelIn 900ms cubic-bezier(0.16, 1, 0.3, 1) 260ms both;
 }
 
 .brand-kicker {

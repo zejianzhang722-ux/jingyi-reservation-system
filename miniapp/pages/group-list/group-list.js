@@ -65,6 +65,6 @@ Page({
   },
 
   onGoRoomList: function () {
-    wx.switchTab({ url: '/pages/room-list/room-list' })
+    wx.navigateTo({ url: '/pages/room-list/room-list?groupMode=1' })
   }
 })

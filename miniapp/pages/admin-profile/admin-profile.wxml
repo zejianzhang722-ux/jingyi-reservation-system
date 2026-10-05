@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-tab {{pageMotionActive ? 'motion-active' : ''}}">
   <view class="profile-header">
     <view class="avatar-wrap"><view class="avatar-icon">{{avatarInitial}}</view></view>
     <view class="profile-info">
@@ -14,9 +14,9 @@
 
   <view class="menu-list">
     <view class="menu-item" wx:for="{{menuList}}" wx:key="key" data-key="{{item.key}}" bindtap="onMenuTap">
-      <view class="menu-icon menu-icon-{{item.tone}}"><view class="admin-profile-symbol admin-profile-symbol-{{item.icon}}"></view></view>
+      <view class="menu-icon menu-icon-{{item.tone}}"><view class="icon menu-icon-inner icon-{{item.icon}}"></view></view>
       <view class="menu-info"><text class="menu-name">{{item.name}}</text><text class="menu-desc">{{item.desc}}</text></view>
-      <view class="menu-arrow"></view>
+      <view class="icon icon-chevron menu-arrow-icon"></view>
     </view>
   </view>
 </view>

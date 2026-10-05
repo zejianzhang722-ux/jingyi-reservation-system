@@ -33,7 +33,7 @@
           <el-button type="primary" @click="resetFilters">重置筛选</el-button>
         </template>
 
-        <el-table :data="filteredRows" stripe>
+        <el-table class="review-motion-table" :data="filteredRows" stripe>
           <el-table-column prop="userName" label="学生姓名" width="100" />
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="roomName" label="功能房" width="130" />

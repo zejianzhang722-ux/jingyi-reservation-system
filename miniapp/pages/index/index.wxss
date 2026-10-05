@@ -74,7 +74,7 @@
 .header-avatar-icon {
   width: 32rpx;
   height: 32rpx;
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.9);
   border-radius: 50%;
 }
 
@@ -122,11 +122,6 @@
 .search-icon-svg {
   width: 32rpx;
   height: 32rpx;
-  background: #999999;
-  border-radius: 50%;
-  border: 4rpx solid #999999;
-  box-sizing: border-box;
-  position: relative;
 }
 
 .search-placeholder {
@@ -160,10 +155,12 @@
 .quick-item {
   min-height: 112rpx;
   padding: 18rpx 12rpx;
-  background: var(--bg-card);
-  border: 1rpx solid var(--border-color);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -207,8 +204,11 @@
   align-items: center;
   padding: 20rpx 8rpx;
   border-radius: 16rpx;
-  background-color: var(--bg-card);
-  box-shadow: var(--shadow);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   position: relative;
 }
@@ -240,7 +240,7 @@
   opacity: 1;
 }
 
-.category-icon-wrap {
+.category-icon {
   width: 80rpx;
   height: 80rpx;
   border-radius: 24rpx;
@@ -250,61 +250,12 @@
   position: relative;
   margin-bottom: 12rpx;
   transition: transform 0.2s ease;
-  box-shadow: inset 0 2rpx 6rpx rgba(255,255,255,0.65), 0 10rpx 20rpx rgba(0,0,0,0.08);
+  box-shadow: 0 10rpx 20rpx rgba(31, 64, 104, 0.18), inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
 }
 
-.category-item:active .category-icon-wrap {
+.category-item:active .category-icon {
   transform: scale(1.08);
 }
-
-.category-icon-study { background: linear-gradient(145deg, #E8F4FF, #CDE7FF); }
-.category-icon-shared { background: linear-gradient(145deg, #F1EAFF, #DDD0FF); }
-.category-icon-media { background: linear-gradient(145deg, #FFE8F3, #FFD0E4); }
-.category-icon-competition { background: linear-gradient(145deg, #FFF3D8, #FFE1A8); }
-.category-icon-roadshow { background: linear-gradient(145deg, #E0FAFA, #BDF0F0); }
-.category-icon-dance { background: linear-gradient(145deg, #FFE4E8, #FFC5CD); }
-.category-icon-reading { background: linear-gradient(145deg, #EAF9E8, #CEF1C8); }
-.category-icon-multi { background: linear-gradient(145deg, #E7EBFF, #CCD5FF); }
-.category-icon-academic { background: linear-gradient(145deg, #FFF6D9, #FFE7A6); }
-.category-icon-career { background: linear-gradient(145deg, #F2FFD8, #DDF5A5); }
-.category-icon-party { background: linear-gradient(145deg, #FFE7E7, #FFC9C9); }
-.category-icon-psychology { background: linear-gradient(145deg, #FFF0F6, #FFD6E7); }
-
-.category-symbol {
-  width: 42rpx;
-  height: 42rpx;
-  position: relative;
-}
-
-.category-symbol::before,
-.category-symbol::after {
-  content: '';
-  position: absolute;
-  box-sizing: border-box;
-}
-
-.category-symbol-study::before { width: 30rpx; height: 34rpx; left: 6rpx; top: 4rpx; border: 5rpx solid #0066cc; border-radius: 5rpx; }
-.category-symbol-study::after { width: 22rpx; height: 5rpx; left: 10rpx; top: 16rpx; background: #0066cc; box-shadow: 0 9rpx 0 #0066cc; }
-.category-symbol-shared::before { width: 16rpx; height: 16rpx; left: 3rpx; top: 6rpx; background: #6f4fd4; border-radius: 50%; box-shadow: 20rpx 0 0 #6f4fd4; }
-.category-symbol-shared::after { width: 36rpx; height: 15rpx; left: 3rpx; bottom: 3rpx; background: #6f4fd4; border-radius: 18rpx 18rpx 8rpx 8rpx; }
-.category-symbol-media::before { width: 34rpx; height: 24rpx; left: 4rpx; top: 10rpx; background: #d63384; border-radius: 8rpx; }
-.category-symbol-media::after { width: 0; height: 0; left: 17rpx; top: 16rpx; border-top: 6rpx solid transparent; border-bottom: 6rpx solid transparent; border-left: 10rpx solid #fff; }
-.category-symbol-competition::before, .category-symbol-roadshow::before { width: 34rpx; height: 26rpx; left: 4rpx; top: 6rpx; border: 5rpx solid #c77a00; border-radius: 5rpx 5rpx 16rpx 16rpx; }
-.category-symbol-competition::after, .category-symbol-roadshow::after { width: 20rpx; height: 6rpx; left: 11rpx; bottom: 3rpx; background: #c77a00; border-radius: 6rpx; }
-.category-symbol-dance::before { width: 24rpx; height: 24rpx; left: 9rpx; top: 2rpx; border: 5rpx solid #c33d5b; border-radius: 50%; }
-.category-symbol-dance::after { width: 32rpx; height: 5rpx; left: 5rpx; bottom: 7rpx; background: #c33d5b; transform: rotate(-22deg); border-radius: 5rpx; }
-.category-symbol-reading::before { width: 32rpx; height: 28rpx; left: 5rpx; top: 8rpx; border-left: 5rpx solid #2f8a3b; border-right: 5rpx solid #2f8a3b; border-bottom: 5rpx solid #2f8a3b; border-radius: 5rpx; }
-.category-symbol-reading::after { width: 5rpx; height: 28rpx; left: 19rpx; top: 8rpx; background: #2f8a3b; }
-.category-symbol-multi::before { width: 30rpx; height: 26rpx; left: 6rpx; top: 8rpx; border: 5rpx solid #2f54eb; border-radius: 8rpx; }
-.category-symbol-multi::after { width: 18rpx; height: 5rpx; left: 12rpx; top: 19rpx; background: #2f54eb; box-shadow: 0 8rpx 0 #2f54eb; }
-.category-symbol-academic::before { width: 34rpx; height: 16rpx; left: 4rpx; top: 9rpx; background: #d99a00; transform: skew(-18deg); }
-.category-symbol-academic::after { width: 20rpx; height: 10rpx; left: 11rpx; top: 24rpx; border: 4rpx solid #d99a00; border-top: 0; border-radius: 0 0 12rpx 12rpx; }
-.category-symbol-career::before { width: 32rpx; height: 24rpx; left: 5rpx; top: 12rpx; border: 5rpx solid #6f9d00; border-radius: 6rpx; }
-.category-symbol-career::after { width: 14rpx; height: 6rpx; left: 14rpx; top: 8rpx; border: 4rpx solid #6f9d00; border-bottom: 0; border-radius: 8rpx 8rpx 0 0; }
-.category-symbol-party::before { width: 5rpx; height: 34rpx; left: 10rpx; top: 4rpx; background: #d64545; }
-.category-symbol-party::after { width: 24rpx; height: 18rpx; left: 15rpx; top: 5rpx; background: #d64545; border-radius: 0 8rpx 8rpx 0; }
-.category-symbol-psychology::before { width: 24rpx; height: 24rpx; left: 9rpx; top: 8rpx; background: #d63384; transform: rotate(45deg); border-radius: 6rpx; }
-.category-symbol-psychology::after { width: 18rpx; height: 18rpx; left: 5rpx; top: 6rpx; background: #d63384; border-radius: 50%; box-shadow: 14rpx 0 0 #d63384; }
 
 .category-badge {
   position: absolute;
@@ -350,13 +301,6 @@
   animation: fadeIn 0.3s ease-out both;
 }
 
-.empty-icon-svg {
-  width: 120rpx;
-  height: 120rpx;
-  background: #F0F0F0;
-  border-radius: 50%;
-  margin-bottom: 24rpx;
-}
 
 .empty-text {
   font-size: 28rpx;

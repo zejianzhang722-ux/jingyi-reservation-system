@@ -1,0 +1,21 @@
+{
+  "checkedIn": true,
+  "outcome": "passed",
+  "reservation": {
+    "id": 1,
+    "name": "张三",
+    "studentId": "20****01",
+    "roomName": "B228自习室",
+    "buildingId": 1,
+    "buildingName": "B座",
+    "location": "B座2楼228",
+    "participants": 1,
+    "purpose": "宿管签到联测 · 自习",
+    "date": "2026-10-05",
+    "startTime": "02:38",
+    "endTime": "03:38",
+    "status": "checked_in"
+  },
+  "checkinRows": 1,
+  "note": "隔离数据、真实后端响应；模拟器相机输入与定位回调使用测试控制"
+}

@@ -207,7 +207,13 @@ const list = async function(options) {
   }
   sql += ' ORDER BY id DESC';
   const [rows] = await db.query(sql, params);
-  return decorateWithReservationContext(rows || []);
+  const decorated = await decorateWithReservationContext(rows || []);
+  if (settings.adminScope && !settings.adminScope.isGlobal) {
+    return decorated.filter(function(row) {
+      return Number(row.building_id) === Number(settings.adminScope.buildingId);
+    });
+  }
+  return decorated;
 };
 
 /**

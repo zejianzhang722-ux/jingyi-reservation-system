@@ -1,4 +1,7 @@
 {
-  "navigationBarTitleText": "登录绑定",
+  "navigationBarTitleText": "登录",
+  "navigationBarBackgroundColor": "#061426",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#061426",
   "usingComponents": {}
 }

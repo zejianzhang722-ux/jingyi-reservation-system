@@ -4,8 +4,11 @@
   flex-wrap: wrap;
   padding: 24rpx;
   gap: 12rpx;
-  background-color: #FFFFFF;
-  border-bottom: 1rpx solid #F0F0F0;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .selected-room {
@@ -45,10 +48,13 @@
 
 .compare-table {
   margin: 24rpx;
-  background-color: #FFFFFF;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
   border-radius: 12rpx;
   overflow: hidden;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
 .compare-row {
@@ -62,7 +68,7 @@
 }
 
 .compare-header {
-  background-color: #FAFAFA;
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .compare-label {
@@ -112,7 +118,10 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #FFFFFF;
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
   border-radius: 24rpx 24rpx 0 0;
   z-index: 101;
   transform: translateY(100%);

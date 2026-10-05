@@ -12,7 +12,7 @@ const pagination = function(query, defaultSize) {
 };
 
 const requestedStatuses = function(req) {
-  const allowed = reservationApprovalController.allowedStatusesForRole(req.adminScope.role);
+  const allowed = reservationApprovalController.allowedStatusesForRole(req.adminScope.role, req.adminScope.capabilities);
   const type = String((req.query && req.query.type) || '').trim() || (String(req.originalUrl || '').includes('/counselor/') ? 'counselor' : '');
   let wanted = allowed;
   if (type === 'counselor') wanted = ['counselor_pending'];

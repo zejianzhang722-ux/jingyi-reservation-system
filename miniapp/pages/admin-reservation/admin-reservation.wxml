@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-stack">
   <view class="header">
     <text class="title">全部预约</text>
     <view class="search-bar">

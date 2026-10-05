@@ -1,9 +1,12 @@
 .detail-card {
-  background-color: #FFFFFF;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   margin: 24rpx;
   border-radius: 12rpx;
   overflow: hidden;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
 }
 
 .detail-status-bar {
@@ -49,7 +52,8 @@
   flex-direction: column;
   align-items: center;
   padding: 32rpx;
-  background-color: #F5F5F5;
+  background-color: rgba(255, 255, 255, 0.5);
+  border: 1rpx solid var(--glass-border);
   border-radius: 12rpx;
   width: 300rpx;
 }
@@ -79,7 +83,7 @@
 }
 
 .btn-secondary {
-  background-color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.55);
   color: #0066CC;
   border: 1rpx solid #BBD7F5;
 }

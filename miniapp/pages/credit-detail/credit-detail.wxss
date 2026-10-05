@@ -67,8 +67,10 @@
   justify-content: space-between;
   align-items: center;
   padding: 24rpx 32rpx;
-  background-color: #FFFFFF;
-  border-bottom: 1rpx solid #F5F5F5;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1rpx solid var(--glass-border);
 }
 
 .record-left {
@@ -144,8 +146,11 @@
 .stats-card {
   min-height: 140rpx;
   border-radius: 18rpx;
-  background: #FFFFFF;
-  box-shadow: 0 6rpx 18rpx rgba(0, 0, 0, 0.06);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   display: flex;
   flex-direction: column;
   align-items: center;

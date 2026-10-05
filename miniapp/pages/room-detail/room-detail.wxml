@@ -1,9 +1,7 @@
-<view class="container page-fade-in">
+<view class="container motion-page motion-detail">
   <view class="detail-card" wx:if="{{room && !loading}}">
     <view class="detail-header">
-      <view class="detail-icon detail-icon-{{room.iconKey || 'room'}}">
-        <view class="detail-symbol detail-symbol-{{room.iconKey || 'room'}}"></view>
-      </view>
+      <view class="detail-icon cat-icon cat-icon-{{room.iconKey || 'room'}}"></view>
       <view class="detail-title">
         <text class="detail-name">{{room.name}}</text>
         <text class="detail-number">{{room.roomNumber || room.room_number || '功能空间'}}</text>
@@ -46,7 +44,8 @@
   </view>
 
   <view class="detail-actions" wx:if="{{room && !loading}}">
-    <view class="action-btn btn-primary" bindtap="onReserveTap">查看时间并预约</view>
+    <view class="action-btn btn-primary" bindtap="onReserveTap">{{room.canGroupReserve ? '个人预约' : '查看时间并预约'}}</view>
+    <view class="action-btn btn-group" wx:if="{{room.canGroupReserve}}" bindtap="onGroupReserveTap">发起组团预约</view>
     <view class="action-btn btn-outline" bindtap="onViewRules">查看管理制度</view>
     <view class="action-btn btn-outline" bindtap="onCompareTap">功能房对比</view>
   </view>

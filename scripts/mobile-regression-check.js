@@ -531,9 +531,7 @@ async function main() {
   const beforeAvatar = beforeAvatarProfile.json.data && beforeAvatarProfile.json.data.avatar
   const avatarCandidatePaths = [
     process.env.AVATAR_TEST_IMAGE,
-    'C:/Users/zzj/AppData/Local/Temp/codex-clipboard-abd3f517-a12d-4417-8e4c-7ad96301da0b.png',
-    'C:/Users/zzj/AppData/Local/Temp/codex-clipboard-e1215da1-e8b7-4371-9452-8b24abb8c0c1.png',
-    'C:/Users/zzj/AppData/Local/Temp/codex-clipboard-f82382ef-f72f-4acf-ae01-ac7bc1b6c7e0.png'
+    path.join(__dirname, '../miniapp/images/default-avatar.png')
   ].filter(Boolean)
   const avatarFixturePath = avatarCandidatePaths.find(function (filePath) {
     return fs.existsSync(filePath)

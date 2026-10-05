@@ -130,6 +130,8 @@ const pending = async function(req, res) {
       buildingId: req.adminScope && !req.adminScope.isGlobal ? req.adminScope.buildingId : null,
       roomId: Number.isInteger(roomId) && roomId > 0 ? roomId : null,
       date: (req.query && req.query.date) ? String(req.query.date).slice(0, 10) : null,
+      status: req.query && req.query.status,
+      keyword: req.query && req.query.keyword,
       page: pagination.page,
       pageSize: pagination.pageSize
     });

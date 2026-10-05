@@ -13,10 +13,11 @@ const roleMap = {
   '书院辅导员': 'counselor',
   '辅导员': 'counselor',
   '宿生': 'student'
+  , '宿管': 'dorm_manager'
 };
 
 const allowedRolesByOperator = {
-  super_admin: ['super_admin', 'admin', 'counselor', 'student'],
+  super_admin: ['super_admin', 'admin', 'counselor', 'dorm_manager', 'student'],
   counselor: ['admin', 'student'],
   admin: ['student']
 };
@@ -96,7 +97,7 @@ async function createAdmin(row, buildingLookup) {
   const [existing] = await db.query('SELECT id FROM admins WHERE username = ?', [row.username]);
   if (existing.length) throw new Error('用户名已存在');
   let buildingId = null;
-  if (row.role === 'admin' && row.scopeType === 'building') {
+  if (['admin', 'dorm_manager'].includes(row.role) && row.scopeType === 'building') {
     buildingId = resolveBuilding(row, buildingLookup, true);
   }
   const scope = normalizeAdminScope(row.role, row.scopeType, buildingId);

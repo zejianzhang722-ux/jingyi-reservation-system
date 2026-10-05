@@ -1,6 +1,7 @@
 var request = require('../../utils/request')
 var util = require('../../utils/util')
 var auth = require('../../utils/auth')
+var pageMotion = require('../../utils/page-motion')
 
 Page({
   data: {
@@ -37,6 +38,7 @@ Page({
       wx.reLaunch({ url: '/pages/admin-profile/admin-profile' })
       return
     }
+    pageMotion.replayPageMotion(this)
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       var isAdmin = auth.isAdmin()
       this.getTabBar().switchTabList()

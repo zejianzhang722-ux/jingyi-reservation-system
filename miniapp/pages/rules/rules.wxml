@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-detail">
   <view class="rules-card" wx:if="{{!loading}}">
     <view class="rules-header" wx:if="{{typeName}}">
       <view class="rules-type-icon rules-type-icon-{{type || 'reading'}}"></view>

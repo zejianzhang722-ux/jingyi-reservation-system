@@ -13,6 +13,7 @@ router.use('/reservation', require('./reservation'));
 router.use('/groups', require('./groups'));
 router.use('/audit', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./audit'));
 router.use('/checkin', require('./checkin'));
+router.use('/verification', require('./verification'));
 router.use('/reading-room', require('./readingRoom'));
 router.use('/poster', require('./poster'));
 router.use('/credit', auth, roleAuth.requireRole('admin', 'super_admin', 'counselor'), require('./credit'));

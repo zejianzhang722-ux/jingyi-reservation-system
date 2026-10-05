@@ -6,11 +6,11 @@ const config = require('../config');
 const { normalizeAdminScope } = require('../utils/adminScope');
 const privacyAuditService = require('../services/privacyAuditService');
 
-const ADMIN_ROLES = ['super_admin', 'admin', 'counselor'];
+const ADMIN_ROLES = ['super_admin', 'admin', 'counselor', 'dorm_manager'];
 const STUDENT_ROLE = 'student';
 
 const allowedRolesByOperator = {
-  super_admin: ['super_admin', 'admin', 'counselor', 'student'],
+  super_admin: ['super_admin', 'admin', 'counselor', 'dorm_manager', 'student'],
   counselor: [],
   admin: []
 };
@@ -228,7 +228,11 @@ const createAccount = async function(req, res) {
     const [existingAdmins] = await db.query('SELECT id FROM admins WHERE username = ?', [username]);
     if (existingAdmins.length > 0) return response.error(res, '用户名已存在', 400);
     const scope = normalizeAdminScope(role, req.body.scopeType, req.body.buildingId);
-    if (!scope) return response.error(res, '导生管理员必须选择全院或一个具体楼栋', 400);
+    if (!scope) return response.error(res, '请设置合法管理范围；宿管必须指定一个楼栋', 400);
+    if (role === 'dorm_manager') {
+      const [buildings] = await db.query('SELECT id FROM buildings WHERE id = ?', [scope.buildingId]);
+      if (!buildings.length) return response.error(res, '指定楼栋不存在', 400);
+    }
     const hashedPassword = await bcrypt.hash(password, 10);
     const [result] = await db.query(
       'INSERT INTO admins (username, password, real_name, role, building_id, scope_type, phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
@@ -286,7 +290,11 @@ const updateAccount = async function(req, res) {
     }
     const nextRole = req.body.role ? normalizeRole(req.body.role) : currentRole;
     const scope = normalizeAdminScope(nextRole, req.body.scopeType !== undefined ? req.body.scopeType : admins[0].scope_type, req.body.buildingId !== undefined ? req.body.buildingId : admins[0].building_id);
-    if (!scope) return response.error(res, '导生管理员必须选择全院或一个具体楼栋', 400);
+      if (!scope) return response.error(res, '管理范围无效；宿管必须指定一个楼栋', 400);
+      if (nextRole === 'dorm_manager') {
+        const [buildings] = await db.query('SELECT id FROM buildings WHERE id = ?', [scope.buildingId]);
+        if (!buildings.length) return response.error(res, '指定楼栋不存在', 400);
+      }
     if (!canManageRole(req.user.role, currentRole) || !canManageRole(req.user.role, nextRole)) return response.error(res, '权限不足', 403);
     if (req.adminScope && !req.adminScope.isGlobal && Number(admins[0].building_id || 0) !== Number(req.adminScope.buildingId)) {
       return response.error(res, '无权操作其他楼栋管理员账号', 403);

@@ -7,6 +7,10 @@ function normalizeAdminScope(role, scopeType, buildingId) {
   if (normalizedRole === 'super_admin' || normalizedRole === 'counselor') {
     return { scopeType: 'global', buildingId: null };
   }
+  if (normalizedRole === 'dorm_manager') {
+    const id = Number(buildingId);
+    return scopeType === 'building' && Number.isInteger(id) && id > 0 ? { scopeType: 'building', buildingId: id } : null;
+  }
   if (normalizedRole !== 'admin') {
     return { scopeType: null, buildingId: buildingId || null };
   }

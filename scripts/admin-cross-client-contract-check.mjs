@@ -91,7 +91,10 @@ assertRoles('ReservationPending', ['admin', 'counselor', 'super_admin'])
 assertRoles('CounselorPending', ['counselor', 'super_admin'])
 assertRoles('AccountManage', ['super_admin'])
 
-assert.equal(navSections.length, 7, 'admin navigation must retain seven operational sections')
+assert.equal(navSections.length, 8, 'admin navigation must retain the distinct review and on-site operations sections')
+assert.deepEqual(navSections.find(section => section.key === 'operations')?.children,
+  ['Verification', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs', 'RoomMonitor'],
+  'on-site operations must keep the reservation records, check-in and live room view together')
 assert.deepEqual(
   navSections.find(section => section.key === 'system')?.children,
   ['SystemLogs', 'SystemBackup'],
@@ -186,13 +189,21 @@ for (const [method, path] of [
   ['get', '/accounts'], ['post', '/accounts'], ['put', '/accounts/:id'], ['delete', '/accounts/:id'],
   ['post', '/rooms'], ['put', '/rooms/:id'], ['delete', '/rooms/:id'],
   ['post', '/seats/batch'], ['put', '/seats/:id'], ['delete', '/seats/:id'],
-  ['get', '/config'], ['put', '/config'], ['get', '/operation-logs'],
+  ['get', '/operation-logs'],
   ['post', '/buildings'], ['put', '/buildings/:id'], ['delete', '/buildings/:id'],
   ['get', '/managers'], ['post', '/managers'], ['put', '/managers/:id'], ['delete', '/managers/:id'],
   ['post', '/announcements'], ['put', '/announcements/:id'], ['delete', '/announcements/:id'],
   ['post', '/archive'],
   ['get', '/backups'], ['post', '/backup'], ['post', '/backups/:fileName/verify']
 ]) assertSuperRoute(method, path)
+
+for (const [method, path] of [['get', '/config'], ['get', '/config/effective'], ['put', '/config']]) {
+  const call = routeCall(adminRoutesSource, method, path)
+  assert.match(call, /requireCapability\(['"]rule_config['"]\)/, `${method.toUpperCase()} ${path} must enforce the rule_config capability`)
+}
+for (const [method, path] of [['get', '/positions'], ['post', '/positions'], ['put', '/positions/:id'], ['delete', '/positions/:id']]) {
+  assertRouteRoles(posterRoutes, method, path, ['super_admin'], `${method.toUpperCase()} ${path} must be super-admin only`)
+}
 
 function runRoleGuard(allowedRoles, role) {
   let nextCalled = false

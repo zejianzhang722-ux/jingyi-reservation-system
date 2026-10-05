@@ -1,3 +1,5 @@
+@import "styles/icons.wxss";
+
 page {
   --primary: #0066CC;
   --primary-dark: #003D7A;
@@ -30,6 +32,55 @@ page {
   --shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 4rpx 24rpx rgba(0, 0, 0, 0.08);
   --shadow-accent: 0 2rpx 12rpx rgba(196, 148, 58, 0.15);
+
+  /* 毛玻璃设计 token */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-bg-soft: rgba(255, 255, 255, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-border-soft: rgba(255, 255, 255, 0.35);
+  --glass-blur: blur(20px);
+  --glass-shadow: 0 8rpx 32rpx rgba(31, 64, 104, 0.12);
+  --glass-shadow-sm: 0 4rpx 16rpx rgba(31, 64, 104, 0.10);
+  --glass-highlight: inset 0 1rpx 0 rgba(255, 255, 255, 0.65);
+
+  /* 页面转场节奏：底栏轻快、普通页面清晰、详情与表单更有空间感 */
+  --motion-duration-tab: 240ms;
+  --motion-duration-page: 360ms;
+  --motion-duration-emphasis: 420ms;
+  --motion-ease-out: cubic-bezier(0.22, 0.72, 0.18, 1);
+  --motion-ease-spring: cubic-bezier(0.18, 0.89, 0.32, 1.16);
+
+  /* 极光渐变底，使毛玻璃有色彩可折射 */
+  background-color: #EAF1FB;
+  background-image: linear-gradient(160deg, #EAF1FB 0%, #F1EEFB 48%, #E9F6F3 100%);
+  background-attachment: fixed;
+}
+
+/* 极光光斑（固定定位，置于内容之下） */
+page::before,
+page::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+page::before {
+  width: 720rpx;
+  height: 720rpx;
+  top: -240rpx;
+  left: -180rpx;
+  background: radial-gradient(circle at center, rgba(0, 102, 204, 0.22), rgba(0, 102, 204, 0) 70%);
+}
+
+page::after {
+  width: 700rpx;
+  height: 700rpx;
+  bottom: -220rpx;
+  right: -200rpx;
+  background: radial-gradient(circle at center, rgba(196, 148, 58, 0.20), rgba(196, 148, 58, 0) 70%);
 }
 
 @keyframes fadeIn {
@@ -67,14 +118,37 @@ page {
   }
 }
 
-.page-fade-in {
-  animation: fadeIn 0.3s ease-out both;
+.glass-effect {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
-.glass-effect {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+/* 通用毛玻璃工具类 */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+
+.glass-soft {
+  background: var(--glass-bg-soft);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border-soft);
+  box-shadow: var(--glass-shadow-sm), var(--glass-highlight);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
 .skeleton {
@@ -88,16 +162,22 @@ page {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: var(--bg-page);
-  padding-bottom: calc(110rpx + env(safe-area-inset-bottom));
+  position: relative;
+  z-index: 1;
+  background-color: transparent;
+  padding-bottom: calc(156rpx + env(safe-area-inset-bottom));
 }
 
 .card {
-  background-color: var(--bg-card);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
   border-radius: var(--radius-lg);
   padding: 24rpx;
   margin: 16rpx 24rpx;
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .btn-primary {
@@ -457,4 +537,120 @@ page {
   justify-content: center;
   align-items: center;
   z-index: 9999;
+}
+
+/* ===== 入场 / 交互动效 ===== */
+@keyframes routeTabEnter {
+  0% { opacity: 0; transform: translateY(14rpx) scale(0.992); }
+  72% { opacity: 1; transform: translateY(-2rpx) scale(1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes routeStackEnter {
+  0% { opacity: 0; transform: translateX(30rpx) scale(0.988); }
+  68% { opacity: 1; transform: translateX(-3rpx) scale(1); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes routeDetailEnter {
+  0% { opacity: 0; transform: translateX(44rpx) scale(0.976); }
+  66% { opacity: 1; transform: translateX(-4rpx) scale(1.002); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes routeFormEnter {
+  0% { opacity: 0; transform: translateY(34rpx) scale(0.982); }
+  64% { opacity: 1; transform: translateY(-4rpx) scale(1.002); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes itemRise {
+  from { opacity: 0; transform: translateY(16rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10rpx); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 102, 204, 0.0); }
+  50% { box-shadow: 0 0 0 8rpx rgba(0, 102, 204, 0.12); }
+}
+
+/* 根据页面层级选择转场；只做入场，不劫持微信原生返回手势 */
+.motion-page {
+  transform-origin: 50% 18%;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.motion-tab.motion-active {
+  animation: routeTabEnter var(--motion-duration-tab) var(--motion-ease-out) both;
+}
+
+.motion-stack {
+  animation: routeStackEnter var(--motion-duration-page) var(--motion-ease-out) both;
+}
+
+.motion-detail {
+  animation: routeDetailEnter var(--motion-duration-emphasis) var(--motion-ease-out) both;
+}
+
+.motion-form {
+  animation: routeFormEnter var(--motion-duration-emphasis) var(--motion-ease-out) both;
+}
+
+/* 列表错峰入场：首屏六项内完成，长列表不再越等越久 */
+.stagger > view {
+  animation: itemRise 0.38s var(--motion-ease-out) both;
+}
+.stagger > view:nth-child(1) { animation-delay: 0.025s; }
+.stagger > view:nth-child(2) { animation-delay: 0.055s; }
+.stagger > view:nth-child(3) { animation-delay: 0.085s; }
+.stagger > view:nth-child(4) { animation-delay: 0.115s; }
+.stagger > view:nth-child(5) { animation-delay: 0.145s; }
+.stagger > view:nth-child(6) { animation-delay: 0.175s; }
+
+/* 轻量点击反馈 */
+.press {
+  transition: transform 0.16s var(--motion-ease-out), box-shadow 0.16s ease, opacity 0.16s ease;
+}
+.press:active {
+  transform: scale(0.982);
+  opacity: 0.92;
+}
+
+/* 悬浮微动 */
+.float {
+  animation: floatY 4s ease-in-out infinite;
+}
+
+/* ===== 统一占位 / 状态图标 ===== */
+.empty-state .empty-icon-svg,
+.empty-icon-svg {
+  width: 124rpx;
+  height: 124rpx;
+  background-color: transparent;
+  border-radius: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b9c2d0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8l9-5 9 5v8l-9 5-9-5z'/%3E%3Cpath d='M3 8l9 5 9-5'/%3E%3Cpath d='M12 13v8'/%3E%3C/svg%3E");
+  animation: floatY 5s ease-in-out infinite;
+  margin-bottom: 24rpx;
+}
+
+.error-state .error-icon-svg,
+.error-icon-svg {
+  width: 120rpx;
+  height: 120rpx;
+  background-color: transparent;
+  border-radius: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FF4D4F' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v6M12 16.5v.5'/%3E%3C/svg%3E");
+  margin-bottom: 24rpx;
 }

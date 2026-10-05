@@ -1,10 +1,12 @@
 .confirm-card {
-  background-color: var(--bg-card);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   margin: 24rpx;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow);
-  border: 1rpx solid var(--border-color);
 }
 
 .confirm-section {
@@ -25,7 +27,7 @@
 }
 
 .summary-section {
-  background: linear-gradient(135deg, #F7FBFF, #FFFFFF);
+  background: linear-gradient(135deg, rgba(0, 102, 204, 0.06), rgba(255, 255, 255, 0.35));
 }
 
 .summary-room {
@@ -54,8 +56,8 @@
 
 .summary-item {
   padding: 18rpx;
-  background: #fff;
-  border: 1rpx solid var(--border-color);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1rpx solid var(--glass-border);
   border-radius: var(--radius-md);
 }
 
@@ -181,4 +183,63 @@
   border-radius: var(--radius-md);
   font-size: 32rpx;
   font-weight: 800;
+}
+
+.reservation-mode-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.reservation-mode {
+  padding: 22rpx 18rpx;
+  border: 2rpx solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: #FAFBFC;
+}
+
+.reservation-mode-active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 8rpx 22rpx rgba(0, 102, 204, 0.12);
+}
+
+.reservation-mode-group.reservation-mode-active {
+  border-color: #7657D6;
+  background: #F2EDFF;
+  box-shadow: 0 8rpx 22rpx rgba(91, 60, 196, 0.14);
+}
+
+.reservation-mode-title,
+.reservation-mode-desc {
+  display: block;
+}
+
+.reservation-mode-title {
+  color: var(--text-primary);
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.reservation-mode-desc {
+  margin-top: 8rpx;
+  color: var(--text-secondary);
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.group-description-row {
+  align-items: flex-start;
+  padding-top: 18rpx;
+}
+
+.confirm-textarea {
+  flex: 1;
+  min-height: 120rpx;
+  padding: 14rpx 16rpx;
+  border-radius: var(--radius-sm);
+  background: #F7F8FA;
+  color: var(--text-primary);
+  font-size: 26rpx;
+  box-sizing: border-box;
 }

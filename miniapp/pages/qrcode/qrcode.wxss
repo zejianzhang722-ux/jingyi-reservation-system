@@ -7,10 +7,13 @@
 
 .qrcode-card {
   width: 100%;
-  background-color: #FFFFFF;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   border-radius: 16rpx;
   overflow: hidden;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.12);
 }
 
 .qrcode-expired {

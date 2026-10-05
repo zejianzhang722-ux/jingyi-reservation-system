@@ -83,6 +83,8 @@ const grant = async function(input) {
   if (!Number.isInteger(adminId) || adminId <= 0) {
     throw buildError('被授权管理员无效', errorCodes.ERROR_CODES.PERMISSION_DENIED, 400);
   }
+  const [targets] = await db.query('SELECT role FROM admins WHERE id = ?', [adminId]);
+  if (!targets.length || targets[0].role === 'dorm_manager') throw buildError('宿管岗位不接受管理权限授权，请先由超级管理员调整岗位', errorCodes.ERROR_CODES.PERMISSION_DENIED, 403);
   if (!permissions.isCapability(settings.capability)) {
     throw buildError('能力项无效', errorCodes.ERROR_CODES.PERMISSION_DENIED, 400);
   }

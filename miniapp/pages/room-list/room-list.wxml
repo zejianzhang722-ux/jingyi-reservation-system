@@ -1,4 +1,4 @@
-<view class="container page-fade-in">
+<view class="container motion-page motion-stack">
   <view class="offline-tip" wx:if="{{isOffline}}">
     <view class="offline-dot"></view>
     <text class="offline-text">当前显示本地数据，连接服务器后会自动刷新。</text>

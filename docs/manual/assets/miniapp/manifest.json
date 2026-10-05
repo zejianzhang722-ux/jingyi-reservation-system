@@ -1,0 +1,526 @@
+[
+  {
+    "kind": "student",
+    "id": "login",
+    "route": "/pages/login/login",
+    "file": "assets/miniapp/student-login.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1052,
+      "viewportHeight": 1052,
+      "frames": 1,
+      "scrollHeight": 753,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "home",
+    "route": "/pages/index/index",
+    "file": "assets/miniapp/student-home.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "room-list",
+    "route": "/pages/room-list/room-list",
+    "file": "assets/miniapp/student-room-list.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 4573,
+      "viewportHeight": 1052,
+      "frames": 7,
+      "scrollHeight": 3567,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "room-detail",
+    "route": "/pages/room-detail/room-detail?roomId=6",
+    "file": "assets/miniapp/student-room-detail.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "reservation-confirm",
+    "route": "/pages/reservation-confirm/reservation-confirm?roomId=6&date=2026-09-28&startHour=10&startMin=0&endHour=12&endMin=0",
+    "file": "assets/miniapp/student-reservation-confirm.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1376,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 1012,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "reservation-detail",
+    "route": "/pages/reservation-detail/reservation-detail?id=1",
+    "file": "assets/miniapp/student-reservation-detail.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "reservations",
+    "route": "/pages/my-reservations/my-reservations",
+    "file": "assets/miniapp/student-reservations.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1197,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "notifications",
+    "route": "/pages/notifications/notifications",
+    "file": "assets/miniapp/student-notifications.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1197,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "profile",
+    "route": "/pages/profile/profile",
+    "file": "assets/miniapp/student-profile.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1308,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 958,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "group-reserve",
+    "route": "/pages/group-reserve/group-reserve?roomId=21",
+    "file": "assets/miniapp/student-group-reserve.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "group-list",
+    "route": "/pages/group-list/group-list",
+    "file": "assets/miniapp/student-group-list.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1052,
+      "viewportHeight": 1052,
+      "frames": 1,
+      "scrollHeight": 753,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "room-compare",
+    "route": "/pages/room-compare/room-compare?roomId=6",
+    "file": "assets/miniapp/student-room-compare.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1785,
+      "viewportHeight": 1052,
+      "frames": 3,
+      "scrollHeight": 1339,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "qrcode",
+    "route": "/pages/qrcode/qrcode?id=1",
+    "file": "assets/miniapp/student-qrcode.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "reading-room",
+    "route": "/pages/reading-room/reading-room",
+    "file": "assets/miniapp/student-reading-room.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "poster-apply",
+    "route": "/pages/poster-apply/poster-apply",
+    "file": "assets/miniapp/student-poster-apply.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1371,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 1008,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "credit-detail",
+    "route": "/pages/credit-detail/credit-detail",
+    "file": "assets/miniapp/student-credit-detail.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "feedback",
+    "route": "/pages/feedback/feedback",
+    "file": "assets/miniapp/student-feedback.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "rules",
+    "route": "/pages/rules/rules",
+    "file": "assets/miniapp/student-rules.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1937,
+      "viewportHeight": 1052,
+      "frames": 3,
+      "scrollHeight": 1461,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "profile-edit",
+    "route": "/pages/profile-edit/profile-edit",
+    "file": "assets/miniapp/student-profile-edit.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1077,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 773,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "network-settings",
+    "route": "/pages/network-settings/network-settings",
+    "file": "assets/miniapp/student-network-settings.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "subscribe-settings",
+    "route": "/pages/subscribe-settings/subscribe-settings",
+    "file": "assets/miniapp/student-subscribe-settings.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1196,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 869,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "home",
+    "route": "/pages/admin-home/admin-home",
+    "file": "assets/miniapp/admin-home.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1881,
+      "viewportHeight": 1052,
+      "frames": 3,
+      "scrollHeight": 1416,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "manage",
+    "route": "/pages/admin-manage/admin-manage",
+    "file": "assets/miniapp/admin-manage.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1448,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 1070,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "reservation",
+    "route": "/pages/admin-reservation/admin-reservation",
+    "file": "assets/miniapp/admin-reservation.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 2995,
+      "viewportHeight": 1052,
+      "frames": 5,
+      "scrollHeight": 2306,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "reservation-detail",
+    "route": "/pages/admin-reservation-detail/admin-reservation-detail?id=10",
+    "file": "assets/miniapp/admin-reservation-detail.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1256,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 917,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "poster",
+    "route": "/pages/admin-poster/admin-poster",
+    "file": "assets/miniapp/admin-poster.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1052,
+      "viewportHeight": 1052,
+      "frames": 1,
+      "scrollHeight": 753,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "feedback",
+    "route": "/pages/admin-feedback/admin-feedback",
+    "file": "assets/miniapp/admin-feedback.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 3443,
+      "viewportHeight": 1052,
+      "frames": 5,
+      "scrollHeight": 2664,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "users",
+    "route": "/pages/admin-users/admin-users",
+    "file": "assets/miniapp/admin-users.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1077,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 773,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "credit",
+    "route": "/pages/admin-credit/admin-credit",
+    "file": "assets/miniapp/admin-credit.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1052,
+      "viewportHeight": 1052,
+      "frames": 1,
+      "scrollHeight": 753,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "stats",
+    "route": "/pages/admin-stats/admin-stats",
+    "file": "assets/miniapp/admin-stats.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1182,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 857,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "rooms",
+    "route": "/pages/admin-rooms/admin-rooms",
+    "file": "assets/miniapp/admin-rooms.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 3816,
+      "viewportHeight": 1052,
+      "frames": 6,
+      "scrollHeight": 2962,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "admin",
+    "id": "profile",
+    "route": "/pages/admin-profile/admin-profile",
+    "file": "assets/miniapp/admin-profile.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1052,
+      "viewportHeight": 1052,
+      "frames": 1,
+      "scrollHeight": 753,
+      "fullPage": true
+    }
+  },
+  {
+    "kind": "student",
+    "id": "study-room",
+    "route": "/pages/study-room/study-room?roomId=1",
+    "file": "assets/miniapp/student-study-room.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 3293,
+      "viewportHeight": 1052,
+      "frames": 5,
+      "scrollHeight": 2545,
+      "fullPage": true,
+      "horizontal": {
+        "file": "assets/miniapp/student-study-room-timeline-panorama.png",
+        "width": 2113,
+        "height": 2400,
+        "frames": 7,
+        "scrollWidth": 1688
+      }
+    }
+  },
+  {
+    "kind": "student",
+    "id": "room-timeline",
+    "route": "/pages/room-timeline/room-timeline?roomId=6",
+    "file": "assets/miniapp/student-room-timeline.png",
+    "ok": true,
+    "capture": {
+      "width": 488,
+      "height": 1596,
+      "viewportHeight": 1052,
+      "frames": 2,
+      "scrollHeight": 1188,
+      "fullPage": true,
+      "horizontal": {
+        "file": "assets/miniapp/student-room-timeline-timeline-panorama.png",
+        "width": 1287,
+        "height": 130,
+        "frames": 4,
+        "scrollWidth": 1028
+      }
+    }
+  }
+]

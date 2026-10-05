@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-tab {{pageMotionActive ? 'motion-active' : ''}}">
   <view class="group-entry" bindtap="onGoGroups">
     <view class="group-entry-left">
       <text class="group-entry-title">我的组团预约</text>

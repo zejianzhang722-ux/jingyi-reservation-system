@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-stack">
   <view class="page-tip">
     <text>组团预约按整房占用，发起人承担签到与爽约责任。成员加入即登记，不单独占座。</text>
   </view>

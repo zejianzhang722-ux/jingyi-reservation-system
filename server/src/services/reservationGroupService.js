@@ -731,14 +731,18 @@ const listPendingGroups = async function(options) {
   const statuses = settings.statuses && settings.statuses.length
     ? settings.statuses
     : ['pending', 'counselor_pending'];
+  const selectedStatuses = settings.status
+    ? statuses.filter(function(status) { return status === settings.status; })
+    : statuses;
   const page = Math.max(1, Number(settings.page) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(settings.pageSize) || 10));
   const offset = (page - 1) * pageSize;
-  const placeholders = statuses.map(function() { return '?'; }).join(',');
+  if (!selectedStatuses.length) return { list: [], total: 0, page, pageSize };
+  const placeholders = selectedStatuses.map(function() { return '?'; }).join(',');
 
   // 注意别名：rooms 统一用 rm（Mock 库中 r 会被解析成 reservations，MySQL 下 r 更是未定义）。
   let scopeClause = '';
-  const params = statuses.slice();
+  const params = selectedStatuses.slice();
   if (settings.buildingId) {
     scopeClause += ' AND rm.building_id = ?';
     params.push(Number(settings.buildingId));
@@ -751,6 +755,12 @@ const listPendingGroups = async function(options) {
     scopeClause += ' AND g.date = ?';
     params.push(commandService.normalizeDate(settings.date));
   }
+  const keyword = String(settings.keyword || '').trim();
+  if (keyword) {
+    scopeClause += ' AND (g.name LIKE ? OR u.real_name LIKE ? OR u.name LIKE ?)';
+    const pattern = '%' + keyword + '%';
+    params.push(pattern, pattern, pattern);
+  }
 
   const [rows] = await db.query(
     'SELECT g.*, rm.name AS room_name, rm.building_id, rm.type AS room_type, u.real_name AS creator_name, u.name AS creator_fallback ' +
@@ -762,7 +772,7 @@ const listPendingGroups = async function(options) {
 
   const countParams = params.slice(0, params.length);
   const [countRows] = await db.query(
-    'SELECT COUNT(*) AS total FROM reservation_groups g JOIN rooms rm ON g.room_id = rm.id ' +
+    'SELECT COUNT(*) AS total FROM reservation_groups g JOIN rooms rm ON g.room_id = rm.id JOIN users u ON g.created_by = u.id ' +
     'WHERE g.status IN (' + placeholders + ')' + scopeClause,
     countParams
   );

@@ -1,4 +1,4 @@
-<view class="container page-fade-in">
+<view class="container motion-page motion-form">
   <view class="network-hero">
     <text class="network-title">网络设置</text>
     <text class="network-subtitle">检查预约服务连接状态</text>

@@ -50,7 +50,7 @@
     <el-alert v-if="actionError" :title="actionError" type="error" show-icon closable @close="actionError = ''" />
 
     <el-card shadow="never">
-      <el-table :data="filteredRows" v-loading="loading" @selection-change="handleSelectionChange" stripe>
+      <el-table class="review-motion-table" :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" stripe>
         <el-table-column type="selection" width="50" />
         <el-table-column prop="title" label="组团标题" min-width="160" show-overflow-tooltip />
         <el-table-column prop="creatorName" label="发起人" width="110" />
@@ -152,7 +152,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useUserStore } from '@/store/user'
 import { listPending, approve, reject as rejectGroup } from '@/api/group'
 import { getList as getRoomList } from '@/api/room'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -186,14 +187,10 @@ const approvalTagType = function(status) {
   return APPROVAL_TAG[status] || 'info'
 }
 
-// 审批状态下拉（后端不认 status，前端兜底过滤）
-const statusOptions = [
-  { label: '待审核', value: 'pending' },
-  { label: '待辅导员审核', value: 'counselor_pending' },
-  { label: '已通过', value: 'approved' },
-  { label: '已拒绝', value: 'rejected' },
-  { label: '已取消', value: 'cancelled' }
-]
+const userStore = useUserStore()
+const statusOptions = computed(() => userStore.userInfo.role === 'admin'
+  ? [{ label: '待审核', value: 'pending' }]
+  : [{ label: '待审核', value: 'pending' }, { label: '待辅导员审核', value: 'counselor_pending' }])
 
 // 导出列：仅组团级字段，与表格展示一致。
 // R-14：不含成员姓名/学号 —— 成员明细属更敏感 PII，详情抽屉内可看但不随列表导出。
@@ -220,34 +217,24 @@ const rejectDialogVisible = ref(false)
 const detailVisible = ref(false)
 const currentRow = ref(null)
 const rejectTemplate = ref('')
+let loadRequestVersion = 0
 
 const filters = reactive({ roomId: '', date: '', status: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const rejectForm = reactive({ reason: '', id: null })
 
-// 查询参数单一来源：列表加载与导出共用，保证「导出结果 == 当前筛选视图」。
-// 实测后端 GET /groups/pending 仅认 roomId / date / page / pageSize，
-// status 与 keyword **都不认**，二者一律前端兜底。
+// 列表与导出使用相同的服务端筛选条件，分页总数也与筛选结果一致。
 function buildParams() {
   return {
     roomId: filters.roomId,
-    date: filters.date
+    date: filters.date,
+    status: filters.status,
+    keyword: filters.keyword.trim()
   }
 }
 
-// 前端兜底过滤：审批状态 + 关键词（组团标题 / 发起人）。
-function matchFilters(row) {
-  if (filters.status && row.approvalStatus !== filters.status) return false
-  const keyword = String(filters.keyword || '').trim().toLowerCase()
-  if (!keyword) return true
-  return String(row.title || '').toLowerCase().includes(keyword) ||
-    String(row.creatorName || '').toLowerCase().includes(keyword)
-}
-
-// 表格数据源：服务端筛选后的当页数据 + status/keyword 前端过滤。
-const filteredRows = computed(() => tableData.value.filter(row => matchFilters(row)))
-
 async function loadData() {
+  const requestVersion = ++loadRequestVersion
   loading.value = true
   loadError.value = ''
   try {
@@ -256,12 +243,16 @@ async function loadData() {
       page: pagination.page,
       pageSize: pagination.pageSize
     })
-    tableData.value = res.data?.list || []
-    pagination.total = res.data?.total || 0
+    if (requestVersion === loadRequestVersion) {
+      tableData.value = res.data?.list || []
+      pagination.total = res.data?.total || 0
+      selectedIds.value = []
+      selectedRows.value = []
+    }
   } catch (e) {
-    loadError.value = '组团列表加载失败，请重试'
+    if (requestVersion === loadRequestVersion) loadError.value = '组团列表加载失败，请重试'
   } finally {
-    loading.value = false
+    if (requestVersion === loadRequestVersion) loading.value = false
   }
 }
 
@@ -274,7 +265,7 @@ async function loadRooms() {
   }
 }
 
-// 筛选条件变化后回到第 1 页（roomId / date 服务端筛选，status / keyword 前端过滤）。
+// 筛选条件变化后回到第 1 页。
 function onSearch() {
   pagination.page = 1
   loadData()
@@ -292,7 +283,6 @@ function resetFilters() {
 // 导出「筛选后全量」：后端 paginationRules 限制 pageSize<=100，不能一次性要 10000；
 // 且 /groups/pending 的 controller 与 service 都把 pageSize 钳到 50，
 // 故这里按 50/页循环拉取（若传 100 会被服务端缩成 50，反而被 fetchAllPages 误判为最后一页而截断）。
-// status / keyword 后端不认，拉全量后套用与列表完全一致的 matchFilters。
 async function handleExport() {
   try {
     const list = await fetchAllPages(listPending, buildParams(), {
@@ -301,9 +291,8 @@ async function handleExport() {
       // 注：listPending 当前签名只有 (params)，options 暂不生效；保留以对齐其他页面约定。
       options: { silentError: true }
     })
-    const rows = list.filter(row => matchFilters(row))
-    if (!exportXlsx(exportColumns, rows, '导出_组团预约列表')) return
-    ElMessage.success(`导出成功，共 ${rows.length} 条`)
+    if (!exportXlsx(exportColumns, list, '导出_组团预约列表')) return
+    ElMessage.success(`导出成功，共 ${list.length} 条`)
   } catch (e) {
     ElMessage.error('导出失败，请重试')
   }
@@ -406,6 +395,7 @@ onMounted(() => {
   loadData()
   loadRooms()
 })
+onBeforeUnmount(() => { loadRequestVersion += 1 })
 </script>
 
 <style scoped>

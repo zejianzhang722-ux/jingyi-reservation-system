@@ -4,7 +4,7 @@ const logger = require('../config/logger');
 const metricsService = require('./metricsService');
 const auditHash = require('../utils/auditHash');
 
-const ADMIN_ROLES = new Set(['admin', 'super_admin', 'counselor']);
+const ADMIN_ROLES = new Set(['admin', 'super_admin', 'counselor', 'dorm_manager']);
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SENSITIVE_KEY_PATTERN = /(password|passwd|secret|token|authorization|cookie|session|openid|session_key|credential|private[_-]?key)/i;
 const MAX_METADATA_BYTES = 12000;

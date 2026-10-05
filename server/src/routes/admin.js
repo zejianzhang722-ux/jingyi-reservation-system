@@ -30,9 +30,9 @@ router.post('/seats/batch', auth, requireRole('super_admin'), adminController.ba
 router.put('/seats/:id', auth, requireRole('super_admin'), adminController.updateSeat);
 router.delete('/seats/:id', auth, requireRole('super_admin'), adminController.deleteSeat);
 
-router.get('/config', auth, requireRole('super_admin'), adminController.getConfig);
-router.get('/config/effective', auth, requireRole('super_admin'), adminController.getEffectiveConfig);
-router.put('/config', auth, requireRole('super_admin'), adminController.updateConfig);
+router.get('/config', auth, requireAdmin, adminScope.loadAdminScope, adminScope.requireCapability('rule_config'), adminController.getConfig);
+router.get('/config/effective', auth, requireAdmin, adminScope.loadAdminScope, adminScope.requireCapability('rule_config'), adminController.getEffectiveConfig);
+router.put('/config', auth, requireAdmin, adminScope.loadAdminScope, adminScope.requireCapability('rule_config'), adminController.updateConfig);
 
 router.get('/buildings', auth, requireAdmin, adminScope.loadAdminScope, adminScope.ownBuildingList, adminController.getBuildings);
 router.post('/buildings', auth, requireRole('super_admin'), adminController.createBuilding);

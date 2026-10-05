@@ -1,67 +1,101 @@
 <view class="login-container">
-  <view class="bg-animation">
-    <view class="particle p1"></view>
-    <view class="particle p2"></view>
-    <view class="particle p3"></view>
-    <view class="particle p4"></view>
-    <view class="particle p5"></view>
-    <view class="particle p6"></view>
-  </view>
+  <image class="space-backdrop" src="/images/brand/login-space-bg.png" mode="aspectFill" />
+  <view class="backdrop-vignette"></view>
+  <view class="space-grid"></view>
+  <view class="ambient-glow glow-left"></view>
+  <view class="ambient-glow glow-right"></view>
 
   <view class="login-content">
     <view class="brand-section">
-      <view class="brand-icon">
-        <text class="brand-icon-text">敬</text>
+      <view class="brand-kicker">
+        <view class="kicker-dot"></view>
+        <text>JINGYI SPACE</text>
+      </view>
+      <view class="logo-stage">
+        <view class="logo-orbit orbit-outer"></view>
+        <view class="logo-orbit orbit-inner"></view>
+        <image class="brand-logo" src="/images/brand/jingyi-glass-logo.png" mode="aspectFit" />
+        <view class="logo-sheen"></view>
       </view>
       <text class="brand-title">敬一书院</text>
       <text class="brand-subtitle">功能房预约平台</text>
-      <view class="brand-line"></view>
-      <text class="brand-desc">智慧空间 · 便捷预约 · 高效管理</text>
+      <view class="brand-divider"><view></view></view>
+      <text class="brand-desc">让每一处空间，都恰逢所需</text>
     </view>
 
     <view class="login-card">
+      <view class="card-head">
+        <view>
+          <text class="card-eyebrow">WELCOME BACK</text>
+          <text class="card-title">登录预约空间</text>
+        </view>
+        <view class="secure-badge">
+          <view class="secure-dot"></view>
+          <text>安全连接</text>
+        </view>
+      </view>
+
       <view class="tab-bar">
+        <view class="tab-indicator" style="transform: translateX({{loginMode === 'admin' ? '100%' : '0'}})"></view>
         <view class="tab-item {{loginMode === 'student' ? 'tab-active' : ''}}" bindtap="switchMode" data-mode="student">
           <text>学生登录</text>
         </view>
         <view class="tab-item {{loginMode === 'admin' ? 'tab-active' : ''}}" bindtap="switchMode" data-mode="admin">
           <text>管理员登录</text>
         </view>
-        <view class="tab-indicator" style="transform: translateX({{loginMode === 'admin' ? '100%' : '0'}})"></view>
       </view>
-      
+
       <view class="form-section" wx:if="{{loginMode === 'student'}}">
-        <view class="input-group">
-          <view class="input-icon input-icon-user"></view>
-          <input class="form-input" type="text" placeholder="请输入学号" value="{{studentId}}" bindinput="onStudentIdInput" placeholder-style="color:#5a6a8a" />
+        <view class="field-shell">
+          <text class="field-label">学号</text>
+          <view class="input-group">
+            <view class="input-icon input-icon-user"></view>
+            <input class="form-input" type="number" placeholder="请输入 9–10 位学号" value="{{studentId}}" bindinput="onStudentIdInput" placeholder-style="color:rgba(182,207,220,.45)" />
+          </view>
         </view>
-        <view class="input-group">
-          <view class="input-icon input-icon-key"></view>
-          <input class="form-input" type="text" placeholder="请输入一卡通卡号" value="{{cardNo}}" bindinput="onCardNoInput" placeholder-style="color:#5a6a8a" />
+        <view class="field-shell">
+          <text class="field-label">一卡通卡号</text>
+          <view class="input-group">
+            <view class="input-icon input-icon-card"></view>
+            <input class="form-input" type="number" password="true" placeholder="请输入 6 位卡号" value="{{cardNo}}" bindinput="onCardNoInput" placeholder-style="color:rgba(182,207,220,.45)" />
+          </view>
         </view>
       </view>
 
       <view class="form-section" wx:if="{{loginMode === 'admin'}}">
-        <view class="input-group">
-          <view class="input-icon input-icon-user"></view>
-          <input class="form-input" type="text" placeholder="请输入管理员账号" value="{{username}}" bindinput="onUsernameInput" placeholder-style="color:#5a6a8a" />
+        <view class="field-shell">
+          <text class="field-label">管理员账号</text>
+          <view class="input-group">
+            <view class="input-icon input-icon-user"></view>
+            <input class="form-input" type="text" placeholder="请输入管理员账号" value="{{username}}" bindinput="onUsernameInput" placeholder-style="color:rgba(182,207,220,.45)" />
+          </view>
         </view>
-        <view class="input-group">
-          <view class="input-icon input-icon-lock"></view>
-          <input class="form-input" type="password" placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" placeholder-style="color:#5a6a8a" />
+        <view class="field-shell">
+          <text class="field-label">登录密码</text>
+          <view class="input-group">
+            <view class="input-icon input-icon-lock"></view>
+            <input class="form-input" type="text" password="true" placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" placeholder-style="color:rgba(182,207,220,.45)" />
+          </view>
         </view>
       </view>
 
       <view class="action-section">
         <button class="login-btn" bindtap="onLogin" loading="{{submitting}}" disabled="{{submitting}}">
-          <text wx:if="{{!submitting}}">{{loginMode === 'student' ? '立即登录' : '管理员登录'}}</text>
-          <text wx:else>验证中...</text>
+          <text wx:if="{{!submitting}}">{{loginMode === 'student' ? '进入预约平台' : '进入管理后台'}}</text>
+          <text wx:else>正在验证身份...</text>
         </button>
+      </view>
+
+      <view class="trust-row">
+        <view class="trust-item"><view class="trust-mark"></view><text>统一身份认证</text></view>
+        <view class="trust-separator"></view>
+        <view class="trust-item"><view class="trust-mark"></view><text>数据加密传输</text></view>
       </view>
     </view>
 
     <view class="footer-text">
       <text>首次使用？请前往书院前台绑定一卡通</text>
+      <text class="footer-version">JY SPACE SERVICE</text>
     </view>
   </view>
 </view>

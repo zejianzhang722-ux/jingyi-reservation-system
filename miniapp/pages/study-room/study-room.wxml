@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-stack">
   <view class="rules-modal" wx:if="{{showRulesModal}}">
     <view class="rules-modal-mask"></view>
     <view class="rules-modal-content">

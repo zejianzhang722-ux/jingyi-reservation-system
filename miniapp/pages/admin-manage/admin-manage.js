@@ -1,36 +1,38 @@
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
 var request = require('../../utils/request')
+var pageMotion = require('../../utils/page-motion')
 
 var CATALOG = [
   {
     title: '工作台与统计',
     items: [
-      { key: 'pending', name: '普通预约审核', desc: '处理共享空间等普通待审预约', icon: 'approve', tone: 'gold', capability: 'ordinaryApproval' },
-      { key: 'counselorPending', name: '重点预约审核', desc: '处理需辅导员把关的特殊空间预约', icon: 'approve', tone: 'red', capability: 'counselorApproval' },
+      { key: 'pending', name: '普通预约审核', desc: '处理共享空间等普通待审预约', icon: 'check', tone: 'gold', capability: 'ordinaryApproval' },
+      { key: 'counselorPending', name: '重点预约审核', desc: '处理需辅导员把关的特殊空间预约', icon: 'check', tone: 'red', capability: 'counselorApproval' },
       { key: 'stats', name: '数据统计', desc: '查看预约、使用、爽约和信用概览', icon: 'chart', tone: 'blue', capability: 'statsView' }
     ]
   },
   {
     title: '预约与空间',
     items: [
+      { key: 'verification', name: '扫码核验与签到', desc: '核对现场身份，办理签到并查询核验记录', icon: 'check', tone: 'green', capability: 'scanCheckin' },
       { key: 'reservation', name: '全部预约', desc: '查看、搜索和处理预约记录', icon: 'calendar', tone: 'blue', capability: 'reservationView' },
-      { key: 'rooms', name: '空间状态', desc: '查看房间分类、容量和开放状态', icon: 'room', tone: 'green', capability: 'roomView' }
+      { key: 'rooms', name: '空间状态', desc: '查看房间分类、容量和开放状态', icon: 'building', tone: 'green', capability: 'roomView' }
     ]
   },
   {
     title: '宿生与信用',
     items: [
       { key: 'users', name: '宿生查询', desc: '查看宿生资料、状态和信用分', icon: 'users', tone: 'purple', capability: 'residentView' },
-      { key: 'violations', name: '违规记录', desc: '查看宿生违规记录', icon: 'credit', tone: 'red', capability: 'violationView' },
-      { key: 'blacklist', name: '黑名单', desc: '管理信用黑名单', icon: 'credit', tone: 'red', capability: 'blacklistManage' }
+      { key: 'violations', name: '违规记录', desc: '查看宿生违规记录', icon: 'warning', tone: 'red', capability: 'violationView' },
+      { key: 'blacklist', name: '黑名单', desc: '管理信用黑名单', icon: 'warning', tone: 'red', capability: 'blacklistManage' }
     ]
   },
   {
     title: '运营审核',
     items: [
-      { key: 'feedback', name: '反馈', desc: '处理宿生反馈和回复', icon: 'feedback', tone: 'cyan', capability: 'feedbackManage' },
-      { key: 'poster', name: '海报审核', desc: '审核移动端活动海报', icon: 'announcement', tone: 'gold', capability: 'posterReview' }
+      { key: 'feedback', name: '反馈', desc: '处理宿生反馈和回复', icon: 'chat', tone: 'cyan', capability: 'feedbackManage' },
+      { key: 'poster', name: '海报审核', desc: '审核移动端活动海报', icon: 'megaphone', tone: 'gold', capability: 'posterReview' }
     ]
   }
 ]
@@ -58,6 +60,7 @@ Page({
 
   onShow: function () {
     if (!this.ensureAdmin()) return
+    pageMotion.replayPageMotion(this)
     this.refreshGroups()
     this.loadPendingCounts()
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
@@ -85,6 +88,7 @@ Page({
   },
 
   loadPendingCounts: function () {
+    if (auth.getUserRole() === 'dorm_manager') return Promise.resolve()
     var self = this
     var role = auth.getUserRole()
     var version = (this._statsRequestVersion || 0) + 1
@@ -112,6 +116,7 @@ Page({
   onItemTap: function (e) {
     var key = e.currentTarget.dataset.key
     var routes = {
+      verification: '/pages/verification/verification',
       pending: '/pages/admin-home/admin-home?queueType=' + adminPolicy.queueType(auth.getUserRole(), 'admin'),
       counselorPending: '/pages/admin-home/admin-home?queueType=' + adminPolicy.queueType(auth.getUserRole(), 'counselor'),
       stats: '/pages/admin-stats/admin-stats', reservation: '/pages/admin-reservation/admin-reservation',

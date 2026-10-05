@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-tab {{pageMotionActive ? 'motion-active' : ''}}">
   <view class="manage-header">
     <text class="manage-title">管理中心</text>
     <text class="manage-subtitle">集中处理审核、空间、宿生与运营事务</text>
@@ -9,7 +9,7 @@
     <view class="menu-grid">
       <view class="menu-card" wx:for="{{item.items}}" wx:for-item="entry" wx:key="key" data-key="{{entry.key}}" bindtap="onItemTap">
         <view class="menu-icon menu-icon-{{entry.tone}}">
-          <view class="admin-symbol admin-symbol-{{entry.icon}}"></view>
+          <view class="icon menu-icon-inner icon-{{entry.icon}}"></view>
           <text class="menu-badge" wx:if="{{entry.badge > 0}}">{{entry.badge > 99 ? '99+' : entry.badge}}</text>
         </view>
         <view class="menu-info">

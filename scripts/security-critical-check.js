@@ -47,11 +47,11 @@ assert(
 
 const checkinRoutes = read('server/src/routes/checkin.js')
 assert(
-  /router\.post\('\/checkout',\s*auth,\s*reservationFromBody/.test(checkinRoutes),
+  /router\.post\('\/checkout',\s*auth,\s*optionalAdminReservationBodyScope\('reservationId'\),\s*reservationFromBody/.test(checkinRoutes),
   '签退接口必须校验预约归属'
 )
 assert(
-  /router\.get\('\/status\/:reservationId',\s*auth,\s*reservationFromParam/.test(checkinRoutes),
+  /router\.get\('\/status\/:reservationId',\s*auth,\s*optionalAdminReservationScope\('reservationId'\),\s*reservationFromParam/.test(checkinRoutes),
   '签到状态接口必须校验预约归属'
 )
 assert(

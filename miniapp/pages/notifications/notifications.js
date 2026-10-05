@@ -1,5 +1,6 @@
 var request = require('../../utils/request')
 var util = require('../../utils/util')
+var pageMotion = require('../../utils/page-motion')
 
 Page({
   data: {
@@ -24,6 +25,7 @@ Page({
   },
 
   onShow: function () {
+    pageMotion.replayPageMotion(this)
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().switchTabList()
       this.getTabBar().setData({ selected: 2 })
@@ -43,11 +45,22 @@ Page({
       params.category = this.data.currentCategory
     }
 
+    var categoryIconMap = {
+      audit: 'shield',
+      reminder: 'bell',
+      noshow_warning: 'warning',
+      credit: 'star',
+      poster: 'megaphone',
+      system: 'info',
+      violation: 'warning'
+    }
+
     request.get('/notification', params, { silent: true }).then(function (data) {
       var list = data && data.list ? data.list : (Array.isArray(data) ? data : [])
       var unreadCount = 0
       ;(list || []).forEach(function (n) {
         if (!n.isRead && !n.is_read) unreadCount++
+        n.icon = categoryIconMap[n.category] || 'info'
       })
       that.setData({
         notifications: list || [],

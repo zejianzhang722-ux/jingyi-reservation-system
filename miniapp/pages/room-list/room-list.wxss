@@ -31,11 +31,14 @@
 .room-item {
   display: flex;
   flex-direction: row;
-  background-color: var(--bg-card);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   border-radius: 16rpx;
   overflow: hidden;
   margin: 12rpx 24rpx;
-  box-shadow: var(--shadow);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -171,14 +174,6 @@
   justify-content: center;
   padding: 120rpx 0;
   animation: fadeIn 0.3s ease-out both;
-}
-
-.empty-icon-svg {
-  width: 120rpx;
-  height: 120rpx;
-  background: var(--border-color);
-  border-radius: 50%;
-  margin-bottom: 24rpx;
 }
 
 .empty-text {

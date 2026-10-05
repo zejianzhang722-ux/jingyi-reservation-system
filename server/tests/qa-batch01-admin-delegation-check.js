@@ -148,11 +148,15 @@ const main = async function() {
   eq('listActiveCapabilities 返回有效能力(去重)', JSON.stringify((await capabilityService.listActiveCapabilities(1, nowMid)).slice().sort()), JSON.stringify(['audit', 'checkin']));
 
   // 管理员 7：仅“未来生效”的授权 -> 在 nowMid 应为空
+  tables.admins.push({ id: 7, username: 'qa_future_admin', role: 'admin', scope_type: 'global', building_id: null, status: 'active' });
   await capabilityService.grant({ adminId: 7, capability: 'data_export', validFrom: '2099-01-01 00:00:00', validTo: '2099-12-31 00:00:00' });
   check('listActive：未生效(未来有效)返回空', (await capabilityService.listActive(7, nowMid)).length === 0);
   check('listActive：进入生效窗口后返回 1 条', (await capabilityService.listActive(7, new Date('2099-06-01T00:00:00'))).length === 1);
 
   // 管理员 8：仅“已过期”的授权 -> 为空
+  tables.admins.push({ id: 8, username: 'qa_expired_admin', role: 'admin', scope_type: 'global', building_id: null, status: 'active' });
+  tables.admins.push({ id: 9, username: 'qa_dorm', role: 'dorm_manager', scope_type: 'building', building_id: 1, status: 'active' });
+  await expectThrow('宿管不接受临时管理权限', function() { return capabilityService.grant({ adminId: 9, capability: 'audit', validFrom: '2020-01-01 00:00:00', validTo: '2099-01-01 00:00:00' }); }, 'PERMISSION_DENIED');
   await capabilityService.grant({ adminId: 8, capability: 'rule_config', validFrom: '2000-01-01 00:00:00', validTo: '2000-12-31 00:00:00' });
   check('listActive：已过期返回空', (await capabilityService.listActive(8, nowMid)).length === 0);
 

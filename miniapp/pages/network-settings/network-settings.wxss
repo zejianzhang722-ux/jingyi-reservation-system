@@ -22,10 +22,12 @@
 .network-card {
   margin: 20rpx 24rpx;
   padding: 28rpx;
-  background: var(--bg-card);
-  border: 1rpx solid var(--border-color);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
 }
 
 .card-title {
@@ -39,7 +41,8 @@
 .current-url {
   display: block;
   padding: 18rpx 20rpx;
-  background: #F7F9FC;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1rpx solid var(--glass-border);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: 24rpx;
@@ -103,7 +106,8 @@
 .full-url-input {
   min-height: 84rpx;
   padding: 0 20rpx;
-  background: #F7F9FC;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1rpx solid var(--glass-border);
   border-radius: var(--radius-md);
 }
 

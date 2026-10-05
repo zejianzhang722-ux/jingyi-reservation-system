@@ -42,6 +42,7 @@ router.beforeEach((to, from, next) => {
   document.title = to.meta.title ? `${to.meta.title} - 敬一书院` : '敬一书院'
   const token = localStorage.getItem('token')
   const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+  if (token && userInfo.role === 'dorm_manager' && (to.path === '/login' || to.path === '/dashboard')) return next('/verification')
 
   if (to.path === '/login') {
     if (token) return next('/dashboard')
@@ -50,7 +51,7 @@ router.beforeEach((to, from, next) => {
 
   if (!token) return next('/login')
 
-  if (to.path !== '/403' && !hasRouteRole(to, userInfo.role)) {
+  if (to.path !== '/403' && !hasRouteRole(to, userInfo.role, userInfo.capabilities || [])) {
     return next('/403')
   }
 

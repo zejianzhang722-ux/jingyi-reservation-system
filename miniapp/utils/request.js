@@ -151,7 +151,7 @@ function request(options) {
           reject({ message: '登录状态已失效，请重新登录' })
           return
         }
-        if (res.data && res.data.code === 200) {
+        if (res.statusCode >= 200 && res.statusCode < 300 && dataCode >= 200 && dataCode < 300) {
           resolve(res.data.data)
         } else {
           var msg = normalizeErrorMessage((res.data && res.data.message) || '请求失败')

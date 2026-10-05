@@ -32,6 +32,9 @@
             </div>
           </template>
           <el-table :data="backupList" v-loading="loading" stripe>
+            <template #empty>
+              <el-empty description="暂无真实备份记录；请在具备数据库和备份密钥的环境中创建备份。" />
+            </template>
             <el-table-column label="备份文件" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">{{ row.fileName || '-' }}</template>
             </el-table-column>

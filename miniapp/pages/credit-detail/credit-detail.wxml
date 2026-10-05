@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-detail">
   <view wx:if="{{mode === 'credit'}}">
     <view class="credit-header">
       <text class="credit-score-label">当前信用分</text>

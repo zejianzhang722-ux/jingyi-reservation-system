@@ -152,7 +152,7 @@ function isAdmin() {
   var userInfo = getUserInfo()
   if (!userInfo) return false
   var role = userInfo.role || ''
-  return role === 'admin' || role === 'super_admin' || role === 'counselor'
+  return role === 'admin' || role === 'super_admin' || role === 'counselor' || role === 'dorm_manager'
 }
 
 function getUserRole() {
@@ -161,6 +161,7 @@ function getUserRole() {
 }
 
 module.exports = {
+  getAdminHome: function () { return getUserRole() === 'dorm_manager' ? '/pages/verification/verification' : '/pages/admin-home/admin-home' },
   login: login,
   mockLogin: mockLogin,
   setAuthData: setAuthData,

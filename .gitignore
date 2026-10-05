@@ -12,6 +12,7 @@ coverage/
 # Runtime files
 server/uploads/
 server/tmp-devtools/
+server/data/mock-user-avatars.json
 uploads/
 *.log
 logs/
@@ -25,6 +26,7 @@ nodejs/
 .env.*
 !.env.example
 config.toml
+password.md
 
 # WeChat DevTools local-only settings
 miniapp/project.private.config.json
@@ -40,3 +42,13 @@ Thumbs.db
 *.temp
 ~$*
 .superpowers/
+
+# Local agent workspaces, caches, and generated verification artifacts
+.agents/
+.artifacts/
+.cache/
+.codex-tools/
+.tools/
+.trae/
+.workbuddy/
+server/data/mock-verification-state.json

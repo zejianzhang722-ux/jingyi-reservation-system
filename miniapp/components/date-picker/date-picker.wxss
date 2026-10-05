@@ -1,7 +1,6 @@
 .date-picker {
   width: 100%;
   white-space: nowrap;
-  background-color: #FFFFFF;
   padding: 16rpx 0;
 }
 
@@ -18,14 +17,19 @@
   align-items: center;
   justify-content: center;
   padding: 16rpx 28rpx;
-  border-radius: 12rpx;
-  background-color: #F5F5F5;
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-soft);
+  border: 1rpx solid var(--glass-border-soft);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-width: 120rpx;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .date-item-active {
-  background-color: #0066CC;
+  background: linear-gradient(135deg, #3385E6, #0066CC);
+  border-color: transparent;
+  box-shadow: 0 6rpx 18rpx rgba(0, 102, 204, 0.35);
 }
 
 .date-weekday {

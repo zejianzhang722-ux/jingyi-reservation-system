@@ -25,14 +25,20 @@ function getIconKey(type) {
   return map[type] || 'room'
 }
 
+function canGroupReserve(type) {
+  return ['study_room', 'study'].indexOf(String(type || '')) === -1
+}
+
 Page({
   data: {
     room: null,
-    loading: true
+    loading: true,
+    groupMode: false
   },
 
   onLoad: function (options) {
     var roomId = localData.resolveRoomId(options.roomId)
+    this.setData({ groupMode: options.groupMode === '1' })
     if (roomId) this.loadRoomDetail(roomId)
   },
 
@@ -65,7 +71,8 @@ Page({
       rules: data.rules || data.management_rules || '',
       type: data.type || '',
       status: data.status || '',
-      need_counselor: data.need_counselor || data.need_counselor_audit || false
+      need_counselor: data.need_counselor || data.need_counselor_audit || false,
+      canGroupReserve: canGroupReserve(data.type)
     }
   },
 
@@ -97,6 +104,14 @@ Page({
     } else {
       wx.navigateTo({ url: '/pages/room-timeline/room-timeline?roomId=' + room.id })
     }
+  },
+
+  onGroupReserveTap: function () {
+    var room = this.data.room
+    if (!room || !room.canGroupReserve) return
+    wx.navigateTo({
+      url: '/pages/room-timeline/room-timeline?roomId=' + room.id + '&reservationMode=group'
+    })
   },
 
   onViewRules: function () {

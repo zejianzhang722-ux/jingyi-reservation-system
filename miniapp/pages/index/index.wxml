@@ -1,4 +1,4 @@
-<view class="container page-fade-in">
+<view class="container motion-page motion-tab {{pageMotionActive ? 'motion-active' : ''}}">
   <view class="header">
     <view class="header-top">
       <view class="header-brand">
@@ -18,7 +18,7 @@
 
     <view class="search-bar glass-effect" bindtap="onSearchTap">
       <view class="search-icon-wrap">
-        <view class="search-icon-svg"></view>
+        <view class="icon icon-search search-icon-svg"></view>
       </view>
       <text class="search-placeholder" wx:if="{{!searchKeyword}}">搜索房号或功能房名称</text>
       <text class="search-keyword" wx:else>{{searchKeyword}}</text>
@@ -54,12 +54,11 @@
 
   <view class="section-title">可预约空间</view>
 
-  <view class="category-grid" wx:if="{{!loading}}">
+  <view class="category-grid stagger" wx:if="{{!loading}}">
     <view class="category-item {{currentCategory === item.key ? 'category-item-active' : ''}}"
           wx:for="{{categories}}" wx:key="key"
           data-key="{{item.key}}" bindtap="onCategoryTap">
-      <view class="category-icon-wrap category-icon-{{item.key}}">
-        <view class="category-symbol category-symbol-{{item.iconKey || item.key}}"></view>
+      <view class="category-icon cat-icon cat-icon-{{item.key}}">
         <view class="category-badge" wx:if="{{item.freeCount > 0}}">
           <text class="category-badge-text">{{item.freeCount}}</text>
         </view>

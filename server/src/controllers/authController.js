@@ -7,6 +7,16 @@ const config = require('../config');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const wechat = require('../utils/wechat');
+const adminCapabilityService = require('../services/adminCapabilityService');
+
+const getAdminCapabilities = async function(adminId) {
+  try {
+    return await adminCapabilityService.listActiveCapabilities(adminId);
+  } catch (err) {
+    logger.warn('登录时加载临时授权失败（已降级为空）:', err && err.message ? err.message : err);
+    return [];
+  }
+};
 
 const getCalculatedCreditScore = async function(user) {
   const fallback = parseInt(user.credit_score) || config.credit.initialScore || 100;
@@ -206,6 +216,7 @@ const adminLogin = async function(req, res) {
       await redis.set('token:admin:' + admin.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
     } catch(e) {}
     await db.query('UPDATE admins SET last_login_at = NOW() WHERE id = ?', [admin.id]);
+    const capabilities = await getAdminCapabilities(admin.id);
 
     return response.success(res, {
       token: tokens.token,
@@ -217,7 +228,8 @@ const adminLogin = async function(req, res) {
         realName: admin.real_name || '',
         role: admin.role,
         buildingId: admin.building_id,
-        scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type
+        scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type,
+        capabilities: capabilities
       }
     });
   } catch (err) {
@@ -253,9 +265,12 @@ const adminMiniappLogin = async function(req, res) {
       return response.error(res, '账号已被禁用', 403);
     }
 
-    const validRoles = ['super_admin', 'admin', 'counselor'];
+    const validRoles = ['super_admin', 'admin', 'counselor', 'dorm_manager'];
     if (!validRoles.includes(admin.role)) {
       return response.error(res, '账号角色无效', 403);
+    }
+    if (admin.role === 'dorm_manager' && !require('../utils/adminScope').normalizeAdminScope(admin.role, admin.scope_type, admin.building_id)) {
+      return response.error(res, '宿管尚未分配负责楼栋，请联系超级管理员', 403);
     }
 
     const tokens = generateTokens({
@@ -268,6 +283,7 @@ const adminMiniappLogin = async function(req, res) {
       await redis.set('token:admin:' + admin.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
     } catch(e) {}
     await db.query('UPDATE admins SET last_login_at = NOW() WHERE id = ?', [admin.id]);
+    const capabilities = await getAdminCapabilities(admin.id);
 
     return response.success(res, {
       token: tokens.token,
@@ -279,7 +295,8 @@ const adminMiniappLogin = async function(req, res) {
         realName: admin.real_name || '',
         role: admin.role,
         buildingId: admin.building_id,
-        scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type
+        scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type,
+        capabilities: capabilities
       }
     });
   } catch (err) {

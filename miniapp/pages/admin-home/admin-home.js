@@ -2,6 +2,7 @@ var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
 var approvalPresenter = require('../../utils/admin-approval-presenter')
+var pageMotion = require('../../utils/page-motion')
 
 var ROLE_NAMES = {
   super_admin: '超级管理员',
@@ -71,6 +72,7 @@ Page({
   },
   ensureAdmin: function () {
     var role = auth.getUserRole()
+    if (auth.isLoggedIn() && role === 'dorm_manager') { wx.reLaunch({ url: auth.getAdminHome() }); return false }
     if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'ordinaryApproval')) {
       wx.reLaunch({ url: '/pages/login/login' })
       return false
@@ -137,6 +139,7 @@ Page({
   },
   onShow: function () {
     if (!this.ensureAdmin()) return
+    pageMotion.replayPageMotion(this)
     var role = auth.getUserRole()
     if (this._loadedRole !== role) {
       this.applyRole(role)
@@ -345,37 +348,7 @@ Page({
     wx.showToast({ title: message || '扫码签到失败', icon: 'none', duration: 2500 })
   },
   onScanCheckin: function () {
-    var that = this
-    if (this.data.scanning) return
-    this.setData({ scanning: true })
-    wx.scanCode({
-      onlyFromCamera: true,
-      scanType: ['qrCode'],
-      success: function (scanResult) {
-        var payload = null
-        try {
-          payload = JSON.parse(scanResult.result || '')
-        } catch (err) {
-          that.showScanError('该二维码不是有效的签到凭证')
-          return
-        }
-        if (!payload || payload.type !== 'jingyi-checkin' || !payload.reservationId || !payload.credential) {
-          that.showScanError('动态签到凭证格式无效')
-          return
-        }
-        request.post('/checkin', { reservationId: payload.reservationId, credential: payload.credential }).then(function () {
-          wx.showToast({ title: '签到成功', icon: 'success' })
-          that.loadStats()
-        }).catch(function (err) {
-          that.showScanError(err && err.message ? err.message : '签到失败，请刷新二维码后重试')
-        })
-      },
-      fail: function (err) {
-        if (err && String(err.errMsg || '').indexOf('cancel') !== -1) return
-        that.showScanError('无法完成扫码，请检查相机权限')
-      },
-      complete: function () { that.setData({ scanning: false }) }
-    })
+    wx.navigateTo({ url: '/pages/verification/verification' })
   },
   onApprove: function (event) {
     var that = this

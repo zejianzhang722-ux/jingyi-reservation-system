@@ -1,4 +1,4 @@
-<view class="container page-fade-in">
+<view class="container motion-page motion-form">
   <view class="subscribe-header">
     <text class="subscribe-title">订阅消息管理</text>
     <text class="subscribe-desc">预约提醒、审核结果和信用分变动会优先通过“消息”页展示；可用时将在这里开启提醒授权。</text>

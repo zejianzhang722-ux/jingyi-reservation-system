@@ -12,7 +12,8 @@ Page({
     credentialReference: '',
     credentialError: '',
     refreshing: false,
-    isExpired: false
+    isExpired: false,
+    checkedIn: false
   },
 
   onLoad: function (options) {
@@ -25,6 +26,10 @@ Page({
 
   onShow: function () {
     this._pageVisible = true
+    clearInterval(this._statusTimer)
+    var self = this
+    this._statusTimer = setInterval(function () { self.syncCheckinStatus() }, 5000)
+    this.syncCheckinStatus()
     if (this.data.reservation && !this.data.isExpired && !this.data.loading) {
       this.loadVoucherCode(this.data.reservation.id)
     }
@@ -33,6 +38,19 @@ Page({
   onHide: function () {
     this._pageVisible = false
     this.clearCredentialTimers()
+    clearInterval(this._statusTimer)
+  },
+  syncCheckinStatus: function () {
+    if (!this._pageVisible || !this.data.reservation || this._statusBusy) return
+    var self = this
+    this._statusBusy = true
+    request.get('/verification/status/' + this.data.reservation.id, {}, { silent: true }).then(function (r) {
+      if (!self._pageVisible) return
+      if (r.checkedIn) {
+        self.clearCredentialTimers()
+        self.setData({ checkedIn: true, isExpired: true, qrCodeUrl: '', credentialError: '', 'reservation.status': r.reservationStatus })
+      }
+    }).catch(function () {}).finally(function () { self._statusBusy = false })
   },
 
   normalizeSeatName: function (data) {
@@ -207,6 +225,7 @@ Page({
     this._pageVisible = false
     if (this._timer) clearInterval(this._timer)
     this.clearCredentialTimers()
+    clearInterval(this._statusTimer)
   },
 
   onRefreshQRCode: function () {

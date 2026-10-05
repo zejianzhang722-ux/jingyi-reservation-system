@@ -1,0 +1,368 @@
+[
+  {
+    "id": "login",
+    "route": "/login",
+    "file": "assets/web/login.png",
+    "ok": true
+  },
+  {
+    "id": "dashboard",
+    "route": "/dashboard",
+    "file": "assets/web/dashboard.png",
+    "ok": true,
+    "title": "工作台 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 1734,
+      "nested": 3,
+      "horizontal": 2,
+      "imageWidth": 1575,
+      "imageHeight": 1734
+    }
+  },
+  {
+    "id": "reservation-pending",
+    "route": "/reservation/pending",
+    "file": "assets/web/reservation-pending.png",
+    "ok": true,
+    "title": "预约审核 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 3,
+      "imageWidth": 1575,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "reservation-all",
+    "route": "/reservation/all",
+    "file": "assets/web/reservation-all.png",
+    "ok": true,
+    "title": "全部预约 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 2,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "reservation-counselor",
+    "route": "/reservation/counselor",
+    "file": "assets/web/reservation-counselor.png",
+    "ok": true,
+    "title": "辅导员审核 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 0,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "reservation-groups",
+    "route": "/reservation/groups",
+    "file": "assets/web/reservation-groups.png",
+    "ok": true,
+    "title": "组团审核 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 3,
+      "imageWidth": 1575,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "checkin-manage",
+    "route": "/checkin/manage",
+    "file": "assets/web/checkin-manage.png",
+    "ok": true,
+    "title": "签到核销 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 2,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "reading-room-logs",
+    "route": "/reading-room/logs",
+    "file": "assets/web/reading-room-logs.png",
+    "ok": true,
+    "title": "阅览室记录 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 0,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "room-monitor",
+    "route": "/room/monitor",
+    "file": "assets/web/room-monitor.png",
+    "ok": true,
+    "title": "空间监控 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 0,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "room-manage",
+    "route": "/room/manage",
+    "file": "assets/web/room-manage.png",
+    "ok": true,
+    "title": "功能房 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 995,
+      "nested": 2,
+      "horizontal": 8,
+      "imageWidth": 1575,
+      "imageHeight": 995
+    }
+  },
+  {
+    "id": "building-manage",
+    "route": "/building/manage",
+    "file": "assets/web/building-manage.png",
+    "ok": true,
+    "title": "楼栋 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 2,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "room-seats",
+    "route": "/room/seats",
+    "file": "assets/web/room-seats.png",
+    "ok": true,
+    "title": "座位 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 0,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "room-rules",
+    "route": "/room/rules",
+    "file": "assets/web/room-rules.png",
+    "ok": true,
+    "title": "开放规则 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 0,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "account",
+    "route": "/account",
+    "file": "assets/web/account.png",
+    "ok": true,
+    "title": "账号管理 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 1,
+      "imageWidth": 1575,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "credit-violations",
+    "route": "/credit/violations",
+    "file": "assets/web/credit-violations.png",
+    "ok": true,
+    "title": "违规记录 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 0,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "credit-blacklist",
+    "route": "/credit/blacklist",
+    "file": "assets/web/credit-blacklist.png",
+    "ok": true,
+    "title": "黑名单 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 3,
+      "imageWidth": 1575,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "credit-config",
+    "route": "/credit/config",
+    "file": "assets/web/credit-config.png",
+    "ok": true,
+    "title": "信用配置 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 0,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "stats-overview",
+    "route": "/stats/overview",
+    "file": "assets/web/stats-overview.png",
+    "ok": true,
+    "title": "数据概览 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 1960,
+      "nested": 2,
+      "horizontal": 1,
+      "imageWidth": 1575,
+      "imageHeight": 1960
+    }
+  },
+  {
+    "id": "stats-export",
+    "route": "/stats/export",
+    "file": "assets/web/stats-export.png",
+    "ok": true,
+    "title": "导出报表 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 1305,
+      "nested": 2,
+      "horizontal": 1,
+      "imageWidth": 1575,
+      "imageHeight": 1305
+    }
+  },
+  {
+    "id": "poster-pending",
+    "route": "/poster/pending",
+    "file": "assets/web/poster-pending.png",
+    "ok": true,
+    "title": "海报审核 - 敬一书院",
+    "capture": {
+      "width": 1503,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 2,
+      "imageWidth": 1503,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "poster-position",
+    "route": "/poster/position",
+    "file": "assets/web/poster-position.png",
+    "ok": true,
+    "title": "海报位置 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 2,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "feedback",
+    "route": "/feedback",
+    "file": "assets/web/feedback.png",
+    "ok": true,
+    "title": "反馈管理 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 995,
+      "nested": 2,
+      "horizontal": 1,
+      "imageWidth": 1575,
+      "imageHeight": 995
+    }
+  },
+  {
+    "id": "system-announcements",
+    "route": "/system/announcements",
+    "file": "assets/web/system-announcements.png",
+    "ok": true,
+    "title": "公告管理 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 900,
+      "nested": 1,
+      "horizontal": 1,
+      "imageWidth": 1575,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "system-logs",
+    "route": "/system/logs",
+    "file": "assets/web/system-logs.png",
+    "ok": true,
+    "title": "操作日志 - 敬一书院",
+    "capture": {
+      "width": 1440,
+      "height": 900,
+      "nested": 0,
+      "horizontal": 6,
+      "imageWidth": 1440,
+      "imageHeight": 900
+    }
+  },
+  {
+    "id": "system-backup",
+    "route": "/system/backup",
+    "file": "assets/web/system-backup.png",
+    "ok": true,
+    "title": "数据备份 - 敬一书院",
+    "capture": {
+      "width": 1575,
+      "height": 913,
+      "nested": 2,
+      "horizontal": 3,
+      "imageWidth": 1575,
+      "imageHeight": 913
+    }
+  }
+]

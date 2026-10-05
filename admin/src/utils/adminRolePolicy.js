@@ -1,4 +1,5 @@
 export const ROLE_LABELS = {
+  dorm_manager: '宿管',
   super_admin: '超级管理员',
   admin: '管理员',
   counselor: '辅导员'

@@ -1,0 +1,58 @@
+<view class="page">
+  <view class="hero"><text class="title">{{sectionTitle}}</text><text class="scope">{{me.buildingName ? '负责范围：' + me.buildingName : '正在确认负责楼栋…'}}</text><text wx:if="{{section === 'scan'}}">先扫码 → 核对现场身份 → 确认签到</text><text wx:elif="{{section === 'home'}}">选择功能，办理现场服务。</text><text wx:elif="{{section === 'reservations'}}">仅显示负责范围内的预约；查看不会办理签到。</text><text wx:elif="{{section === 'spaces'}}">根据预约与签到记录查看当前使用安排，现场情况请巡房核实。</text><text wx:else>签到结果与异常处理经过均可查询。</text></view>
+  <view wx:if="{{error && section !== 'scan'}}" class="warning">{{error}}</view>
+  <view wx:if="{{section === 'home' || section === 'reservations'}}" class="summary-grid"><view><text>{{section === 'home' ? '今日预约' : '所选日期'}}</text><text class="stat">{{summary.total}}</text></view><view class="wait"><text>待签到</text><text class="stat">{{summary.waiting}}</text></view><view class="present"><text>使用中</text><text class="stat">{{summary.checkedIn}}</text></view><view><text>已完成</text><text class="stat">{{summary.finished}}</text></view></view>
+  <view wx:if="{{section === 'home'}}" class="navigation">
+    <button id="nav-scan" class="nav-scan" data-section="scan" bindtap="openSection"><text>扫码办理签到</text><text class="nav-description">现场核对宿生身份，确认后完成签到 →</text></button>
+    <button id="nav-reservations" data-section="reservations" bindtap="openSection"><text>预约查询</text><text class="nav-description">查看房间、时间、预约人和使用人数 →</text></button>
+    <button id="nav-spaces" data-section="spaces" bindtap="openSection"><text>空间监控</text><text class="nav-description">查看现在各房间的使用状态，便于巡房 →</text></button>
+    <button id="nav-records" data-section="records" bindtap="openSection"><text>签到记录</text><text class="nav-description">查询签到结果、异常与上级处理情况 →</text></button>
+    <view wx:if="{{reservationError}}" class="warning">{{reservationError}}</view>
+    <view class="help">需要协助时，请联系书院导生会会长团。</view>
+  </view>
+  <view wx:if="{{section === 'spaces'}}" class="card">
+    <text class="subtitle">当前空间状态</text><text class="hint">更新时间：{{spaceUpdatedAt || '加载中'}} · 每15秒更新</text>
+    <view class="reservation-filters"><picker range="{{spaceFilters}}" value="{{spaceFilter}}" bindchange="spaceFilterChange"><view>{{spaceFilters[spaceFilter]}} ▾</view></picker></view>
+    <input value="{{spaceSearch}}" data-field="spaceSearch" bindinput="input" bindconfirm="filterSpaces" placeholder="输入房间名称或位置" /><button bindtap="filterSpaces">查找房间</button><button bindtap="loadSpaces">刷新当前状态</button>
+    <view wx:if="{{spaceError}}" class="warning">{{spaceError}} · 当前显示可能是上次状态，请勿仅据此开门。</view>
+    <view wx:for="{{spaces}}" wx:key="id" class="reservation-item {{item.state === 'in_use' ? 'checked_in' : 'approved'}}">
+      <text class="room">{{item.name}}</text><text>{{item.location}} · {{item.capacity}}人容量</text><text class="space-status">{{item.label}}</text>
+      <view wx:if="{{item.requiresInspection}}" class="warning">使用安排存在异常，请巡房核对并联系书院导生会会长团。</view>
+      <view wx:for="{{item.current}}" wx:for-item="booking" wx:key="id" class="current-booking"><text>预约 #{{booking.id}} · {{booking.name}}</text><text>{{booking.studentId}} · {{booking.participants}}人</text><text class="time">{{booking.startTime}} — {{booking.endTime}}</text><text>{{booking.purpose}}</text></view>
+      <text wx:if="{{item.next}}" class="hint">下一场：{{item.next.startTime}} — {{item.next.endTime}} · {{item.next.name}} · {{item.next.participants}}人</text>
+    </view>
+    <view wx:if="{{!spaces.length && !spaceError}}" class="filter">没有符合条件的房间</view>
+  </view>
+  <view wx:if="{{section === 'reservations'}}" class="card">
+    <text class="subtitle">负责楼栋的预约</text><text class="hint">查看预约不等于签到，请现场扫码办理。</text>
+    <view class="reservation-filters"><picker mode="date" value="{{reservationDate}}" bindchange="reservationDateChange"><view>{{reservationDate}} ▾</view></picker><picker range="{{reservationStatuses}}" value="{{reservationStatusIndex}}" bindchange="reservationStatusChange"><view>{{reservationStatuses[reservationStatusIndex]}} ▾</view></picker></view>
+    <input value="{{reservationSearch}}" data-field="reservationSearch" bindinput="input" bindconfirm="searchReservations" placeholder="搜索预约人、学号、功能房或编号" /><button size="mini" bindtap="searchReservations">搜索 / 刷新预约</button>
+    <view wx:if="{{reservationError}}" class="warning">{{reservationError}}</view>
+    <view wx:for="{{reservations}}" wx:key="id" class="reservation-item {{item.status}}"><view class="reservation-row"><text class="number">预约 #{{item.id}}</text><text class="status">{{item.label}}</text></view><text class="room">{{item.roomName}}</text><text class="time">{{item.startTime}} — {{item.endTime}}</text><view class="reservation-row"><text>{{item.name}}</text><text class="hint">{{item.studentId}}</text></view><text class="hint">{{item.purpose}} · {{item.participants}}人</text><text class="hint">{{item.buildingName}} · {{item.date}}</text></view>
+    <view wx:if="{{!reservations.length && !reservationError}}" class="filter">暂无符合条件的预约，可切换日期或筛选条件</view>
+    <view class="pagination"><button size="mini" bindtap="previousReservations" disabled="{{reservationPage <= 1}}">上一页</button><text>{{reservationPage}} 页 · {{reservationTotal}}条</text><button size="mini" bindtap="nextReservations" disabled="{{reservationPage * 6 >= reservationTotal}}">下一页</button></view>
+  </view>
+  <view wx:if="{{section === 'scan'}}" class="card" id="scan-panel">
+    <button id="scan-trigger" type="primary" bindtap="scan" disabled="{{busy || uncertain}}">扫描宿生动态预约码</button>
+    <text class="hint">请让宿生打开预约详情中的最新动态预约码。</text>
+    <view wx:if="{{error}}" class="warning">{{error}}</view>
+    <view wx:if="{{result}}">
+      <view class="message {{result.checkedIn ? 'success' : ''}}"><text class="subtitle">{{result.checkedIn ? '已签到 · 核对信息后开门' : result.message}}</text><text wx:if="{{result.checkedIn}}" class="hint">请按下方信息核对房间与使用时段，再现场开门。</text></view>
+      <view wx:if="{{result.reservation}}" class="details"><text class="hint">开门核对信息 · 预约 #{{result.reservation.id}}</text><text class="room">{{result.reservation.buildingName}} · {{result.reservation.roomName}}</text><text>{{result.reservation.location}}</text><text class="time">{{result.reservation.startTime}} — {{result.reservation.endTime}}</text><text>{{result.reservation.date}}</text><text>预约人：{{result.reservation.name}}</text><text>学号：{{result.reservation.studentId}}</text><text>使用人数：{{result.reservation.participants}} 人</text><text>用途：{{result.reservation.purpose}}</text><text wx:if="{{result.recordedAt}}">登记时间：{{result.recordedAt}}</text></view>
+      <view wx:if="{{result.outcome === 'ready' && !uncertain}}">
+        <checkbox-group bindchange="identity"><label><checkbox value="yes" checked="{{identity}}" />已核对现场身份与预约人一致</label></checkbox-group>
+        <input value="{{note}}" data-field="note" bindinput="input" maxlength="500" placeholder="现场备注或异常说明" />
+        <button id="confirm-signin" type="primary" bindtap="pass" disabled="{{!identity || busy || !result.eligible || result.verified}}">核验通过并签到</button>
+        <button bindtap="exception" disabled="{{busy}}">登记异常，不办理签到</button>
+      </view>
+    </view>
+    <button wx:if="{{uncertain}}" bindtap="retry" loading="{{busy}}">重试上次操作（不会重复签到）</button>
+  </view>
+  <view wx:if="{{section === 'records'}}" class="card"><text class="subtitle">核验记录与异常跟进</text>
+    <picker range="{{outcomes}}" value="{{outcomeIndex}}" bindchange="filter"><view class="filter">结果：{{outcomes[outcomeIndex]}} ▾</view></picker>
+    <input value="{{reservationId}}" data-field="reservationId" bindinput="input" type="number" placeholder="按预约编号查询" /><button size="mini" bindtap="search">查询 / 刷新</button>
+    <view wx:for="{{records}}" wx:key="id" class="record"><view>{{item.label}} · 预约 {{item.reservationId || '—'}}</view><text>{{item.createdAt}}</text><text>{{item.note || item.result.message}}</text><text wx:if="{{item.resolution}}">处理：{{item.resolution}}</text><button wx:if="{{canResolve && item.needsResolve}}" size="mini" data-id="{{item.id}}" bindtap="resolve">填写处理结果</button><text wx:elif="{{item.needsResolve}}">联系书院导生会会长团处理</text></view>
+    <view wx:if="{{!records.length}}" class="filter">暂无符合条件的记录</view>
+    <view class="pagination"><button size="mini" bindtap="previous" disabled="{{page <= 1}}">上一页</button><text>第 {{page}} 页 · {{total}} 条</text><button size="mini" bindtap="next" disabled="{{page * 20 >= total}}">下一页</button></view>
+  </view><button wx:if="{{section === 'home'}}" bindtap="logout">退出登录</button>
+</view>

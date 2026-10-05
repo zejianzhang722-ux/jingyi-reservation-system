@@ -21,7 +21,7 @@ Component({
       {
         pagePath: '/pages/notifications/notifications',
         text: '消息',
-        icon: 'message'
+        icon: 'bell'
       },
       {
         pagePath: '/pages/profile/profile',

@@ -2,6 +2,7 @@ const STORAGE_PREFIX = 'jingyi-admin-navigation:v2'
 const LEGACY_STORAGE_PREFIX = 'jingyi-admin-navigation'
 
 const WORKSPACE_LABELS = {
+  dorm_manager: '宿管核验工作区',
   admin: '导生工作区',
   counselor: '辅导员工作区',
   super_admin: '超级管理工作区'

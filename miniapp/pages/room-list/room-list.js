@@ -31,7 +31,8 @@ Page({
     typeName: '',
     rooms: [],
     loading: true,
-    isOffline: false
+    isOffline: false,
+    groupMode: false
   },
 
   onLoad: function (options) {
@@ -41,7 +42,8 @@ Page({
     this.setData({
       type: type,
       keyword: keyword,
-      typeName: title || util.getRoomTypeName(type)
+      typeName: title || util.getRoomTypeName(type),
+      groupMode: options.groupMode === '1'
     })
     wx.setNavigationBarTitle({
       title: keyword ? '搜索: ' + keyword : (title || '功能房列表')
@@ -125,6 +127,8 @@ Page({
   onRoomTap: function (e) {
     var roomId = e.currentTarget.dataset.id
     if (!roomId) return
-    wx.navigateTo({ url: '/pages/room-detail/room-detail?roomId=' + roomId })
+    var url = '/pages/room-detail/room-detail?roomId=' + roomId
+    if (this.data.groupMode) url += '&groupMode=1'
+    wx.navigateTo({ url: url })
   }
 })

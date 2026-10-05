@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container motion-page motion-detail">
   <view class="detail-card" wx:if="{{reservation && !loading}}">
     <view class="detail-status-bar">
       <text class="status-tag {{statusClass}}">{{statusText}}</text>

@@ -1,15 +1,18 @@
 .admin-nav {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 112rpx;
+  left: 24rpx;
+  right: 24rpx;
+  bottom: calc(20rpx + env(safe-area-inset-bottom));
+  height: 104rpx;
   padding-bottom: env(safe-area-inset-bottom);
-  background: rgba(255, 255, 255, 0.96);
-  border-top: 1rpx solid #e8edf5;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1rpx solid var(--glass-border);
+  border-radius: 36rpx;
   display: flex;
   z-index: 50;
-  box-shadow: 0 -8rpx 24rpx rgba(12, 32, 64, 0.08);
+  box-shadow: 0 10rpx 40rpx rgba(31, 64, 104, 0.18), inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
 }
 
 .admin-nav-item {
@@ -20,19 +23,30 @@
   justify-content: center;
   color: #667085;
   font-size: 24rpx;
+  border-radius: 28rpx;
+  transition: background-color 0.25s ease;
+}
+
+.admin-nav-item.active {
+  background: rgba(0, 102, 204, 0.10);
 }
 
 .admin-nav-icon {
   width: 44rpx;
   height: 44rpx;
   margin-bottom: 6rpx;
+  transition: transform 0.2s ease;
+}
+
+.admin-nav-item.active .admin-nav-icon {
+  animation: tabPop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .admin-nav-text {
   line-height: 1;
 }
 
-.admin-nav-item.active {
+.admin-nav-item.active .admin-nav-text {
   color: #0066cc;
   font-weight: 700;
 }

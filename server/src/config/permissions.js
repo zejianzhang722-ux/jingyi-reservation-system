@@ -44,7 +44,7 @@ const HANDOVER_STATUSES = Object.freeze({
 });
 
 /** 管理员角色（与 admins.role 一致）。 */
-const ADMIN_ROLES = Object.freeze(['admin', 'super_admin', 'counselor']);
+const ADMIN_ROLES = Object.freeze(['admin', 'super_admin', 'counselor', 'dorm_manager']);
 
 /**
  * 校验是否为合法能力值。

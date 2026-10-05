@@ -22,8 +22,11 @@ let nextId = 1000;
 function genId() { return ++nextId; }
 
 const tables = {};
-const persistedDir = path.join(__dirname, '..', '..', 'data');
+const persistedDir = process.env.MOCK_DATA_DIR
+  ? path.resolve(process.env.MOCK_DATA_DIR)
+  : path.join(__dirname, '..', '..', 'data');
 const feedbackFile = path.join(persistedDir, 'mock-feedbacks.json');
+const userAvatarsFile = path.join(persistedDir, 'mock-user-avatars.json');
 
 function loadFeedbacks() {
   try {
@@ -38,11 +41,29 @@ function loadFeedbacks() {
   }
 }
 
+function loadUserAvatars() {
+  try {
+    if (!fs.existsSync(userAvatarsFile)) return {};
+    const avatars = JSON.parse(fs.readFileSync(userAvatarsFile, 'utf8'));
+    return avatars && typeof avatars === 'object' && !Array.isArray(avatars) ? avatars : {};
+  } catch (err) {
+    return {};
+  }
+}
+
 function persistTable(tableName) {
-  if (tableName !== 'feedbacks') return;
+  if (tableName !== 'feedbacks' && tableName !== 'users') return;
   try {
     if (!fs.existsSync(persistedDir)) fs.mkdirSync(persistedDir, { recursive: true });
-    fs.writeFileSync(feedbackFile, JSON.stringify(tables.feedbacks || [], null, 2), 'utf8');
+    if (tableName === 'feedbacks') {
+      fs.writeFileSync(feedbackFile, JSON.stringify(tables.feedbacks || [], null, 2), 'utf8');
+      return;
+    }
+    const avatars = {};
+    (tables.users || []).forEach(function(user) {
+      if (user && user.id && user.avatar) avatars[String(user.id)] = user.avatar;
+    });
+    fs.writeFileSync(userAvatarsFile, JSON.stringify(avatars, null, 2), 'utf8');
   } catch (err) {}
 }
 
@@ -137,8 +158,17 @@ seatConfigs.forEach(function(cfg) {
 
 tables.users = [
   { id: 1, openid: 'test_openid_001', session_key: 'sk001', nickname: '张三', avatar: '', phone: '13900000001', student_id: '2024001001', student_no: '2024001001', real_name: '张三', name: '张三', gender: '男', college: '敬一书院', major: '软件工程', class_name: '2024级1班', grade: '2024', building_id: 1, room_number: 'B301', card_no: '200001', role: 'student', credit_score: 80, status: 'active', restricted_until: null, noshow_count: 1, wechat_openid: null, created_at: now, updated_at: now },
-  { id: 2, openid: 'test_openid_002', session_key: 'sk002', nickname: '李四', avatar: '', phone: '13900000002', student_id: '2024001002', student_no: '2024001002', real_name: '李四', name: '李四', gender: '女', college: '敬一书院', major: '计算机科学', class_name: '2024级2班', grade: '2024', building_id: 2, room_number: 'C205', card_no: '200002', role: 'student', credit_score: 95, status: 'active', restricted_until: null, noshow_count: 0, wechat_openid: null, created_at: now, updated_at: now }
+  { id: 2, openid: 'test_openid_002', session_key: 'sk002', nickname: '李四', avatar: '', phone: '13900000002', student_id: '2024001002', student_no: '2024001002', real_name: '李四', name: '李四', gender: '女', college: '敬一书院', major: '计算机科学', class_name: '2024级2班', grade: '2024', building_id: 2, room_number: 'C205', card_no: '200002', role: 'student', credit_score: 95, status: 'active', restricted_until: null, noshow_count: 0, wechat_openid: null, created_at: now, updated_at: now },
+  { id: 3, openid: 'test_openid_003', session_key: 'sk003', nickname: '王晨', avatar: '', phone: '13900000003', student_id: '2023001003', student_no: '2023001003', real_name: '王晨', name: '王晨', gender: '男', college: '敬一书院', major: '建筑学', class_name: '2023级1班', grade: '2023', building_id: 3, room_number: 'D412', card_no: '200003', role: 'student', credit_score: 45, status: 'restricted', restricted_until: dayjs().add(5, 'day').format('YYYY-MM-DD HH:mm:ss'), noshow_count: 3, wechat_openid: null, created_at: now, updated_at: now },
+  { id: 4, openid: 'test_openid_004', session_key: 'sk004', nickname: '赵宁', avatar: '', phone: '13900000004', student_id: '2024001004', student_no: '2024001004', real_name: '赵宁', name: '赵宁', gender: '女', college: '敬一书院', major: '材料科学', class_name: '2024级3班', grade: '2024', building_id: 1, room_number: 'B416', card_no: '200004', role: 'student', credit_score: 100, status: 'active', restricted_until: null, noshow_count: 0, wechat_openid: null, created_at: now, updated_at: now },
+  { id: 5, openid: 'test_openid_005', session_key: 'sk005', nickname: '陈嘉', avatar: '', phone: '13900000005', student_id: '2023001005', student_no: '2023001005', real_name: '陈嘉', name: '陈嘉', gender: '女', college: '敬一书院', major: '法学', class_name: '2023级2班', grade: '2023', building_id: 2, room_number: 'C308', card_no: '200005', role: 'student', credit_score: 110, status: 'active', restricted_until: null, noshow_count: 0, wechat_openid: null, created_at: now, updated_at: now }
 ];
+const persistedUserAvatars = loadUserAvatars();
+tables.users.forEach(function(user) {
+  if (Object.prototype.hasOwnProperty.call(persistedUserAvatars, String(user.id))) {
+    user.avatar = persistedUserAvatars[String(user.id)];
+  }
+});
 
 // 种子账号口令改为 env 注入，保留原值作为非生产默认，仅非生产 mock 使用。
 const adminPassword = process.env.MOCK_ADMIN_PASSWORD || 'admin123';
@@ -149,7 +179,9 @@ tables.admins = [
   { id: 1, username: 'admin', password: bcrypt.hashSync(adminPassword, 10), real_name: '系统管理员', role: 'admin', building_id: null, scope_type: 'global', phone: '13800000001', status: 'active', last_login_at: null, created_at: now, updated_at: now },
   { id: 2, username: 'superadmin', password: bcrypt.hashSync(superAdminPassword, 10), real_name: '超级管理员', role: 'super_admin', building_id: null, scope_type: 'global', phone: '13800000002', status: 'active', last_login_at: null, created_at: now, updated_at: now },
   { id: 3, username: 'counselor', password: bcrypt.hashSync(counselorPassword, 10), real_name: '辅导员', role: 'counselor', building_id: null, scope_type: 'global', phone: '13800000003', status: 'active', last_login_at: null, created_at: now, updated_at: now },
-  { id: 4, username: 'building_admin', password: bcrypt.hashSync(adminPassword, 10), real_name: 'B座导生管理员', role: 'admin', building_id: 1, scope_type: 'building', phone: '13800000004', status: 'active', last_login_at: null, created_at: now, updated_at: now }
+  { id: 4, username: 'building_admin', password: bcrypt.hashSync(adminPassword, 10), real_name: 'B座导生管理员', role: 'admin', building_id: 1, scope_type: 'building', phone: '13800000004', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 5, username: 'dorm_b', password: bcrypt.hashSync(adminPassword, 10), real_name: 'B座宿管', role: 'dorm_manager', building_id: 1, scope_type: 'building', status: 'active', created_at: now, updated_at: now },
+  { id: 6, username: 'dorm_c', password: bcrypt.hashSync(adminPassword, 10), real_name: 'C座宿管', role: 'dorm_manager', building_id: 2, scope_type: 'building', status: 'active', created_at: now, updated_at: now }
 ];
 
 tables.reservations = [
@@ -165,10 +197,16 @@ tables.reservations = [
   { id: 10, user_id: 1, room_id: 6, seat_id: null, date: tomorrow, start_time: '14:00', end_time: '16:00', purpose: '小组讨论', participants: 6, status: 'pending', reservation_code: 'JYTEST010', reject_reason: '', audited_by: null, audited_at: null, cancelled_at: null, version: 1, created_at: now, updated_at: now },
   { id: 11, user_id: 1, room_id: 11, seat_id: null, date: today, start_time: '19:00', end_time: '21:00', purpose: '观影活动', participants: 15, status: 'completed', reservation_code: 'JYTEST011', reject_reason: '', audited_by: null, audited_at: null, cancelled_at: null, version: 1, created_at: now, updated_at: now },
   { id: 12, user_id: 1, room_id: 3, seat_id: 5, date: tomorrow, start_time: '09:00', end_time: '12:00', purpose: '自习', participants: 1, status: 'approved', reservation_code: 'JYTEST012', reject_reason: '', audited_by: null, audited_at: null, cancelled_at: null, version: 1, created_at: now, updated_at: now },
-  { id: 13, user_id: 1, room_id: 17, seat_id: null, date: dayAfter, start_time: '10:00', end_time: '11:00', purpose: '学业辅导', participants: 3, status: 'approved', reservation_code: 'JYTEST013', reject_reason: '', audited_by: null, audited_at: null, cancelled_at: null, version: 1, created_at: now, updated_at: now }
+  { id: 13, user_id: 1, room_id: 17, seat_id: null, date: dayAfter, start_time: '10:00', end_time: '11:00', purpose: '学业辅导', participants: 3, status: 'approved', reservation_code: 'JYTEST013', reject_reason: '', audited_by: null, audited_at: null, cancelled_at: null, version: 1, created_at: now, updated_at: now },
+  { id: 14, user_id: 1, room_id: 21, seat_id: null, date: tomorrow, start_time: '14:00', end_time: '16:00', purpose: '3D打印入门体验', participants: 2, status: 'pending', reservation_code: 'JYTEST014', reject_reason: '', audited_by: null, audited_at: null, cancelled_at: null, version: 1, created_at: now, updated_at: now },
+  { id: 15, user_id: 2, room_id: 7, seat_id: null, date: dayAfter, start_time: '10:00', end_time: '12:00', purpose: '课程项目讨论', participants: 2, status: 'approved', reservation_code: 'JYTEST015', reject_reason: '', audited_by: 1, audited_at: now, cancelled_at: null, version: 1, created_at: now, updated_at: now },
+  { id: 16, user_id: 1, room_id: 11, seat_id: null, date: dayAfter, start_time: '15:00', end_time: '17:00', purpose: '主题电影交流', participants: 1, status: 'counselor_pending', reservation_code: 'JYTEST016', reject_reason: '', audited_by: null, audited_at: null, cancelled_at: null, version: 1, created_at: now, updated_at: now }
 ];
 
-tables.checkins = [];
+tables.checkins = [
+  { id: 1, reservation_id: 8, user_id: 2, room_id: 5, checkin_time: today + ' 19:03:00', checkout_time: null, checkin_type: 'qrcode', created_at: today + ' 19:03:00' },
+  { id: 2, reservation_id: 11, user_id: 1, room_id: 11, checkin_time: today + ' 19:02:00', checkout_time: today + ' 21:01:00', checkin_type: 'admin_manual', created_at: today + ' 19:02:00' }
+];
 tables.credits_log = [
   { id: 1, user_id: 1, score_change: -20, score_after: 80, type: 'noshow', description: '爽约 - B228自习室，预约开始后15分钟内未签到', related_id: 9, created_at: yesterday },
   { id: 2, user_id: 1, score_change: -5, score_after: 75, type: 'warning', description: '临近开始时间取消预约', related_id: 9, created_at: oneMinuteAgo },
@@ -176,8 +214,16 @@ tables.credits_log = [
   { id: 4, user_id: 2, score_change: 5, score_after: 95, type: 'good_behavior', description: '正常使用功能房 - B228自习室', related_id: 2, created_at: now },
   { id: 5, user_id: 2, score_change: 5, score_after: 95, type: 'good_behavior', description: '正常使用功能房 - B102共享空间', related_id: 3, created_at: now }
 ];
-tables.violations = [];
-tables.posters = [];
+tables.violations = [
+  { id: 1, user_id: 1, type: 'noshow', description: '预约B228自习室后未在规定时间签到', score: -20, related_id: 9, created_by: 1, created_at: yesterday + ' 10:20:00' },
+  { id: 2, user_id: 2, type: 'warning', description: '共享空间使用结束后未及时整理桌面（演示记录）', score: -5, related_id: 3, created_by: 4, created_at: yesterday + ' 16:30:00' },
+  { id: 3, user_id: 3, type: 'noshow', description: '累计爽约达到限制阈值（演示记录）', score: -20, related_id: null, created_by: 1, created_at: yesterday + ' 17:00:00' }
+];
+tables.posters = [
+  { id: 1, user_id: 1, title: '书院读书分享会', organization: '敬一书院读书会', start_date: today, end_date: dayAfter, contact_name: '张三', contact_phone: '13900000001', description: '邀请宿生分享最近读过的书。', image_url: '', position: 'B座一楼大厅公告栏', position_index: 1, status: 'pending', reject_reason: '', approved_by: null, approved_at: null, cleaned_at: null, created_at: now, updated_at: now },
+  { id: 2, user_id: 2, title: '迎新志愿服务招募', organization: '敬一书院志愿队', start_date: today, end_date: dayAfter, contact_name: '李四', contact_phone: '13900000002', description: '欢迎报名参与迎新志愿服务。', image_url: '', position: 'C座一楼入口展板', position_index: 1, status: 'approved', reject_reason: '', approved_by: 3, approved_at: now, cleaned_at: null, created_at: yesterday + ' 14:00:00', updated_at: now },
+  { id: 3, user_id: 1, title: '旧版讲座通知', organization: '敬一书院学习组', start_date: yesterday, end_date: today, contact_name: '张三', contact_phone: '13900000001', description: '信息不全，待修改后重新提交。', image_url: '', position: 'B座二楼电梯口展板', position_index: 1, status: 'rejected', reject_reason: '请补充活动地点与主办信息', approved_by: 3, approved_at: now, cleaned_at: null, created_at: yesterday + ' 09:00:00', updated_at: now }
+];
 // 张贴位置（poster_positions）：与 server/sql/migrations/20260920_poster_positions.sql 表名、
 // 字段严格一致。必须预置数据——mock 模式下 SELECT 对未注册的表只会返回空数组，
 // 页面会一片空白、无法验证。
@@ -210,10 +256,26 @@ tables.notifications = [
   { id: 4, user_id: 1, type: 'credit', title: '信用分变动', content: '您因爽约被扣除20信用分，当前信用分：80', is_read: 1, created_at: now },
   { id: 5, user_id: 1, type: 'reminder', title: '预约提醒', content: '您预约的C133学业辅导中心即将开始，请准时到达', is_read: 0, created_at: now }
 ];
-tables.reservation_waitlist = [];
-tables.reservation_groups = [];
-tables.reservation_group_members = [];
-tables.operation_logs = [];
+tables.reservation_waitlist = [
+  { id: 1, user_id: 2, room_id: 1, seat_id: 1, date: today, start_time: '09:00', end_time: '12:00', status: 'waiting', created_at: now, updated_at: now },
+  { id: 2, user_id: 1, room_id: 1, seat_id: 2, date: today, start_time: '14:00', end_time: '17:00', status: 'converted', created_at: yesterday + ' 11:00:00', updated_at: now }
+];
+tables.reservation_groups = [
+  { id: 1, name: '创新工作坊体验队', room_id: 21, date: tomorrow, start_time: '14:00', end_time: '16:00', purpose: '3D打印入门体验', max_members: 5, reservation_id: 14, status: 'pending', reject_reason: '', audited_by: null, audited_at: null, created_by: 1, created_at: now, updated_at: now },
+  { id: 2, name: '共享空间研讨组', room_id: 7, date: dayAfter, start_time: '10:00', end_time: '12:00', purpose: '课程项目讨论', max_members: 6, reservation_id: 15, status: 'approved', reject_reason: '', audited_by: 1, audited_at: now, created_by: 2, created_at: yesterday + ' 09:00:00', updated_at: now },
+  { id: 3, name: '影音室观影小组', room_id: 11, date: dayAfter, start_time: '15:00', end_time: '17:00', purpose: '主题电影交流', max_members: 8, reservation_id: 16, status: 'counselor_pending', reject_reason: '', audited_by: null, audited_at: null, created_by: 1, created_at: now, updated_at: now }
+];
+tables.reservation_group_members = [
+  { id: 1, group_id: 1, user_id: 1, seat_id: null, status: 'confirmed', created_at: now },
+  { id: 2, group_id: 1, user_id: 2, seat_id: null, status: 'pending', created_at: now },
+  { id: 3, group_id: 2, user_id: 2, seat_id: null, status: 'confirmed', created_at: now },
+  { id: 4, group_id: 2, user_id: 1, seat_id: null, status: 'confirmed', created_at: now },
+  { id: 5, group_id: 3, user_id: 1, seat_id: null, status: 'confirmed', created_at: now }
+];
+tables.operation_logs = [
+  { id: 1, operator_id: 1, action: 'reservation.approve', target_table: 'reservations', target_id: 3, description: '通过共享空间预约（演示记录）', method: 'POST', path: '/api/v1/admin/reservations/3/approve', status_code: 200, outcome: 'success', created_at: yesterday + ' 14:20:00' },
+  { id: 2, operator_id: 3, action: 'poster.approve', target_table: 'posters', target_id: 2, description: '通过迎新志愿服务海报（演示记录）', method: 'POST', path: '/api/v1/admin/posters/2/approve', status_code: 200, outcome: 'success', created_at: now }
+];
 tables.announcements = [
   { id: 1, title: '欢迎使用敬一书院功能房预约系统', content: '欢迎使用敬一书院功能房预约系统，请遵守使用规则，文明预约。', type: 'notice', is_top: 1, status: 'published', created_by: 1, created_at: now, updated_at: now },
   { id: 2, title: '自习室使用须知', content: '1. 请按时签到签退\n2. 请勿占座\n3. 保持安静\n4. 爱护公共设施', type: 'notice', is_top: 0, status: 'published', created_by: 1, created_at: now, updated_at: now }
@@ -366,6 +428,16 @@ function evaluateInCondition(row, field, values, negated) {
 function parseWhereClause(whereStr, rows, aliasMap) {
   if (!whereStr || whereStr.trim() === '') return rows;
 
+  // 在各分支筛选前处理简单的 OR，否则前置的 IN 筛选会错误地排除另一分支。
+  if (/\s+OR\s+/i.test(whereStr) && !/\s+AND\s+/i.test(whereStr) && !whereStr.trim().startsWith('(')) {
+    const alternatives = whereStr.split(/\s+OR\s+/i);
+    return rows.filter(function(row) {
+      return alternatives.some(function(alternative) {
+        return parseWhereClause(alternative, [row], aliasMap).length > 0;
+      });
+    });
+  }
+
   let filtered = rows;
 
   const inMatch = whereStr.match(/([\w.]+)\s+(NOT\s+)?IN\s*\(([^)]+)\)/i);
@@ -393,6 +465,16 @@ function parseWhereClause(whereStr, rows, aliasMap) {
   for (const cond of conditions) {
     const trimmed = cond.trim();
     if (/^1\s*=\s*1$/.test(trimmed)) continue;
+
+    if (trimmed.startsWith('(') && trimmed.endsWith(')') && /\s+OR\s+/i.test(trimmed)) {
+      const alternatives = trimmed.slice(1, -1).split(/\s+OR\s+/i);
+      filtered = filtered.filter(function(row) {
+        return alternatives.some(function(alternative) {
+          return parseWhereClause(alternative, [row], aliasMap).length > 0;
+        });
+      });
+      continue;
+    }
 
     const likeMatch = trimmed.match(/([\w.]+)\s+(NOT\s+)?LIKE\s+(['"][^'"]*['"])/i);
     if (likeMatch) {
@@ -432,23 +514,27 @@ function performJoin(mainRows, mainTable, joinClause, aliasMap) {
 
   const joinData = tables[resolveAlias(joinAlias, joinTableName)] || [];
 
-  const leftParts = leftField.split('.');
-  const rightParts = rightField.split('.');
-  const leftKey = leftParts.length === 2 ? leftParts[1] : leftField;
-  const rightKey = rightParts.length === 2 ? rightParts[1] : rightField;
+  const joinField = leftField.startsWith(joinAlias + '.') ? leftField : rightField;
+  const sourceField = joinField === leftField ? rightField : leftField;
+  const joinKey = joinField.split('.').pop();
 
   const result = [];
   for (const mainRow of mainRows) {
-    const mainVal = mainRow[leftKey];
+    const mainVal = getFieldValue(mainRow, sourceField);
     const matched = joinData.filter(function(jr) {
-      return String(jr[rightKey]) === String(mainVal);
+      return mainVal !== undefined && String(jr[joinKey]) === String(mainVal);
     });
     if (matched.length > 0) {
       for (const jr of matched) {
         const merged = {};
         for (const k in mainRow) {
-          merged[(aliasMap[mainTable] || mainTable) + '.' + k] = mainRow[k];
-          merged[k] = mainRow[k];
+          if (k.includes('.')) merged[k] = mainRow[k];
+          else {
+            if (merged[(aliasMap[mainTable] || mainTable) + '.' + k] === undefined) {
+              merged[(aliasMap[mainTable] || mainTable) + '.' + k] = mainRow[k];
+            }
+            merged[k] = mainRow[k];
+          }
         }
         for (const k in jr) {
           merged[(joinAlias) + '.' + k] = jr[k];

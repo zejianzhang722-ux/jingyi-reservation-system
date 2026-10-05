@@ -34,7 +34,8 @@ Page({
     rulesScrolledToBottom: false,
     rulesCountdown: 5,
     rulesAgreed: false,
-    rulesTimer: null
+    rulesTimer: null,
+    reservationMode: 'personal'
   },
 
   onLoad: function (options) {
@@ -46,6 +47,7 @@ Page({
       return
     }
     this.setData({ roomId: roomId })
+    this.setData({ reservationMode: options.reservationMode === 'group' ? 'group' : 'personal' })
     var roomType = options.roomType ? decodeURIComponent(options.roomType) : ''
     var rulesContent = localData.getRulesByRoomType(roomType)
     this.setData({
@@ -347,6 +349,7 @@ Page({
     if (this.data.isStudyRoom && this.data.selectedSeat) {
       url += '&seatId=' + this.data.selectedSeat + '&seatName=' + encodeURIComponent(seatName)
     }
+    if (this.data.reservationMode === 'group') url += '&reservationMode=group'
     wx.navigateTo({ url: url })
   },
 

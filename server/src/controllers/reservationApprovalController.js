@@ -53,15 +53,16 @@ const recordAuditSafely = async function(event) {
   }
 };
 
-const allowedStatusesForRole = function(role) {
+const allowedStatusesForRole = function(role, capabilities) {
   if (role === 'super_admin') return ['pending', 'counselor_pending'];
   if (role === 'counselor') return ['pending', 'counselor_pending'];
+  if (role === 'admin' && (capabilities || []).includes('audit')) return ['pending', 'counselor_pending'];
   if (role === 'admin') return ['pending'];
   return [];
 };
 
 const ensureApprovalScope = function(req, res, reservation) {
-  const allowedStatuses = allowedStatusesForRole(req.user && req.user.role);
+  const allowedStatuses = allowedStatusesForRole(req.user && req.user.role, req.adminScope && req.adminScope.capabilities);
   const approvableStatuses = ['pending', 'counselor_pending'];
   if (allowedStatuses.length === 0) {
     response.error(res, '权限不足', 403);

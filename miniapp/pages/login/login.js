@@ -172,7 +172,7 @@ Page({
       var roleName = roleNameMap[role] || '管理员'
       wx.showToast({ title: roleName + '登录成功', icon: 'success' })
       setTimeout(function () {
-        wx.reLaunch({ url: '/pages/admin-home/admin-home' })
+        wx.reLaunch({ url: auth.getAdminHome() })
       }, 800)
     }).catch(function (err) {
       that.setData({ submitting: false })

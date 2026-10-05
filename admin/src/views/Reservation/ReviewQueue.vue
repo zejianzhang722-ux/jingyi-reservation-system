@@ -49,7 +49,7 @@
           <el-button type="primary" @click="resetFilters">重置筛选</el-button>
         </template>
 
-        <el-table :data="filteredRows" @selection-change="handleSelectionChange" stripe>
+        <el-table class="review-motion-table" :data="filteredRows" @selection-change="handleSelectionChange" stripe>
           <el-table-column type="selection" width="50" />
           <el-table-column prop="userName" label="预约人" width="110" />
           <el-table-column prop="studentId" label="学号" width="130" />

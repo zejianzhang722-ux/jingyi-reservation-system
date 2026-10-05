@@ -1,6 +1,7 @@
 var request = require('../../utils/request')
 var util = require('../../utils/util')
 var auth = require('../../utils/auth')
+var pageMotion = require('../../utils/page-motion')
 
 function normalizeReservations(list) {
   var userInfo = auth.getUserInfo() || {}
@@ -38,6 +39,7 @@ Page({
   },
 
   onShow: function () {
+    pageMotion.replayPageMotion(this)
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().switchTabList()
       this.getTabBar().setData({ selected: 1 })

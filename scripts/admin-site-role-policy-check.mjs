@@ -38,29 +38,44 @@ const navigationNamesFor = role => navigationFor(role).flatMap(section => sectio
 for (const role of roles) {
   const navigation = navigationFor(role)
   const expectedSections = role === 'admin'
-    ? ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表']
+    ? ['工作台', '预约审核', '现场运营', '宿生与信用', '数据报表']
     : role === 'counselor'
-      ? ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表', '内容与沟通']
-      : ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表', '内容与沟通', '系统运维']
+      ? ['工作台', '预约审核', '现场运营', '宿生与信用', '数据报表', '公告与反馈']
+      : ['工作台', '预约审核', '现场运营', '空间与规则', '宿生与信用', '数据报表', '公告与反馈', '系统运维']
   assert.deepEqual(navigation.map(section => section.title), expectedSections)
   assert.ok(navigation.every(section => section.children.length), `${role} should not receive empty navigation sections`)
+  assert.deepEqual(
+    [...navigationNamesFor(role)].sort(),
+    adminChildren.filter(route => hasRouteRole(route, role)).map(route => route.name).sort(),
+    `${role} should see every permitted route exactly once`
+  )
   for (const name of navigationNamesFor(role)) {
     assert.ok(hasRouteRole(routeByName.get(name), role), `${role} navigation should only contain allowed route ${name}`)
   }
 }
 
 const counselorNavigationNames = navigationNamesFor('counselor')
-assert.deepEqual(counselorNavigationNames.slice(0, 5), ['Dashboard', 'CounselorPending', 'ReservationPending', 'CheckinManage', 'ReservationAll'])
+assert.deepEqual(counselorNavigationNames.slice(0, 5), ['Dashboard', 'CounselorPending', 'ReservationPending', 'ReservationGroups', 'CheckinManage'])
 assert.ok(
   counselorNavigationNames.indexOf('CounselorPending') < counselorNavigationNames.indexOf('ReservationPending'),
   'counselor review should precede general reservation review in actual navigation'
 )
 
 const adminNavigationNames = navigationNamesFor('admin')
-assert.deepEqual(adminNavigationNames.slice(0, 5), ['Dashboard', 'ReservationPending', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs'])
+assert.deepEqual(adminNavigationNames.slice(0, 5), ['Dashboard', 'ReservationPending', 'ReservationGroups', 'CheckinManage', 'ReservationAll'])
+
+assert.equal(hasRouteRole(routeByName.get('CounselorPending'), 'admin', ['audit']), true)
+assert.equal(hasRouteRole(routeByName.get('RulesConfig'), 'admin', ['rule_config']), true)
+assert.equal(hasRouteRole(routeByName.get('StatsExport'), 'admin', ['data_export']), true)
+assert.equal(hasRouteRole(routeByName.get('PosterPosition'), 'admin', ['rule_config']), false)
+const delegatedAdminNavigation = buildNavigation('admin', ['audit', 'rule_config', 'data_export'])
+  .flatMap(section => section.children.map(item => item.name))
+for (const delegatedRoute of ['CounselorPending', 'RulesConfig', 'StatsExport']) {
+  assert.ok(delegatedAdminNavigation.includes(delegatedRoute), `delegated admin should receive ${delegatedRoute}`)
+}
 
 const superNavigationNames = navigationNamesFor('super_admin')
-assert.deepEqual(superNavigationNames.slice(0, 4), ['Dashboard', 'ReservationPending', 'CounselorPending', 'ReservationAll'])
+assert.deepEqual(superNavigationNames.slice(0, 4), ['Dashboard', 'ReservationPending', 'CounselorPending', 'ReservationGroups'])
 assert.ok(superNavigationNames.includes('SystemLogs'))
 assert.ok(superNavigationNames.includes('SystemBackup'))
 
