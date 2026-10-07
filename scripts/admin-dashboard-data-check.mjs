@@ -22,7 +22,8 @@ assert.deepEqual(formatReservationTrend(reservationRows), {
   dates: ['2026-07-01', '2026-07-02'],
   total: [3, 2],
   used: [2, 1],
-  cancelled: [1, 0]
+  cancelled: [1, 0],
+  noshow: [0, 1]
 });
 
 const usageRows = [
@@ -46,8 +47,8 @@ assert.deepEqual(formatPeakHours([
 assert.deepEqual(formatNoshowRate({
   totalNoshow: 3,
   roomNoshowStats: [
-    { name: 'B228自习室', noshow_count: 2 },
-    { name: 'C128影音室', noshow_count: 1 }
+    { name: 'B228自习室', noshow_count: 2, reservation_count: 3 },
+    { name: 'C128影音室', noshow_count: 1, reservation_count: 3 }
   ]
 }), {
   labels: ['B228自习室', 'C128影音室'],

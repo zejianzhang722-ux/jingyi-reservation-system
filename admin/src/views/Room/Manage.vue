@@ -65,16 +65,16 @@
           <el-table-column prop="building_name" label="楼栋" width="110" />
           <el-table-column prop="floor" label="楼层" width="80" />
           <el-table-column prop="capacity" label="容量" width="90" />
-          <el-table-column prop="status" label="状态" width="100">
+          <el-table-column prop="status" label="状态" width="150">
             <template #default="{ row }">
               <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
-          <el-table-column label="操作" width="230" fixed="right">
+          <el-table-column label="操作" width="300" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" size="small" link @click="handleEdit(row)">编辑</el-button>
-              <el-button type="success" size="small" link @click="handleSeats(row)">座位</el-button>
+              <el-button type="primary" size="small" link @click="handleStatus(row)">调整状态</el-button><el-button type="success" size="small" link @click="handleSeats(row)">座位</el-button>
               <el-button type="danger" size="small" link @click="handleDelete(row)">关闭</el-button>
             </template>
           </el-table-column>
@@ -94,6 +94,17 @@
       </AsyncState>
     </el-card>
 
+    <el-dialog v-model="statusVisible" title="调整空间状态" width="620px">
+      <el-alert title="定时安排结束后恢复长期状态。已有预约保留，请按需处理。" type="info" :closable="false" />
+      <el-form label-width="110px" style="margin-top:20px">
+        <el-form-item label="调整方式"><el-radio-group v-model="statusForm.mode"><el-radio value="base">长期（全部时间段）</el-radio><el-radio value="timed">定时调整</el-radio></el-radio-group></el-form-item>
+        <el-form-item label="状态"><el-select v-model="statusForm.status"><el-option v-for="(item,key) in statusMap" :key="key" :label="item.label" :value="key" /></el-select></el-form-item>
+        <el-form-item v-if="statusForm.mode === 'timed'" label="起止时间"><el-date-picker v-model="statusForm.range" type="datetimerange" value-format="YYYY-MM-DD HH:mm" format="YYYY-MM-DD HH:mm" start-placeholder="开始日期、时间" end-placeholder="结束日期、时间" /></el-form-item>
+      </el-form>
+      <p>长期状态：{{ statusMap[statusRoom.baseStatus]?.label }}</p><p v-if="!statusRows.length">暂无定时安排</p>
+      <div v-for="(row,index) in statusRows" :key="row.startAt" style="margin:12px 0"><el-tag>{{ statusMap[row.status]?.label }}</el-tag><p>{{ row.startAt }} 至 {{ row.endAt }}</p><el-button :disabled="statusSaving" @click="cancelStatus(index)">取消安排</el-button></div>
+      <template #footer><el-button :disabled="statusSaving" @click="statusVisible=false">关闭</el-button><el-button type="primary" :loading="statusSaving" @click="saveStatus">保存</el-button></template>
+    </el-dialog>
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑功能房' : '新增功能房'" width="620px" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="名称" prop="name">
@@ -121,11 +132,13 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="开放时段" prop="openStartTime"><el-time-picker v-model="form.openStartTime" format="HH:mm" value-format="HH:mm" placeholder="开放时间" :clearable="false" /><span class="time-range-divider">至</span><el-time-picker v-model="form.openEndTime" format="HH:mm" value-format="HH:mm" placeholder="关闭时间" :clearable="false" /></el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="form.status" style="width: 100%">
             <el-option label="开放" value="open" />
             <el-option label="关闭" value="closed" />
             <el-option label="维护中" value="maintenance" />
+            <el-option label="联系辅导员预约" value="counselor_only" />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
@@ -193,6 +206,31 @@ import ListToolbar from '@/components/admin/ListToolbar.vue'
 import { createLatestRequestCoordinator } from '@/utils/latestRequest'
 import { exportXlsx, fetchAllPages } from '@/utils/exportXlsx'
 
+const statusVisible = ref(false), statusSaving = ref(false), statusRows = ref([]), statusRoom = ref({})
+const statusForm = reactive({ mode: 'base', status: 'open', range: [] })
+async function handleStatus(row) {
+  const { getDetail } = await import('@/api/room')
+  statusRoom.value = (await getDetail(row.id)).data
+  statusRows.value = statusRoom.value.statusSchedules || []
+  Object.assign(statusForm, { mode: 'base', status: statusRoom.value.baseStatus || 'open', range: [] })
+  statusVisible.value = true
+}
+async function saveStatus() {
+  if (statusSaving.value) return
+  if (statusForm.mode === 'timed' && (!statusForm.range?.length || statusForm.range[0] >= statusForm.range[1])) return ElMessage.warning('请选择有效起止时间')
+  const body = statusForm.mode === 'base' ? { status: statusForm.status } : { statusSchedules: statusRows.value.concat({ status: statusForm.status, startAt: statusForm.range[0], endAt: statusForm.range[1] }) }
+  await persistStatus(body)
+}
+async function cancelStatus(index) {
+  if (statusSaving.value) return
+  await ElMessageBox.confirm('取消后，这个时段按长期状态执行。', '取消定时安排')
+  await persistStatus({ statusSchedules: statusRows.value.filter((_, i) => i !== index) })
+}
+async function persistStatus(body) {
+  statusSaving.value = true
+  try { await update(statusRoom.value.id, body); ElMessage.success('已保存'); statusVisible.value = false; await loadData() }
+  finally { statusSaving.value = false }
+}
 const loading = ref(false)
 const loadError = ref('')
 const submitLoading = ref(false)
@@ -220,17 +258,20 @@ const roomTypeOptions = [
   { label: '国防教育工作室', value: 'national_defense_studio' },
   { label: '导师交流室', value: 'mentor_room' },
   { label: '心理咨询室', value: 'psychology_room' },
-  { label: '团员模范岗', value: 'tutor' }
+  { label: '团员模范岗', value: 'tutor' },
+  { label: '资料室', value: 'data_room' },
+  { label: '其他空间', value: 'other' }
 ]
 
 const typeLabels = roomTypeOptions.reduce((map, item) => ({ ...map, [item.value]: item.label }), {})
-const statusMap = { open: { label: '开放', type: 'success' }, closed: { label: '关闭', type: 'info' }, maintenance: { label: '维护中', type: 'danger' } }
+const statusMap = { open: { label: '开放', type: 'success' }, closed: { label: '关闭', type: 'info' }, maintenance: { label: '维护中', type: 'danger' }, counselor_only: { label: '联系辅导员预约', type: 'warning' } }
 
 // 列表工具条的状态下拉（后端 GET /admin/rooms 原生支持 status 筛选）
 const statusOptions = [
   { label: '开放', value: 'open' },
   { label: '关闭', value: 'closed' },
-  { label: '维护中', value: 'maintenance' }
+  { label: '维护中', value: 'maintenance' },
+  { label: '联系辅导员预约', value: 'counselor_only' }
 ]
 
 // 导出列：与表格展示字段一一对应，枚举用页面既有 label map 映射
@@ -246,7 +287,7 @@ const exportColumns = [
 
 const filters = reactive({ keyword: '', type: '', buildingId: '', status: '' })
 const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
-const form = reactive({ id: null, name: '', type: '', buildingId: '', floor: 1, capacity: 10, status: 'open', description: '', facilities: [] })
+const form = reactive({ id: null, name: '', type: '', buildingId: '', floor: 1, capacity: 10, openStartTime: '08:00', openEndTime: '22:00', status: 'open', description: '', facilities: [] })
 const rules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
@@ -336,12 +377,12 @@ function mapFacilities(row) {
 
 function handleEdit(row) {
   isEdit.value = true
-  Object.assign(form, { id: row.id, name: row.name, type: row.type, buildingId: row.building_id, floor: row.floor, capacity: row.capacity, status: row.status, description: row.description || '', facilities: mapFacilities(row) })
+  Object.assign(form, { id: row.id, name: row.name, type: row.type, buildingId: row.building_id, floor: row.floor, capacity: row.capacity, openStartTime: String(row.open_start_time || '08:00').slice(0,5), openEndTime: String(row.open_end_time || '22:00').slice(0,5), status: row.baseStatus || row.status, description: row.description || '', facilities: mapFacilities(row) })
   dialogVisible.value = true
 }
 
 function resetForm() {
-  Object.assign(form, { id: null, name: '', type: '', buildingId: '', floor: 1, capacity: 10, status: 'open', description: '', facilities: [] })
+  Object.assign(form, { id: null, name: '', type: '', buildingId: '', floor: 1, capacity: 10, openStartTime: '08:00', openEndTime: '22:00', status: 'open', description: '', facilities: [] })
 }
 
 async function handleSubmit() {

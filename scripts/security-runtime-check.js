@@ -8,7 +8,7 @@ function wait(ms) {
 }
 
 function startServer() {
-  const child = spawn(process.execPath, ['src/app.js'], {
+  const child = spawn(process.execPath, ['--require', './tests/security-fixture.js', 'src/app.js'], {
     cwd: __dirname + '/../server',
     env: Object.assign({}, process.env, {
       PORT: String(PORT),
@@ -339,8 +339,8 @@ async function main() {
       body: JSON.stringify({
         roomId: 11,
         date: futureDate(2),
-        startTime: '08:00',
-        endTime: '09:00',
+        startTime: '18:00',
+        endTime: '19:00',
         purpose: 'security test',
         participants: 3
       })

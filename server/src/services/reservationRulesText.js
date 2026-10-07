@@ -1,0 +1,6 @@
+const config = require('../config');
+// Keep server deployments independent of the mobile client directory.
+function getRules() {
+  return '敬一书院功能房使用管理制度\n\n一、预约次数与时间\n按预约所选日期，每人同一种功能房最多预约3次，不同种类分别计算。已取消和被拒绝释放次数；待审核、已通过、使用中、已完成、已爽约仍计入。加入组团也计入，发起人不重复计数。所有功能房及参加的组团不得时间重叠，相邻时段允许。可提前' + config.reservation.advanceDays + '天预约，时长和开放时间以房间显示为准。\n\n二、预约方式\n共享空间至少2人组团，单个时段一个团队。创新工作坊、备赛间可个人或组团，按实际人数累计容量。舞蹈室团队独占，无团队时个人可直接进入，有团队时个人不可进入。多功能厅仅一个团队组团预约。D128党团活动室仅联系辅导员预约，不能系统预约。自习室按座位预约。\n\n三、取消与签到\n待审核、待辅导员审核、已通过可取消；使用中、已完成、已爽约不可取消。团队由发起人取消。已通过预约开始前10分钟提醒，开始前15分钟至开始后15分钟可签到。超过开始后15分钟仍未签到视为爽约并扣分、发送提醒。\n\n四、信用分\n初始' + config.credit.initialScore + '分，上限' + config.credit.maxScore + '分；爽约扣' + Math.abs(config.credit.noshowPenalty) + '分、违规扣' + Math.abs(config.credit.violationPenalty) + '分、累计良好使用' + config.credit.goodThreshold + '次奖励' + config.credit.goodReward + '分、有效反馈奖励' + config.credit.feedbackReward + '分。' + require('./creditBookingPolicy').description() + '\n\n五、使用规范\n保持安静整洁，爱护设施，使用后恢复桌椅并关闭电器；有疑问请联系书院导生会会长团。';
+}
+module.exports = { getRules };

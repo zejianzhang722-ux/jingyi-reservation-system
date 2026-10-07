@@ -1,3 +1,4 @@
+@import "../../styles/admin-management.wxss";
 .container { padding: 20rpx 30rpx; min-height: 100vh; }
 .header { padding: 20rpx 0; }
 .title { font-size: 36rpx; font-weight: 700; color: #1a1a2e; display: block; margin-bottom: 20rpx; }
@@ -5,17 +6,16 @@
 .search-input { height: 72rpx; font-size: 26rpx; color: #333; }
 .user-list { margin-top: 20rpx; }
 .user-item { display: flex; align-items: center; background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1rpx solid var(--glass-border); box-shadow: var(--glass-shadow); border-radius: 16rpx; padding: 24rpx 30rpx; margin-bottom: 12rpx; }
-.user-avatar { width: 72rpx; height: 72rpx; border-radius: 50%; background: linear-gradient(135deg, #0077ff, #00d4ff); color: #fff; font-size: 28rpx; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.user-avatar { width: 72rpx; height: 72rpx; border-radius: 50%; background: linear-gradient(135deg, var(--btn-primary-bg), #27b8ff); color: #fff; font-size: 28rpx; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .user-info { flex: 1; margin-left: 20rpx; }
 .user-name { display: block; font-size: 28rpx; font-weight: 500; color: #333; }
 .user-detail { display: block; font-size: 22rpx; color: #999; margin-top: 4rpx; }
-.user-credit { display: block; font-size: 22rpx; color: #0077ff; margin-top: 4rpx; }
+.user-credit { display: block; font-size: 22rpx; color: var(--btn-primary-bg); margin-top: 4rpx; }
 .user-status { font-size: 22rpx; padding: 4rpx 12rpx; border-radius: 6rpx; flex-shrink: 0; }
-.user-status.active { color: #52c41a; background: #f6ffed; }
-.user-status.banned { color: #ff4d4f; background: #fff1f0; }
+.user-status.active { color: var(--success); background: var(--success-light); }
+.user-status.banned { color: var(--danger); background: var(--danger-light); }
 .empty { text-align: center; padding: 100rpx 0; color: #999; font-size: 28rpx; }
 .user-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
-.action-btns { display: flex; gap: 8rpx; }
-.btn-credit { font-size: 22rpx; padding: 6rpx 16rpx; background: #e6f7ff; color: #1890ff; border-radius: 4rpx; }
-.btn-ban { font-size: 22rpx; padding: 6rpx 16rpx; background: #fff1f0; color: #ff4d4f; border-radius: 4rpx; }
-.btn-unban { background: #f6ffed; color: #52c41a; }
+/* 说明：.action-btns / .btn-credit / .btn-ban / .btn-unban 原为「调分 / 停用」按钮组，
+   该能力属super_admin 专属且小程序端本就是死代码（仅弹「请在电脑后台处理」toast），
+   已随canManageStudents 一并移除，故此处不再保留其样式。 */

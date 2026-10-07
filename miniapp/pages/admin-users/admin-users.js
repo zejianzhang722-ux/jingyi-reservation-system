@@ -3,7 +3,7 @@ var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
 
 Page({
-  data: { list: [], keyword: '', filteredList: [], canManageStudents: false },
+  data: { list: [], keyword: '', filteredList: [] },
   hasReadAccess: function () {
     return auth.isLoggedIn() && auth.isAdmin() && adminPolicy.can(auth.getUserRole(), 'residentView')
   },
@@ -53,8 +53,8 @@ Page({
     return list.map(function (u) {
       var status = u.status || 'active'
       u.avatarInitial = (u.name || u.real_name || '?').charAt(0)
-      u.creditDisplay = parseInt(u.credit_score) || 100
-      u.statusText = status === 'active' ? '正常' : (status === disabledStatus ? '停用' : status)
+      u.creditDisplay = u.credit_score === null || u.credit_score === undefined ? 100 : Number(u.credit_score)
+      u.statusText = { active: '正常', restricted: '预约受限', banned: u.restricted_until ? '历史信用限制' : '停用', disabled: '停用', inactive: '停用' }[status] || '状态待确认'
       u.nextStatus = status === disabledStatus ? 'active' : disabledStatus
       u.statusActionText = status === disabledStatus ? '恢复' : '停用'
       u.statusActionClass = status === disabledStatus ? 'btn-unban' : ''
@@ -72,11 +72,5 @@ Page({
   onSearch: function (e) {
     var keyword = e.detail.value.trim()
     this.setData({ keyword: keyword, filteredList: this.applyFilter(this.data.list, keyword) })
-  },
-  onAdjustCredit: function (e) {
-    wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
-  },
-  onToggleStatus: function (e) {
-    wx.showToast({ title: '请在电脑后台处理此项功能', icon: 'none' })
   }
 })

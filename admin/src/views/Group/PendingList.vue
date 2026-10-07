@@ -180,7 +180,7 @@ const APPROVAL_TAG = {
 }
 
 const approvalText = function(status) {
-  return APPROVAL_TEXT[status] || status || '未知'
+  return APPROVAL_TEXT[status] || '状态待确认'
 }
 
 const approvalTagType = function(status) {

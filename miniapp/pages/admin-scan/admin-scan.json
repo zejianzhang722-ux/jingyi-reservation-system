@@ -1,0 +1,5 @@
+{
+  "navigationBarTitleText": "扫码核验与签到",
+  "enablePullDownRefresh": true,
+  "usingComponents": { "admin-nav": "/components/admin-nav/admin-nav" }
+}

@@ -413,7 +413,7 @@ async function main() {
   }
 
   async function cleanupSharedRegressionReservations(token) {
-    const list = await api('/reservation?page=1&pageSize=100&roomId=8', {
+    const list = await api('/reservation?page=1&pageSize=100&roomId=21', {
       headers: { Authorization: 'Bearer ' + token }
     })
     const activeStatuses = ['approved', 'pending', 'counselor_pending', 'checked_in']
@@ -421,7 +421,7 @@ async function main() {
     for (const reservation of reservations) {
       const purpose = String(reservation.purpose || '')
       const isRegressionData = purpose.indexOf('mobile-regression-shared-space') !== -1 || Number(reservation.participants) === 4
-      if (Number(reservation.room_id) === 8 && activeStatuses.includes(reservation.status) && isRegressionData) {
+      if (Number(reservation.room_id) === 21 && activeStatuses.includes(reservation.status) && isRegressionData) {
         await api('/reservation/' + reservation.id, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + token }
@@ -451,7 +451,7 @@ async function main() {
             Authorization: 'Bearer ' + token
           },
           body: JSON.stringify({
-            roomId: 8,
+            roomId: 21,
             date: date,
             startTime: slot[0],
             endTime: slot[1]
@@ -481,13 +481,14 @@ async function main() {
       Authorization: 'Bearer ' + sharedToken
     },
     body: JSON.stringify({
-      roomId: 8,
+      roomId: 21,
       date: sharedSlot.date,
       startTime: sharedSlot.startTime,
-      endTime: sharedSlot.endTime
+      endTime: sharedSlot.endTime,
+      participantCount: 0
     })
   })
-  assert(invalidShared.json.code !== 200, '共享空间缺少用途和人数时不应预约成功')
+  assert(invalidShared.json.code !== 200, '实际参与人数明确为0时不应预约成功')
 
   const validShared = await api('/reservation', {
     method: 'POST',
@@ -496,7 +497,7 @@ async function main() {
       Authorization: 'Bearer ' + sharedToken
     },
     body: JSON.stringify({
-      roomId: 8,
+      roomId: 21,
       date: sharedSlot.date,
       startTime: sharedSlot.startTime,
       endTime: sharedSlot.endTime,

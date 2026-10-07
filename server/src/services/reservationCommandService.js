@@ -3,6 +3,8 @@ const db = require('../config/database');
 const config = require('../config');
 const helpers = require('../utils/helpers');
 const legacyReservationService = require('./reservationService');
+const dailyPolicy = require('./reservationDailyPolicy');
+const roomPolicy = require('./roomBookingPolicy');
 
 const ACTIVE_STATUSES = ['approved', 'pending', 'counselor_pending', 'checked_in'];
 const SEAT_REQUIRED_TYPES = ['study_room', 'study'];
@@ -76,6 +78,7 @@ const normalizeInput = function(input) {
     endTime: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
     participants: normalizeParticipants(input.participants),
+    groupBooking: input.groupBooking === true,
     idempotencyKey: normalizeIdempotencyKey(input.idempotencyKey),
     forcedStatus: input.forcedStatus || null
   };
@@ -90,7 +93,8 @@ const buildRequestFingerprint = function(input) {
     startTime: input.startTime,
     endTime: input.endTime,
     purpose: input.purpose,
-    participants: input.participants
+    participants: input.participants,
+    groupBooking: input.groupBooking === true
   };
   return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 };
@@ -115,17 +119,12 @@ const statusForRoom = function(room, forcedStatus) {
 
 const validateReservationInput = function(input, user, room, seat) {
   if (!user) throw httpError(404, '用户不存在');
-  if (user.status === 'banned' || user.status === 'restricted') {
-    throw httpError(403, '账号已被限制预约');
-  }
-  if (Number(user.credit_score) < Number(config.credit.restrictThreshold)) {
-    throw httpError(403, '信用分过低，无法预约');
-  }
+  require('./creditBookingPolicy').validate(input, user);
   if (!helpers.isDateInRange(input.date, config.reservation.advanceDays)) {
     throw httpError(400, '预约日期不在允许范围内（今天至' + config.reservation.advanceDays + '天后）');
   }
   if (!room) throw httpError(404, '功能房不存在');
-  if (room.status !== 'open') throw httpError(400, '该功能房当前不可预约');
+  roomPolicy.validateInput(input, room);
   if (SEAT_REQUIRED_TYPES.includes(room.type || '') && !input.seatId) {
     throw httpError(400, '自习室预约必须选择座位', 'SEAT_REQUIRED');
   }
@@ -174,12 +173,12 @@ const mapReservation = function(row, idempotent) {
   };
 };
 
-const insertSlots = async function(connection, reservationId, input) {
+const insertSlots = async function(connection, reservationId, input, room) {
   const minutes = getSlotMinutes(input.startTime, input.endTime);
   const placeholders = minutes.map(function() { return '(?, ?, ?, ?, ?)'; }).join(',');
   const params = [];
   minutes.forEach(function(minute) {
-    params.push(reservationId, input.roomId, input.seatId || 0, input.date, minute);
+    params.push(reservationId, input.roomId, roomPolicy.slotScope(room, input, reservationId), input.date, minute);
   });
   await connection.execute(
     'INSERT INTO reservation_slots (reservation_id, room_id, seat_scope, date, slot_minute) VALUES ' + placeholders,
@@ -213,11 +212,13 @@ const createReservationWithinTransaction = async function(connection, rawInput) 
 
   validateReservationInput(input, users[0], rooms[0], seats[0] || null);
 
-  const [dailyRows] = await connection.execute(
-    "SELECT id FROM reservations WHERE user_id = ? AND date = ? AND status IN ('approved','pending','counselor_pending','checked_in')",
-    [input.userId, input.date]
-  );
-  if (dailyRows.length >= 3) throw httpError(400, '每日最多预约3次');
+  await dailyPolicy.assertTransaction(connection, input, rooms[0].type);
+  if (roomPolicy.forRoom(rooms[0]).mode !== 'seat') {
+    const [held] = await connection.execute(
+      "SELECT * FROM reservations WHERE room_id = ? AND date = ? AND status IN ('pending','counselor_pending','approved','checked_in') FOR UPDATE",
+      [input.roomId, input.date]);
+    roomPolicy.assertOccupancy(input, rooms[0], held);
+  }
 
   const reservationCode = helpers.generateReservationCode();
   const status = statusForRoom(rooms[0], input.forcedStatus);
@@ -229,7 +230,7 @@ const createReservationWithinTransaction = async function(connection, rawInput) 
       input.idempotencyKey, input.idempotencyKey ? requestHash : null
     ]
   );
-  await insertSlots(connection, result.insertId, input);
+  await insertSlots(connection, result.insertId, input, rooms[0]);
 
   return {
     id: result.insertId,
@@ -269,18 +270,14 @@ const validateMockInput = function(input) {
     : null;
   validateReservationInput(input, user, room, seat);
 
-  const dailyCount = tables.reservations.filter(function(row) {
-    return Number(row.user_id) === input.userId &&
-      normalizeDate(row.date) === input.date &&
-      ACTIVE_STATUSES.includes(row.status);
-  }).length;
-  if (dailyCount >= 3) throw httpError(400, '每日最多预约3次');
+  dailyPolicy.assertMock(input, tables);
 };
 
 const createReservation = async function(rawInput) {
   const input = normalizeInput(rawInput);
   if (db.isMock()) {
-    validateMockInput(input);
+    // Legacy mock creation checks idempotency before quota and conflict rules.
+    // Checking here first incorrectly rejects a retry after the quota is full.
     return legacyReservationService.createReservation(input);
   }
 

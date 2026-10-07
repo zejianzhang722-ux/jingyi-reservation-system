@@ -168,7 +168,7 @@ Page({
         auth.setAuthData(data)
       }
       var role = (data.userInfo && data.userInfo.role) || ''
-      var roleNameMap = { super_admin: '超级管理员', admin: '导生管理员', counselor: '书院辅导员' }
+      var roleNameMap = { super_admin: '导生会会长团', admin: '导生管理员', counselor: '书院辅导员' }
       var roleName = roleNameMap[role] || '管理员'
       wx.showToast({ title: roleName + '登录成功', icon: 'success' })
       setTimeout(function () {

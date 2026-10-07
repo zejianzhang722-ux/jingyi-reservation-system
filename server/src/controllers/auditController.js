@@ -260,6 +260,7 @@ const batchAudit = async function(req, res) {
 
   for (const reservation of reservations) {
     await notifyBatchResult(reservation, action, reason);
+    if (action === 'approve') await require('../services/danceGroupNotificationService').notifySafely(reservation.id);
   }
 
   await realtimeEventService.publishReservationRoomsSafely(
@@ -275,7 +276,7 @@ const batchAudit = async function(req, res) {
 
 const counselorPending = async function(req, res) {
   if (!['counselor', 'super_admin'].includes(req.user && req.user.role)) {
-    return response.error(res, '仅辅导员或超级管理员可查看该队列', 403);
+    return response.error(res, '仅辅导员或导生会会长团可查看该队列', 403);
   }
   req.query = Object.assign({}, req.query, { type: 'counselor' });
   return pendingList(req, res);

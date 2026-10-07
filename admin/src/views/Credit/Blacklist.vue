@@ -1,22 +1,21 @@
 ﻿<template>
   <PageShell
-    title="黑名单与受限账号"
+    title="信用与预约权限"
     eyebrow="信用管控"
-    description="集中处理低信用、受限和封禁宿生，所有人工操作都需要填写原因，方便后续审计。"
+    description="低信用仅影响预约权限，不限制登录。可清理旧规则留下的信用限制记录。"
   >
-    <template #actions>
-      <el-button type="danger" @click="handleManualBan">手动封禁</el-button>
-    </template>
 
+
+    <template #actions><el-button type="primary" @click="handleSetCredit()">设置信用</el-button></template>
     <el-row :gutter="16">
       <el-col :xs="24" :sm="8">
-        <MetricCard label="当前名单" :value="total" caption="受限、封禁或低信用宿生" icon="CircleCloseFilled" tone="danger" />
+        <MetricCard label="当前名单" :value="total" caption="低信用及历史限制记录" icon="CircleCloseFilled" tone="danger" />
       </el-col>
       <el-col :xs="24" :sm="8">
-        <MetricCard label="处理方式" value="人工 + 自动" caption="支持学号封禁和列表解封" icon="Operation" tone="warning" />
+        <MetricCard label="处理方式" value="人工 + 自动" caption="按当前信用区间自动调整预约" icon="Operation" tone="warning" />
       </el-col>
       <el-col :xs="24" :sm="8">
-        <MetricCard label="处理要求" value="必须填原因" caption="原因将留存在操作记录中" icon="DocumentChecked" tone="primary" />
+        <MetricCard label="处理要求" value="不影响登录" caption="已有预约仍可签到签退" icon="DocumentChecked" tone="primary" />
       </el-col>
     </el-row>
 
@@ -30,7 +29,7 @@
       @search="onSearch"
       @reset="resetFilters"
       @export="handleExport"
-    />
+    ><el-select v-model="filters.range" placeholder="信用区间" clearable @change="onSearch"><el-option label="60–79分" value="warning" /><el-option label="30–59分" value="restricted" /><el-option label="0–29分" value="strict" /></el-select></ListToolbar>
 
     <el-card shadow="never">
       <el-table :data="tableData" v-loading="loading" stripe>
@@ -46,13 +45,13 @@
             <el-tag :type="statusMap[row.status]?.type || 'info'" size="small">{{ statusMap[row.status]?.label || '状态待确认' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="reason" label="进入原因" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="bannedAt" label="处理时间" width="170" show-overflow-tooltip />
-        <el-table-column prop="banExpiresAt" label="预计恢复" width="170" show-overflow-tooltip />
-        <el-table-column prop="violationCount" label="违规次数" width="100" />
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="预约权限" min-width="210"><template #default="{ row }">{{ bookingLabel(row.creditScore) }}</template></el-table-column>
+
+        <el-table-column prop="banExpiresAt" label="旧限制期限" width="170" show-overflow-tooltip />
+
+        <el-table-column label="操作" width="250" fixed="right">
           <template #default="{ row }">
-            <el-button type="success" size="small" link @click="handleUnban(row)" :disabled="actionSubmitting">恢复正常</el-button>
+            <el-button type="primary" size="small" link @click="handleViewCredit(row)">详情</el-button><el-button type="primary" size="small" link @click="handleSetCredit(row)">设置</el-button><el-button v-if="row.banExpiresAt" type="success" size="small" link @click="handleUnban(row)" :disabled="actionSubmitting">清理旧限制</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -68,31 +67,17 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="banDialogVisible" title="手动封禁宿生" width="500px">
-      <el-alert title="请核对宿生学号并填写封禁原因；原因将留存在操作记录中，便于后续查询。" type="warning" show-icon :closable="false" class="form-alert" />
-      <el-form ref="formRef" :model="banForm" :rules="rules" label-width="100px">
-        <el-form-item label="学号" prop="studentId">
-          <el-input v-model="banForm.studentId" placeholder="请输入学号" />
-        </el-form-item>
-        <el-form-item label="封禁原因" prop="reason">
-          <el-input v-model="banForm.reason" type="textarea" :rows="3" placeholder="请输入封禁原因" />
-        </el-form-item>
-        <el-form-item label="封禁天数" prop="days">
-          <el-input-number v-model="banForm.days" :min="1" :max="365" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="banDialogVisible = false">取消</el-button>
-        <el-button type="danger" :loading="submitLoading" :disabled="actionSubmitting" @click="confirmBan">确认封禁</el-button>
-      </template>
-    </el-dialog>
+
+    <el-dialog v-model="creditDialogVisible" title="设置信用与预约权限" width="520px" :close-on-click-modal="!creditSaving" :close-on-press-escape="!creditSaving" :show-close="!creditSaving"><el-alert title="信用仅调整预约权限，不限制登录" type="info" :closable="false" class="form-alert" /><el-form label-position="top"><el-form-item label="宿生学号"><el-input v-model="creditForm.studentId" placeholder="请输入学号" :disabled="creditSaving" /></el-form-item><el-form-item label="目标信用分"><el-input-number v-model="creditForm.score" :min="0" :max="120" :disabled="creditSaving" /><span class="permission-tip">{{ bookingLabel(creditForm.score) }}</span></el-form-item><el-form-item label="调整原因"><el-input v-model="creditForm.reason" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="请填写调整依据" :disabled="creditSaving" /></el-form-item></el-form><template #footer><el-button :disabled="creditSaving" @click="creditDialogVisible=false">取消</el-button><el-button type="primary" :loading="creditSaving" @click="saveCredit">保存设置</el-button></template></el-dialog>
+    <el-dialog v-model="detailVisible" title="宿生信用详情" width="640px"><template v-if="creditDetail"><el-descriptions :column="2" border><el-descriptions-item label="姓名">{{ creditDetail.student.real_name }}</el-descriptions-item><el-descriptions-item label="学号">{{ creditDetail.student.student_id }}</el-descriptions-item><el-descriptions-item label="信用分">{{ creditDetail.student.credit_score }}</el-descriptions-item><el-descriptions-item label="预约权限">{{ bookingLabel(creditDetail.student.credit_score) }}</el-descriptions-item></el-descriptions><h3>最近信用记录</h3><el-table :data="creditDetail.logs" max-height="320"><el-table-column prop="created_at" label="时间" width="160" /><el-table-column prop="description" label="原因" /><el-table-column prop="score_change" label="变动" width="80" /><el-table-column prop="score_after" label="变动后" width="80" /></el-table></template></el-dialog>
   </PageShell>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getBlacklist, toggleBan } from '@/api/credit'
+import { getBlacklist, toggleBan, getStudentCredit, setStudentCredit } from '@/api/credit'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { creditRow } from '@/utils/managementPresenter'
 import { createActionLock } from '@/utils/approvalState'
 import PageShell from '@/components/admin/PageShell.vue'
 import MetricCard from '@/components/admin/MetricCard.vue'
@@ -100,32 +85,23 @@ import ListToolbar from '@/components/admin/ListToolbar.vue'
 import { exportXlsx } from '@/utils/exportXlsx'
 
 const loading = ref(false)
-const submitLoading = ref(false)
 const actionSubmitting = ref(false)
 const actionLock = createActionLock()
 const allRows = ref([])
-const banDialogVisible = ref(false)
-const formRef = ref(null)
 
-const filters = reactive({ status: '', keyword: '' })
+const filters = reactive({ status: '', keyword: '', range: '' })
 const pagination = reactive({ page: 1, pageSize: 10 })
-const banForm = reactive({ studentId: '', reason: '', days: 7 })
-const rules = {
-  studentId: [{ required: true, message: '请输入学号', trigger: 'blur' }],
-  reason: [{ required: true, message: '请输入封禁原因', trigger: 'blur' }],
-  days: [{ required: true, message: '请输入封禁天数', trigger: 'blur' }]
-}
 
 // 🔧 后端 GET /credit/blacklist 不支持 status 筛选，状态下拉由前端兜底
 const statusOptions = [
-  { label: '封禁', value: 'banned' },
-  { label: '受限', value: 'restricted' },
+  { label: '历史信用限制', value: 'banned' },
+  { label: '预约受限', value: 'restricted' },
   { label: '低信用', value: 'active' }
 ]
 
 const statusMap = {
-  banned: { label: '封禁', type: 'danger' },
-  restricted: { label: '受限', type: 'warning' },
+  banned: { label: '历史信用限制', type: 'danger' },
+  restricted: { label: '预约受限', type: 'warning' },
   active: { label: '低信用', type: 'info' }
 }
 
@@ -136,10 +112,8 @@ const exportColumns = [
   { header: '学号', key: 'studentId' },
   { header: '信用分', key: 'creditScore', formatter: row => (row.creditScore ?? '-') },
   { header: '状态', key: 'status', formatter: row => statusMap[row.status]?.label || '状态待确认' },
-  { header: '进入原因', key: 'reason' },
-  { header: '处理时间', key: 'bannedAt' },
-  { header: '预计恢复', key: 'banExpiresAt' },
-  { header: '违规次数', key: 'violationCount' }
+  { header: '预约权限', formatter: row => bookingLabel(row.creditScore) },
+  { header: '旧限制期限', key: 'banExpiresAt' }
 ]
 
 function matchKeyword(row, keyword) {
@@ -154,6 +128,8 @@ function matchKeyword(row, keyword) {
 // 因此状态 / 关键词过滤与分页都在前端完成，保证「导出结果 == 当前筛选视图」。
 const filteredRows = computed(() => allRows.value.filter(row => {
   if (filters.status && row.status !== filters.status) return false
+  const score=Number(row.creditScore)
+  if (filters.range && !(filters.range === 'warning' ? score>=60 && score<80 : filters.range === 'restricted' ? score>=30 && score<60 : score<30)) return false
   return matchKeyword(row, filters.keyword)
 }))
 
@@ -171,6 +147,7 @@ async function loadData() {
     // 该接口用 response.success 直接回数组（不是 { list, total }），这里两种形态都兜住。
     const payload = res.data
     allRows.value = Array.isArray(payload?.list) ? payload.list : (Array.isArray(payload) ? payload : [])
+    allRows.value = allRows.value.map(creditRow)
     // 过滤/翻页都是前端行为，页码越界时回退到最后一页有效位置
     const maxPage = Math.max(1, Math.ceil(total.value / pagination.pageSize))
     if (pagination.page > maxPage) pagination.page = maxPage
@@ -186,40 +163,10 @@ function onSearch() {
 }
 
 function resetFilters() {
+  filters.range = ''
   filters.status = ''
   filters.keyword = ''
   pagination.page = 1
-}
-
-function handleManualBan() {
-  Object.assign(banForm, { studentId: '', reason: '', days: 7 })
-  banDialogVisible.value = true
-}
-
-async function confirmBan() {
-  const token = actionLock.acquire()
-  if (!token) return
-  actionSubmitting.value = true
-  try {
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) return
-
-  submitLoading.value = true
-  try {
-    await toggleBan({ studentId: banForm.studentId, action: 'ban', reason: banForm.reason, days: banForm.days })
-    ElMessage.success('封禁成功')
-    banDialogVisible.value = false
-    loadData()
-  } catch (e) {
-    // handled by interceptor
-  } finally {
-    submitLoading.value = false
-    actionSubmitting.value = false
-    actionLock.release(token)
-  }
-  } finally {
-    if (actionLock.release(token)) actionSubmitting.value = false
-  }
 }
 
 async function handleUnban(row) {
@@ -227,9 +174,9 @@ async function handleUnban(row) {
   if (!token) return
   actionSubmitting.value = true
   try {
-    await ElMessageBox.confirm(`确认恢复 ${row.userName || row.studentId} 的账号状态？`, '提示', { type: 'success' })
+    await ElMessageBox.confirm(`确认清理 ${row.userName || row.studentId} 的历史信用限制？预约权限仍按当前分数执行。`, '提示', { type: 'success' })
     await toggleBan({ userId: row.userId || row.id, studentId: row.studentId, action: 'unban' })
-    ElMessage.success('已恢复正常')
+    ElMessage.success('旧限制已清理，预约权限按当前分数执行')
     loadData()
   } catch (e) {
     // cancelled
@@ -251,6 +198,17 @@ function handleExport() {
   }
 }
 
+const creditDialogVisible=ref(false),creditSaving=ref(false),detailVisible=ref(false),creditDetail=ref(null)
+const creditForm=reactive({studentId:'',score:100,reason:''})
+function bookingLabel(value) { const score=Number(value);return score>=80?'提前3天 · 每天同类3次 · 房间开放时段':score>=60?'提前2天 · 每天同类2次 · 房间开放时段':score>=30?'提前1天 · 每天同类1次 · 08:00–20:00':'仅当天 · 每天同类1次 · 09:00–17:00' }
+function handleSetCredit(row) {Object.assign(creditForm,{studentId:row?.studentId || '',score:row?.creditScore ?? 100,reason:''});creditDialogVisible.value=true}
+async function handleViewCredit(row) { try { const res=await getStudentCredit(row.userId || row.id);creditDetail.value=res.data;detailVisible.value=true } catch (_) {} }
+async function saveCredit() {
+  if(creditSaving.value)return
+  if(!/^\d{9,10}$/.test(creditForm.studentId.trim()) || !creditForm.reason.trim() || !Number.isInteger(creditForm.score)){ElMessage.warning('请填写有效学号、信用分和调整原因');return}
+  creditSaving.value=true
+  try {await setStudentCredit(creditForm.studentId.trim(),{score:creditForm.score,reason:creditForm.reason.trim()});ElMessage.success('信用分及预约权限已更新');creditDialogVisible.value=false;await loadData()} catch (_) {} finally {creditSaving.value=false}
+}
 onMounted(() => {
   loadData()
 })
@@ -263,6 +221,7 @@ onMounted(() => {
   margin-top: 16px;
 }
 
+.permission-tip { display:block; margin-left:16px; font-size:13px; color:#667a91; line-height:1.8 }
 .form-alert {
   margin-bottom: 16px;
 }

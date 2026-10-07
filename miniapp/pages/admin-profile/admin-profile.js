@@ -1,4 +1,6 @@
+var dialog = require('../../utils/dialog')
 var auth = require('../../utils/auth')
+var roleModel = require('../../utils/role-model')
 var pageMotion = require('../../utils/page-motion')
 
 var BASE_MENU = [
@@ -10,14 +12,14 @@ var BASE_MENU = [
 ]
 
 function securityDescription(role) {
-  return role === 'super_admin' ? '请在电脑后台管理管理员账号与安全设置' : '如需修改账号或密码，请联系超级管理员'
+  return roleModel.normalizeRole(role) === 'super_admin' ? '请在电脑后台管理管理员账号与安全设置' : '如需修改账号或密码，请联系导生会会长团'
 }
 
 Page({
   data: {
     adminInfo: {},
     avatarInitial: '管',
-    roleMap: { admin: '导生管理员', super_admin: '超级管理员', counselor: '书院辅导员' },
+    roleMap: { admin: roleModel.label('admin'), super_admin: roleModel.label('super_admin'), counselor: roleModel.label('counselor'), dorm_manager: roleModel.label('dorm_manager') },
     menuList: BASE_MENU.map(function (item) {
       var next = Object.assign({}, item)
       if (item.key === 'password') next.desc = securityDescription('admin')
@@ -45,6 +47,10 @@ Page({
       wx.reLaunch({ url: '/pages/login/login' })
       return false
     }
+    if (!roleModel.isGuideRole(auth.getUserRole())) {
+      wx.reLaunch({ url: auth.getAdminHome() })
+      return false
+    }
     return true
   },
 
@@ -56,7 +62,8 @@ Page({
       if (item.key === 'password') next.desc = securityDescription(userInfo.role)
       return next
     })
-    this.setData({ adminInfo: userInfo, avatarInitial: String(name).slice(0, 1) || '管', menuList: menuList })
+    var role = roleModel.normalizeRole(userInfo.role)
+    this.setData({ adminInfo: userInfo, roleLabel: roleModel.isAdminRole(role) ? roleModel.label(role) : '管理员', avatarInitial: String(name).slice(0, 1) || '管', menuList: menuList })
   },
 
   onMenuTap: function (e) {
@@ -68,7 +75,7 @@ Page({
         wx.showToast({ title: securityDescription(auth.getUserRole()), icon: 'none' })
         break
       case 'about':
-        wx.showModal({
+        dialog.show(this, {
           title: '关于系统',
           content: '敬一书院功能房预约管理系统，用于预约审核、空间管理和服务通知。',
           showCancel: false
@@ -80,17 +87,17 @@ Page({
 
   showAccountInfo: function () {
     var info = this.data.adminInfo || {}
-    wx.showModal({
+    dialog.show(this, {
       title: '账号信息',
       content: '姓名：' + (info.name || info.realName || info.real_name || info.username || '管理员') +
-        '\n角色：' + (this.data.roleMap[info.role] || info.role || '管理员') +
+        '\n角色：' + (this.data.roleMap[roleModel.normalizeRole(info.role)] || '管理员') +
         '\n账号：' + (info.username || '-'),
       showCancel: false
     })
   },
 
   onLogout: function () {
-    wx.showModal({
+    dialog.show(this, {
       title: '确认退出',
       content: '确定要退出当前管理员账号吗？',
       success: function (res) {

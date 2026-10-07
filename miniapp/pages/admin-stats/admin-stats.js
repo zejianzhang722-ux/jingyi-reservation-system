@@ -1,5 +1,6 @@
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
+var adminPolicy = require('../../utils/admin-policy')
 
 function numberOrZero(value) {
   var number = Number(value)
@@ -23,7 +24,7 @@ function creditLevelLabel(level) {
   if (level === 'good') return '良好'
   if (level === 'warning') return '需注意'
   if (level === 'restricted') return '受限'
-  if (level === 'banned' || level === 'blocked') return '封禁'
+  if (level === 'banned' || level === 'blocked') return '预约严格受限'
   return '未知'
 }
 
@@ -64,6 +65,11 @@ Page({
   ensureAdmin: function () {
     if (!auth.isLoggedIn() || !auth.isAdmin()) {
       wx.reLaunch({ url: '/pages/login/login' })
+      return false
+    }
+    if (!adminPolicy.can(auth.getUserRole(), 'statsView')) {
+      this._requestVersion = (this._requestVersion || 0) + 1
+      wx.reLaunch({ url: auth.getAdminHome() })
       return false
     }
     return true

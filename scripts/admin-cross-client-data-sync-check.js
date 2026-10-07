@@ -120,7 +120,7 @@ async function createTemporaryOrdinaryRoom() {
       headers: authHeaders(superToken, true),
       body: JSON.stringify({
         name: purpose,
-        type: 'seminar_room',
+        type: 'roadshow_space',
         buildingId: 1,
         floor: 1,
         location: 'acceptance-test-only',
@@ -144,7 +144,7 @@ async function createTemporaryOrdinaryRoom() {
     headers: authHeaders(superToken, true),
     body: JSON.stringify({
       name: purpose,
-      type: 'seminar_room',
+      type: 'roadshow_space',
       buildingId: 1,
       floor: 1,
       location: 'acceptance-test-only',

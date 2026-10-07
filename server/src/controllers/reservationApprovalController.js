@@ -217,6 +217,7 @@ const approve = async function(req, res) {
     );
 
     await realtimeEventService.publishRoomStatusSafely(reservation.room_id, 'reservation-approved');
+    await require('../services/danceGroupNotificationService').notifySafely(id);
     return response.success(res, null, '审批通过');
   } catch (err) {
     logger.error('审批异常:', err);

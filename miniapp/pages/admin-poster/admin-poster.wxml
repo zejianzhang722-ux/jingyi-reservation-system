@@ -12,7 +12,7 @@
   <view class="state-card error-state" wx:if="{{!loading && error}}">
     <text class="state-title">海报审核暂时未能加载</text>
     <text class="state-note">请检查网络后重试</text>
-    <button class="retry-button" bindtap="onRetry">重新加载</button>
+    <button class="ui-btn retry-button" bindtap="onRetry">重新加载</button>
   </view>
 
   <view class="poster-list" wx:if="{{!loading && !error && list.length > 0}}">
@@ -22,9 +22,10 @@
           <text class="poster-title">{{item.title || '未命名海报'}}</text>
           <text class="applicant">申请人：{{item.real_name || item.nickname || item.student_id || '未知申请人'}}</text>
         </view>
-        <text class="status status-{{item.status}}">{{statusMap[item.status] || item.status || '未知状态'}}</text>
+        <text class="status status-{{item.status}}">{{statusMap[item.status] || '状态待确认'}}</text>
       </view>
 
+      <image wx:if="{{item.previewUrl && !item.imageFailed}}" class="poster-preview" src="{{item.previewUrl}}" mode="aspectFill" data-id="{{item.id}}" bindtap="onPreview" binderror="onImageError" /><view class="poster-image-empty" wx:else><text>{{item.imageFailed ? "图片暂时无法加载" : "申请人未上传海报图片"}}</text></view>
       <view class="info-grid">
         <view class="info-row">
           <text class="info-label">申请组织</text>
@@ -44,18 +45,19 @@
         </view>
       </view>
 
+      <button class="ui-btn ui-btn-secondary poster-detail-button" data-id="{{item.id}}" bindtap="onViewDetail">查看申请详情</button>
       <view class="actions" wx:if="{{item.status === 'pending'}}">
         <text class="processing" wx:if="{{processingIds[item.id]}}">正在提交并刷新列表</text>
         <block wx:else>
-          <button class="action-button reject-button" data-id="{{item.id}}" bindtap="onReject">拒绝</button>
-          <button class="action-button approve-button" data-id="{{item.id}}" bindtap="onApprove">通过</button>
+          <button class="ui-btn ui-btn-md action-button ui-btn-danger-ghost" data-id="{{item.id}}" bindtap="onReject">拒绝</button>
+          <button class="ui-btn ui-btn-md action-button ui-btn-success" data-id="{{item.id}}" bindtap="onApprove">通过</button>
         </block>
       </view>
     </view>
 
     <view class="load-more-wrap" wx:if="{{hasMore || loadingMore || loadMoreError}}">
       <text class="load-more-error" wx:if="{{loadMoreError}}">{{loadMoreError}}，请重试</text>
-      <button class="load-more-button" bindtap="onLoadMore" disabled="{{loadingMore}}" loading="{{loadingMore}}">
+      <button class="ui-btn load-more-button {{loadingMore ? 'is-disabled' : ''}}" bindtap="onLoadMore" disabled="{{loadingMore}}" loading="{{loadingMore}}">
         {{loadingMore ? '加载中' : (loadMoreError ? '重试加载更多' : '加载更多')}}
       </button>
     </view>
@@ -66,3 +68,5 @@
     <text class="state-note">新的申请提交后会显示在这里</text>
   </view>
 </view>
+
+<app-dialog id="app-dialog" />

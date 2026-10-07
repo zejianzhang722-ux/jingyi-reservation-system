@@ -1,4 +1,7 @@
 {
   "navigationBarTitleText": "预约详情审核",
-  "enablePullDownRefresh": false
+  "enablePullDownRefresh": false,
+  "usingComponents": {
+    "app-dialog": "/components/app-dialog/app-dialog"
+  }
 }

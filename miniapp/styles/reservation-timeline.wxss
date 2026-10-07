@@ -1,0 +1,78 @@
+/* Keep fixed dialogs outside transformed ancestors; only the header enters with motion. */
+.container.reservation-page {
+  height: 100vh;
+  min-height: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.reservation-page > .room-header,
+.reservation-page > date-picker { flex-shrink: 0; }
+.reservation-page .timeline-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 24rpx 16rpx;
+}
+.timeline-tip {
+  flex-shrink: 0;
+  padding: 6rpx 4rpx 16rpx;
+  font-size: 23rpx;
+  color: #52657d;
+}
+.timeline-viewport { flex: 1; min-height: 0; }
+.reservation-page .time-picker-mask {
+  z-index: 1100;
+  background: rgba(15, 32, 56, 0.48);
+  animation: reservationMaskIn 180ms ease-out;
+}
+.reservation-page .time-picker {
+  z-index: 1101;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 36rpx 36rpx 0 0;
+  background: #ffffff;
+  box-shadow: 0 -16rpx 64rpx rgba(20, 45, 80, 0.18);
+  animation: reservationSheetIn 240ms ease-out;
+}
+.time-picker-handle {
+  flex-shrink: 0;
+  width: 64rpx;
+  height: 7rpx;
+  margin: 18rpx auto 0;
+  border-radius: 8rpx;
+  background: #d5dfeb;
+}
+.reservation-page .time-picker-header { padding: 8rpx 32rpx 12rpx; flex-shrink: 0; }
+.reservation-page .time-picker-close {
+  width: 88rpx;
+  height: 88rpx;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #52657d;
+}
+.reservation-page .time-picker-body { min-height: 0; max-height: calc(85vh - 260rpx - env(safe-area-inset-bottom)); box-sizing: border-box; padding: 20rpx 32rpx 0; }
+.time-picker-context {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+  background: #eff6ff;
+}
+.time-picker-room { font-size: 28rpx; color: #193d69; font-weight: 600; }
+.time-picker-date { font-size: 24rpx; color: #52657d; }
+.reservation-page .time-picker-row { min-height: 88rpx; padding: 0; }
+.reservation-page .time-picker-row picker { flex: 1; text-align: right; padding: 26rpx 0; }
+.reservation-page .time-picker-value::after { content: '  ›'; color: #8299b3; }
+.reservation-page .duration-text { color: #326697; font-size: 26rpx; }
+.reservation-page .time-picker-footer { flex-shrink: 0; padding: 12rpx 32rpx 24rpx; }
+.reservation-page .time-picker-btn { border-radius: 18rpx; font-weight: 600; }
+.reservation-page .btn-cancel { background: #f0f4f8; color: #52657d; }
+.reservation-page .btn-confirm { background: linear-gradient(120deg, #147ce0, #0066cc); }
+@keyframes reservationMaskIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes reservationSheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }

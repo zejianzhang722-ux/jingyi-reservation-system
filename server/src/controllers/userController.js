@@ -2,31 +2,19 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const response = require('../utils/response');
 const config = require('../config');
+const creditService = require('../services/creditService');
 
 const calculateCreditScore = async function(userId, fallbackScore) {
   const [logsAsc] = await db.query(
-    'SELECT * FROM credits_log WHERE user_id = ? ORDER BY created_at ASC, id ASC LIMIT 200',
+    'SELECT * FROM credits_log WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 20',
     [userId]
   );
-  logsAsc.sort(function(a, b) {
-    const timeA = new Date(a.created_at || 0).getTime();
-    const timeB = new Date(b.created_at || 0).getTime();
-    if (timeA !== timeB) return timeA - timeB;
-    const changeA = Number(a.score_change) || 0;
-    const changeB = Number(b.score_change) || 0;
-    if ((changeA < 0) !== (changeB < 0)) return changeA < 0 ? -1 : 1;
-    return Number(a.id) - Number(b.id);
-  });
-  let runningScore = Number(config.credit.initialScore) || 100;
+  let runningScore = fallbackScore === null || fallbackScore === undefined ? NaN : Number(fallbackScore);
+  if (!Number.isFinite(runningScore)) runningScore = config.credit.initialScore;
   const scoreAfterById = {};
   logsAsc.forEach(function(log) {
-    runningScore += Number(log.score_change) || 0;
-    scoreAfterById[log.id] = runningScore;
+    scoreAfterById[log.id] = log.score_after === null || log.score_after === undefined ? null : Number(log.score_after);
   });
-  if (logsAsc.length === 0) {
-    runningScore = Number(fallbackScore);
-    if (isNaN(runningScore)) runningScore = Number(config.credit.initialScore) || 100;
-  }
   return { score: runningScore, logsAsc: logsAsc, scoreAfterById: scoreAfterById };
 };
 
@@ -97,9 +85,6 @@ const getCredit = async function(req, res) {
       const timeA = new Date(a.created_at || 0).getTime();
       const timeB = new Date(b.created_at || 0).getTime();
       if (timeA !== timeB) return timeB - timeA;
-      const changeA = Number(a.score_change) || 0;
-      const changeB = Number(b.score_change) || 0;
-      if ((changeA > 0) !== (changeB > 0)) return changeA > 0 ? -1 : 1;
       return Number(b.id) - Number(a.id);
     });
 
@@ -110,8 +95,8 @@ const getCredit = async function(req, res) {
         reason: log.description || '信用分变动',
         description: log.description || '信用分变动',
         change: Number(log.score_change) || 0,
-        scoreAfter: Number(scoreAfterById[log.id]) || 0,
-        score_after: Number(scoreAfterById[log.id]) || 0,
+        scoreAfter: scoreAfterById[log.id],
+        score_after: scoreAfterById[log.id],
         createdAt: log.created_at,
         created_at: log.created_at
       };
@@ -121,6 +106,7 @@ const getCredit = async function(req, res) {
       creditScore: creditScore,
       score: creditScore,
       status: users[0].status,
+      rules: creditService.getCreditRules(),
       recentLogs: records,
       records: records
     });

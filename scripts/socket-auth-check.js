@@ -42,7 +42,7 @@ function dependencies(overrides) {
           return [[{ id: params[0], username: 'admin-test', real_name: '测试管理员', role: settings.databaseRole || 'admin', building_id: settings.buildingId === undefined ? 2 : settings.buildingId, scope_type: settings.scopeType || 'building', status: settings.status || 'active' }]]
         }
         if (sql.includes('FROM users')) {
-          return [[{ id: params[0], nickname: 'student-test', real_name: '测试学生', role: settings.studentDatabaseRole || 'student', building_id: 2, status: settings.studentStatus || 'active' }]]
+          return [[{ id: params[0], nickname: 'student-test', real_name: '测试学生', role: settings.studentDatabaseRole || 'student', building_id: 2, status: settings.studentStatus || 'active', restricted_until: settings.restrictedUntil || null }]]
         }
         if (sql.includes('FROM rooms')) {
           if (Number(params[0]) === 404) return [[]]
@@ -84,6 +84,8 @@ async function main() {
   await expectSocketError(function() { return socketAuthService.authorizeRoom(studentSocket, 'user:2', dependencies()) }, 'SOCKET_ROOM_FORBIDDEN', 'student must not access another user room')
   await expectSocketError(function() { return socketAuthService.authorizeRoom(studentSocket, 'monitor:all', dependencies()) }, 'SOCKET_ROOM_FORBIDDEN', 'student must not access monitoring rooms')
   await expectSocketError(function() { return socketAuthService.validateLiveSession(studentSocket, dependencies({ studentStatus: 'banned' })) }, 'SOCKET_ACCOUNT_DISABLED', 'disabled student session must be rejected')
+  await socketAuthService.validateLiveSession(studentSocket, dependencies({ studentStatus: 'restricted' }))
+  await socketAuthService.validateLiveSession(studentSocket, dependencies({ studentStatus: 'banned', restrictedUntil: new Date(Date.now() + 86400000) }))
 
   const expiredLiveSocket = fakeSocket('access-token')
   await socketAuthService.authenticateSocket(expiredLiveSocket, dependencies())

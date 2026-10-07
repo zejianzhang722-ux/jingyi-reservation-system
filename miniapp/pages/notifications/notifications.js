@@ -1,19 +1,11 @@
 var request = require('../../utils/request')
-var util = require('../../utils/util')
 var pageMotion = require('../../utils/page-motion')
+var notificationPresenter = require('../../utils/notification-presenter')
+var auth = require('../../utils/auth')
 
 Page({
   data: {
-    categories: [
-      { key: 'all', name: '全部' },
-      { key: 'audit', name: '审核通知' },
-      { key: 'reminder', name: '使用提醒' },
-      { key: 'noshow_warning', name: '爽约警告' },
-      { key: 'credit', name: '信用变动' },
-      { key: 'poster', name: '海报通知' },
-      { key: 'system', name: '系统公告' },
-      { key: 'violation', name: '违规提醒' }
-    ],
+    categories: notificationPresenter.categories,
     currentCategory: 'all',
     notifications: [],
     loading: true,
@@ -45,22 +37,12 @@ Page({
       params.category = this.data.currentCategory
     }
 
-    var categoryIconMap = {
-      audit: 'shield',
-      reminder: 'bell',
-      noshow_warning: 'warning',
-      credit: 'star',
-      poster: 'megaphone',
-      system: 'info',
-      violation: 'warning'
-    }
-
     request.get('/notification', params, { silent: true }).then(function (data) {
       var list = data && data.list ? data.list : (Array.isArray(data) ? data : [])
       var unreadCount = 0
+      list = (list || []).map(function (row) { return notificationPresenter.present(row, auth.getUserRole()) })
       ;(list || []).forEach(function (n) {
         if (!n.isRead && !n.is_read) unreadCount++
-        n.icon = categoryIconMap[n.category] || 'info'
       })
       that.setData({
         notifications: list || [],
@@ -90,18 +72,7 @@ Page({
       this.markAsRead(id)
     }
 
-    if (item.relatedId || item.related_id) {
-      var relatedId = item.relatedId || item.related_id
-      if (item.category === 'audit' || item.category === 'reminder') {
-        wx.navigateTo({
-          url: '/pages/reservation-detail/reservation-detail?id=' + relatedId
-        })
-      } else if (item.category === 'credit') {
-        wx.navigateTo({
-          url: '/pages/credit-detail/credit-detail'
-        })
-      }
-    }
+    if (item.targetUrl) wx.navigateTo({ url: item.targetUrl })
   },
 
   markAsRead: function (id) {

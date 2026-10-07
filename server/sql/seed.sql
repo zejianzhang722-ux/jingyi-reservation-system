@@ -27,7 +27,7 @@ INSERT INTO rooms (id, name, type, building_id, floor, location, area, capacity,
 (18, 'D132学业辅导中心', 'study_center', 3, 1, 'D座1楼132', NULL, NULL, '08:00', '22:00', 180, 0, 0, 'D座1楼学业辅导中心', 'WiFi,白板,空调', 'open'),
 (19, 'C210生涯发展咨询室', 'career_center', 2, 2, 'C座2楼210', NULL, NULL, '08:00', '22:00', 120, 0, 0, 'C座2楼生涯发展咨询室', 'WiFi,空调', 'open'),
 (20, 'D134求职就业工作室', 'job_studio', 3, 1, 'D座1楼134', NULL, NULL, '08:00', '22:00', 120, 0, 0, 'D座1楼求职就业工作室', 'WiFi,空调', 'open'),
-(21, 'C228创新工作坊', 'innovation_workshop', 2, 2, 'C座2楼228', NULL, NULL, '08:00', '22:00', 180, 0, 0, 'C座2楼创新工作坊', 'WiFi,3D打印机,工具,空调', 'open'),
+(21, 'C228创新工作坊', 'innovation_workshop', 2, 2, 'C座2楼228', NULL, 15, '08:00', '22:00', 180, 0, 0, 'C座2楼创新工作坊', 'WiFi,3D打印机,工具,空调', 'open'),
 (22, 'D128党团活动室', 'party_room', 3, 1, 'D座1楼128', NULL, NULL, '08:00', '22:00', 180, 0, 0, 'D座1楼党团活动室', 'WiFi,投影,空调', 'open'),
 (23, 'C102国防教育工作室', 'national_defense_studio', 2, 1, 'C座1楼102', NULL, NULL, '08:00', '22:00', 120, 0, 0, 'C座1楼国防教育工作室', 'WiFi,空调', 'open'),
 (24, 'C129导师交流室', 'mentor_room', 2, 1, 'C座1楼129', NULL, NULL, '08:00', '22:00', 120, 0, 0, 'C座1楼导师交流室', 'WiFi,白板,空调', 'open'),
@@ -93,7 +93,7 @@ INSERT INTO seats (room_id, seat_number, row_num, col_num, status, has_power) VA
 
 INSERT INTO admins (id, username, password, real_name, role, building_id, scope_type, phone, status) VALUES
 (1, 'admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 'admin', NULL, 'global', '13800000001', 'active'),
-(2, 'superadmin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '超级管理员', 'super_admin', NULL, 'global', '13800000002', 'active'),
+(2, 'superadmin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '导生会会长团', 'super_admin', NULL, 'global', '13800000002', 'active'),
 (3, 'counselor', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '辅导员', 'counselor', NULL, 'global', '13800000003', 'active');
 
 INSERT INTO users (id, openid, nickname, name, avatar, phone, student_id, student_no, card_no, real_name, gender, college, major, grade, class_name, building_id, room_number, role, credit_score, status) VALUES

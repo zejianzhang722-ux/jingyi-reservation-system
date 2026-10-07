@@ -1,3 +1,4 @@
+var bookingPolicy = require('../../utils/room-booking-policy')
 Component({
   properties: {
     room: {
@@ -9,6 +10,7 @@ Component({
   data: {
     statusColor: '#D9D9D9',
     statusText: '未知',
+    showAvailability: true,
     freeRate: '0%'
   },
 
@@ -32,9 +34,14 @@ Component({
         text = '已满'
       }
 
+      var policy = bookingPolicy.forRoom(room)
+      if (policy.counselorOnly) { color = '#FA8C16'; text = '仅辅导员预约' }
+      else if (room.status === 'closed' || room.status === 'maintenance' || room.status === 'counselor_only') { color = '#999999'; text = room.status === 'maintenance' ? '维护中' : room.status === 'counselor_only' ? '仅辅导员预约' : '关闭' }
+      else if (bookingPolicy.blockReason(room, policy.groupOnly ? 'group' : 'personal')) { color = '#999999'; text = '关闭' }
       this.setData({
         statusColor: color,
         statusText: text,
+        showAvailability: ['closed', 'maintenance', 'counselor_only'].indexOf(room.status) < 0 && !policy.counselorOnly && !bookingPolicy.blockReason(room, policy.groupOnly ? 'group' : 'personal'),
         freeRate: rate + '%'
       })
     }

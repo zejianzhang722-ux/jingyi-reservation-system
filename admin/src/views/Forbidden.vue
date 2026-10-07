@@ -1,6 +1,6 @@
 <template>
   <div class="forbidden-page">
-    <el-result icon="warning" title="无权访问" sub-title="当前账号没有权限访问该页面，请切换账号或联系超级管理员调整权限。">
+    <el-result icon="warning" title="无权访问" sub-title="当前账号没有权限访问该页面，请切换账号或联系导生会会长团调整权限。">
       <template #extra>
         <el-button type="primary" @click="$router.push('/dashboard')">返回工作台</el-button>
       </template>

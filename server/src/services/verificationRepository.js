@@ -31,13 +31,21 @@ async function atomic(work, attempt = 0) {
     const run = queue.then(async () => {
       const original = mockState();
       const draft = JSON.parse(JSON.stringify(original));
-      const result = await work({ mock: draft, query: db.query });
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file + '.tmp', JSON.stringify(draft), 'utf8');
-      fs.renameSync(file + '.tmp', file);
-      state = draft;
-      applySnapshots(state);
-      return result;
+      const runner = { mock: draft, query: db.query, claimedReservations: [] };
+      try {
+        const result = await work(runner);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file + '.tmp', JSON.stringify(draft), 'utf8');
+        fs.renameSync(file + '.tmp', file);
+        state = draft;
+        applySnapshots(state);
+        return result;
+      } catch (err) {
+        for (const reservation of runner.claimedReservations) {
+          if (reservation.status === 'checked_in') reservation.status = 'approved';
+        }
+        throw err;
+      }
     });
     queue = run.catch(() => {});
     return run;
@@ -72,9 +80,15 @@ async function findSuccess(runner, reservationId) {
   return rows[0];
 }
 async function applyCheckin(runner, reservation, geoColumns) {
+  const window = require('./checkinWindowPolicy').windowStatus(reservation);
+  if (!window.eligible) throw policy.error(window.reason, 400, 'OUTSIDE_WINDOW');
   const [existing] = await runner.query('SELECT id FROM checkins WHERE reservation_id = ?', [reservation.id]);
   if (existing.length) throw policy.error('已经办理签到，请勿重复签到', 409, 'ALREADY_CHECKED_IN');
   if (runner.mock) {
+    const current = require('../config/mock-db').__tables.reservations.find(r => Number(r.id) === Number(reservation.id));
+    if (!current || current.status !== 'approved') throw policy.error('预约状态已变化，请刷新后重试', 409, 'STATUS_CHANGED');
+    runner.claimedReservations.push(current);
+    current.status = 'checked_in';
     runner.mock.checkins = runner.mock.checkins || [];
     runner.mock.checkins.push({ reservation_id: Number(reservation.id), user_id: Number(reservation.user_id), room_id: Number(reservation.room_id), reservation_date: String(reservation.date).slice(0, 10), checkin_time: new Date().toISOString(), created_at: new Date().toISOString(), checkout_time: null, checkin_type: 'qrcode', ...geoColumns });
     return;

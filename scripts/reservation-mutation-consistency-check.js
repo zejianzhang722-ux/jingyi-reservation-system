@@ -38,7 +38,7 @@ async function main() {
 
   const first = await reservationService.createReservation({
     userId: 1,
-    roomId: 8,
+    roomId: 13,
     date,
     startTime: '18:00',
     endTime: '19:00',
@@ -61,7 +61,7 @@ async function main() {
 
   const second = await reservationService.createReservation({
     userId: 2,
-    roomId: 8,
+    roomId: 13,
     date,
     startTime: '18:00',
     endTime: '19:00',

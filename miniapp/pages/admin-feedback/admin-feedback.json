@@ -1,1 +1,6 @@
-{ "navigationBarTitleText": "反馈管理" }
+{
+  "navigationBarTitleText": "反馈管理",
+  "usingComponents": {
+    "app-dialog": "/components/app-dialog/app-dialog"
+  }
+}

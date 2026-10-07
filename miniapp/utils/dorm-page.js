@@ -2,15 +2,16 @@ var auth = require('./auth')
 var request = require('./request')
 function key() { return 'mini_' + Date.now() + '_' + Math.random().toString(36).slice(2) }
 var labels = { ready: '待确认', passed: '签到成功', duplicate: '已签到', exception: '现场异常', rejected: '核验失败' }
-var statusLabels = { approved: '待签到', checked_in: '使用中 · 已签到', completed: '已完成', pending: '待审核', pending_counselor: '待辅导员审核', cancelled: '已取消', rejected: '未通过', noshow: '未到场' }
+var statusLabels = { approved: '待签到', checked_in: '使用中 · 已签到', completed: '已完成', pending: '待审核', counselor_pending: '待辅导员审核', cancelled: '已取消', rejected: '未通过', noshow: '未到场' }
 function today() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) }
 module.exports = function (section) { return {
   data: { me: null, credential: '', result: null, identity: false, note: '', busy: false, error: '', records: [], page: 1, total: 0, reservationId: '', outcomeIndex: 0, outcomes: ['全部', '签到成功', '重复核验', '现场异常', '核验失败'], canResolve: false, uncertain: false },
-  onLoad: function () {
+  onLoad: function (options) {
     this.setData({ section: section, sectionTitle: { home: '宿管工作台', reservations: '预约查询', scan: '扫码办理签到', records: '签到记录', spaces: '空间监控' }[section], spaces: [], spaceFilter: 0, spaceFilters: ['全部房间', '使用中', '待签到', '无使用记录', '未开放'], spaceSearch: '', spaceError: '' })
     if (!auth.isLoggedIn() || !auth.isAdmin()) { wx.reLaunch({ url: '/pages/login/login' }); return }
     var self = this
-    this.setData({ reservationDate: today(), reservations: [], reservationPage: 1, reservationTotal: 0, reservationSearch: '', reservationStatusIndex: 0, reservationStatuses: ['全部预约', '待签到', '使用中 · 已签到', '已完成'], summary: { total: 0, waiting: 0, checkedIn: 0, finished: 0 }, reservationError: '' })
+    var date = options && /^\d{4}-\d{2}-\d{2}$/.test(options.date || '') ? options.date : today()
+    this.setData({ reservationDate: date, reservations: [], reservationPage: 1, reservationTotal: 0, reservationSearch: '', reservationStatusIndex: 0, reservationStatuses: ['全部预约', '待签到', '使用中 · 已签到', '已完成'], summary: { total: 0, waiting: 0, checkedIn: 0, finished: 0 }, reservationError: '' })
     request.get('/verification/me').then(function (me) { self.setData({ me: me, canResolve: me.canResolve }); self.refreshSection() }).catch(function (e) { self.setData({ error: e.message || '岗位权限加载失败，请重新登录' }) })
   },
   openSection: function (e) { var paths = { reservations: 'dorm-reservations', scan: 'dorm-scan', records: 'dorm-records', spaces: 'dorm-spaces' }; var next = paths[e.currentTarget.dataset.section]; if (next) wx.navigateTo({ url: '/pages/' + next + '/' + next }) },
@@ -32,7 +33,7 @@ module.exports = function (section) { return {
     var self = this; var version = this._reservationVersion = (this._reservationVersion || 0) + 1
     return request.get('/verification/reservations', { date: this.data.reservationDate, status: ['', 'approved', 'checked_in', 'completed'][this.data.reservationStatusIndex], q: this.data.reservationSearch, page: this.data.reservationPage, pageSize: 6 }, { silent: true }).then(function (r) {
       if (version !== self._reservationVersion) return
-      self.setData({ reservations: r.list.map(function (item) { item.label = statusLabels[item.status] || item.status; return item }), reservationTotal: r.total, summary: r.summary || { total: 0, waiting: 0, checkedIn: 0, finished: 0 }, reservationError: '' })
+      self.setData({ reservations: r.list.map(function (item) { item.label = statusLabels[item.status] || '状态待确认'; return item }), reservationTotal: r.total, summary: r.summary || { total: 0, waiting: 0, checkedIn: 0, finished: 0 }, reservationError: '' })
     }).catch(function () { if (version === self._reservationVersion) self.setData({ reservations: [], reservationError: '预约加载失败，请下拉刷新' }) })
   },
   input: function (e) { var next = {}; next[e.currentTarget.dataset.field] = e.detail.value; this.setData(next) },

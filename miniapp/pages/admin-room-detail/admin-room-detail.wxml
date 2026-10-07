@@ -1,0 +1,16 @@
+<view class="management-page">
+  <view class="management-state" wx:if="{{loading}}">正在读取空间信息</view>
+  <view class="management-state" wx:elif="{{error}}"><text>{{error}}</text><button class="ui-btn ui-btn-secondary" bindtap="onRetry">重新加载</button></view>
+  <block wx:elif="{{room}}">
+    <view class="management-card"><text class="management-note">空间管理 · {{room.building_name || room.location}}</text><text class="management-title">{{room.name}}</text><text class="room-status status-{{room.status}}">{{room.statusLabel}}</text>
+      <view class="management-row"><text class="management-label">位置</text><text class="management-value">{{room.location || '未填写'}}</text></view>
+      <view class="management-row"><text class="management-label">容量</text><text class="management-value">{{room.capacity}} 人</text></view>
+      <view class="management-row"><text class="management-label">开放时间</text><text class="management-value">{{room.opening}}</text></view>
+      <view class="management-row"><text class="management-label">单次最长</text><text class="management-value">{{room.max_duration || '未设置'}} 分钟</text></view>
+      <text class="management-note">{{room.bookingPolicy.message || '按空间预约规则使用'}}</text>
+    </view>
+    <view class="management-card"><text class="management-title">使用与预约</text><text class="management-note">时段安排仅供查看；查看已有预约和审核请进入预约记录。</text><view class="management-actions"><button class="ui-btn ui-btn-primary" bindtap="onViewReservations">预约记录</button><button class="ui-btn ui-btn-secondary" bindtap="onSchedule">时段安排（只读）</button></view></view>
+    <view class="management-card" wx:if="{{canConfigure}}"><text class="management-title">空间设置</text><text class="management-note">调整基本信息和使用状态。D128 的辅导员预约方式仍按空间规则执行。</text><view class="management-actions"><button class="ui-btn ui-btn-secondary" bindtap="onEdit" disabled="{{saving}}">编辑信息</button><button class="ui-btn ui-btn-secondary" bindtap="onStatus" disabled="{{saving}}" loading="{{saving}}">调整状态</button></view></view>
+    <view class="management-card"><text class="management-title">定时状态安排</text><text class="management-note">长期状态：{{room.baseStatusLabel}}。定时安排结束后自动恢复。</text><text class="management-note" wx:if="{{!room.statusSchedules.length}}">暂无定时安排</text><view wx:for="{{room.statusSchedules}}" wx:key="startAt"><text class="management-value">{{item.statusLabel}}</text><text class="management-note">{{item.startAt}} 至 {{item.endAt}}</text><button wx:if="{{canConfigure}}" class="ui-btn ui-btn-secondary" data-index="{{index}}" bindtap="onCancelStatusSchedule" disabled="{{saving}}">取消安排</button></view></view><view class="management-card" wx:if="{{!canConfigure}}"><text class="management-note">当前账号可查看使用情况；空间基础设置由会长团维护。</text></view>
+  </block>
+</view><app-dialog id="app-dialog" />

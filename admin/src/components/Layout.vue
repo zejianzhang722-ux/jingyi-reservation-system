@@ -136,7 +136,7 @@
             <el-dropdown @command="handleCommand">
               <span class="user-info">
                 <el-avatar :size="32" class="user-avatar">{{ avatarText }}</el-avatar>
-                <span class="user-name">{{ userStore.userInfo.realName || userStore.userInfo.username || '管理员' }}</span>
+                <span class="user-name">{{ displayName }}</span>
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -233,14 +233,15 @@ const filteredQuickEntries = computed(() => {
   if (!keyword) return quickEntries.value
   return quickEntries.value.filter(item => `${item.title} ${item.description}`.toLowerCase().includes(keyword))
 })
-const avatarText = computed(() => {
-  const name = userStore.userInfo.realName || userStore.userInfo.username || '管'
-  return name.charAt(0)
+const displayName = computed(() => {
+  const name = userStore.userInfo.realName || userStore.userInfo.username || '管理员'
+  return ['super_admin', 'superadmin'].includes(userStore.userInfo.role) && name === '超级管理员' ? '导生会会长团' : name
 })
+const avatarText = computed(() => displayName.value.charAt(0))
 
 const roleMap = {
   dorm_manager: '宿管',
-  super_admin: '超级管理员',
+  super_admin: '导生会会长团',
   admin: '导生管理员',
   counselor: '辅导员'
 }
@@ -390,12 +391,12 @@ function handleGroupClose(groupKey) {
 
 async function syncVisibleMenu(options = {}) {
   await nextTick()
-  if (isCollapse.value || !menuRef.value) return
+  if (isCollapse.value || !menuRef.value || !userStore.token || !navigation.value.length) return
   menuSyncDepth += 1
   try {
     menuSync.sync(
       menuRef.value,
-      openGroups.value,
+      openGroups.value.filter(key => navigation.value.some(group => group.key === key)),
       findActiveGroupKey(navigation.value, route.path),
       options
     )

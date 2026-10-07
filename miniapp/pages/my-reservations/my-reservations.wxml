@@ -33,11 +33,13 @@
           <text class="reservation-date">{{item.date}} {{item.start_time}}-{{item.end_time}}</text>
           <text class="reservation-purpose" wx:if="{{item.purpose}}">{{item.purpose}}</text>
         </view>
-        <view class="reservation-actions" wx:if="{{item.canCancel || item.canCheckIn}}">
+        <view class="reservation-actions" wx:if="{{item.canCancel || item.canCheckIn || item.canViewVoucher}}">
           <view class="action-btn action-cancel" wx:if="{{item.canCancel}}"
                 data-id="{{item.id}}" catchtap="onCancel">取消预约</view>
           <view class="action-btn action-checkin" wx:if="{{item.canCheckIn}}"
                 data-id="{{item.id}}" catchtap="onCheckIn">签到</view>
+          <view class="action-btn action-checkin" wx:if="{{item.canViewVoucher}}"
+                data-id="{{item.id}}" catchtap="onQRCode">凭证码</view>
         </view>
       </view>
     </view>

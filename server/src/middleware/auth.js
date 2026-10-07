@@ -8,8 +8,8 @@ const loadCurrentPrincipal = async function(decoded) {
   if (!decoded || !decoded.id) return null;
 
   if (decoded.role === 'student') {
-    const [rows] = await db.query('SELECT id, role, status, building_id, openid FROM users WHERE id = ?', [Number(decoded.id)]);
-    if (!rows.length || rows[0].status === 'banned') return null;
+    const [rows] = await db.query('SELECT id, role, status, restricted_until, building_id, openid FROM users WHERE id = ?', [Number(decoded.id)]);
+    if (!rows.length || require('../services/creditBookingPolicy').isAccountDisabled(rows[0])) return null;
     return Object.assign({}, decoded, {
       role: rows[0].role || 'student',
       buildingId: rows[0].building_id,
@@ -71,6 +71,7 @@ const auth = async function(req, res, next) {
     const routePath = String(req.originalUrl || '').split('?')[0];
     if (currentPrincipal.role === 'dorm_manager' &&
         !/^\/api\/v1\/verification(?:\/|$)/.test(routePath) &&
+        !/^\/api\/v1\/notification(?:\/|$)/.test(routePath) &&
         routePath !== '/api/v1/auth/logout') {
       return response.error(res, '宿管仅可访问现场核验与本人会话功能', 403);
     }

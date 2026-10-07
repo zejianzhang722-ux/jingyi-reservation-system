@@ -1,8 +1,8 @@
 <view class="timeline-wrapper">
-  <scroll-view class="timeline-scroll-x" scroll-x="true" scroll-left="{{scrollLeft}}" bindscroll="onScroll" enhanced="true" show-scrollbar="{{true}}">
+  <scroll-view class="timeline-scroll-x" scroll-x="true" scroll-y="true" scroll-left="{{scrollLeft}}" bindscroll="onScroll" enhanced="true" show-scrollbar="{{true}}" bounces="{{false}}">
     <view class="timeline-inner" style="width:{{totalWidth + seatLabelWidth}}rpx">
       <view class="timeline-header">
-        <view class="timeline-header-label" style="width:{{seatLabelWidth}}rpx">座位</view>
+        <view class="timeline-header-label" style="width:{{seatLabelWidth}}rpx">{{mode === 'seat' ? '座位' : '空间'}}</view>
         <view class="timeline-header-hours">
           <view class="timeline-hour {{item.isHalf ? 'timeline-hour-half' : ''}}" wx:for="{{hours}}" wx:key="value" style="width:{{halfHourWidth}}rpx">
             <text wx:if="{{!item.isHalf}}">{{item.label}}</text>
@@ -12,14 +12,12 @@
 
       <view class="timeline-body">
         <view class="timeline-row" wx:for="{{processedTimeline}}" wx:key="seatId">
-          <view class="timeline-seat-label" style="width:{{seatLabelWidth}}rpx">{{item.seatName}}</view>
+          <view class="timeline-seat-label" style="width:{{seatLabelWidth}}rpx">{{item.seatName || '整间'}}</view>
           <view class="timeline-blocks" style="width:{{totalWidth}}rpx"
-                data-seat-id="{{item.seatId}}"
-                bindtouchstart="onBlockTouchStart"
-                bindtouchmove="onBlockTouchMove"
-                bindtouchend="onBlockTouchEnd">
+                data-seat-id="{{item.seatId}}">
             <view class="timeline-block timeline-block-{{block.type}}"
-                  wx:for="{{item.blocks}}" wx:for-item="block" wx:key="start"
+                  id="slot-{{item.seatId || 'room'}}-{{blockIndex}}"
+                  wx:for="{{item.blocks}}" wx:for-item="block" wx:for-index="blockIndex" wx:key="start"
                   style="{{block.style}}"
                   data-seat-id="{{item.seatId}}"
                   data-type="{{block.type}}"

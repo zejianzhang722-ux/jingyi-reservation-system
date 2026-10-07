@@ -40,7 +40,7 @@ const loadAdminScope = async function(req, res, next) {
     if (admin.status !== 'active') return scopeError(res, '管理员账号已禁用', 403);
     if (databaseRole !== tokenRole) return scopeError(res, '管理员权限已变化，请重新登录', 401);
     const scope = resolveScope(admin);
-    if (!scope) return scopeError(res, '管理员数据范围尚未明确，请由超级管理员设置为全院或指定楼栋', 403);
+    if (!scope) return scopeError(res, '管理员数据范围尚未明确，请由导生会会长团设置为全院或指定楼栋', 403);
     req.adminScope = {
       adminId: Number(admin.id),
       role: databaseRole,

@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const config = require('../config');
 const { normalizeAdminScope } = require('../utils/adminScope');
 const privacyAuditService = require('../services/privacyAuditService');
+const adminName = require('../utils/adminNamePresenter');
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'counselor', 'dorm_manager'];
 const STUDENT_ROLE = 'student';
@@ -96,8 +97,8 @@ async function getAdminRows() {
       rawId: row.id,
       accountType: 'manager',
       username: row.username,
-      realName: row.real_name || row.username || '',
-      name: row.real_name || row.username || '',
+      realName: adminName(row.real_name, role) || row.username || '',
+      name: adminName(row.real_name, role) || row.username || '',
       role: role,
       buildingId: row.building_id,
       buildingName: row.building_name || '',
@@ -143,7 +144,7 @@ const getAccounts = async function(req, res) {
     const { page = 1, pageSize = 20, role, status, keyword } = req.query;
     const requestedAccountType = req.query.accountType || 'manager';
     const operatorRole = normalizeRole(req.user && req.user.role);
-    if (operatorRole !== 'super_admin') return response.error(res, '仅超级管理员可管理账号', 403);
+    if (operatorRole !== 'super_admin') return response.error(res, '仅导生会会长团可管理账号', 403);
     const allowedRoles = allowedRolesFor(operatorRole);
     const requestedRole = role ? normalizeRole(role) : null;
 
@@ -278,7 +279,7 @@ const updateAccount = async function(req, res) {
       return response.success(res, null, '更新成功');
     }
 
-    if (normalizeRole(req.user.role) !== 'super_admin') return response.error(res, '仅超级管理员可修改管理账号', 403);
+    if (normalizeRole(req.user.role) !== 'super_admin') return response.error(res, '仅导生会会长团可修改管理账号', 403);
     const [admins] = await db.query('SELECT id, role, building_id, scope_type FROM admins WHERE id = ?', [account.id]);
     if (!admins.length) return response.error(res, '管理员账号不存在', 404);
     const isCurrentAdmin = Number(req.user.id) === Number(account.id);
@@ -346,7 +347,7 @@ const deleteAccount = async function(req, res) {
     if (!admins.length) return response.error(res, '管理员账号不存在', 404);
     if (Number(req.user.id) === Number(account.id)) return response.error(res, '不能停用当前登录账号', 409);
     const targetRole = normalizeRole(admins[0].role);
-    if (targetRole === 'super_admin') return response.error(res, '不能删除超级管理员账号', 403);
+    if (targetRole === 'super_admin') return response.error(res, '不能删除导生会会长团账号', 403);
     if (!canManageRole(req.user.role, targetRole)) return response.error(res, '权限不足', 403);
     await db.query("UPDATE admins SET status = 'disabled' WHERE id = ?", [account.id]);
     await logOperation(req.user.id, 'delete_admin_account', 'admins', account.id, '禁用管理员账号');

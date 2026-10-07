@@ -25,7 +25,18 @@
 - 非 root 容器、数据库发布门禁、蓝绿切换和应用回滚；
 - 慢查询指纹、连接池监控、性能索引和容量回归。
 
-## 本地启动
+## 2026-10-07 更新
+
+- 会长团、辅导员、普通管理员与宿管的权限、菜单和扫码流程分别校验，核验完成停留在自身流程。
+- 信用分仅影响预约日期、同类每日次数和可预约时段，不因低信用分限制登录。
+- 功能房支持长期状态与指定日期时间的定时状态，到期恢复长期状态；未来关闭、维护时段不能新预约。
+- 小程序与网页同步完善房间管理、信用搜索与设置、海报详情和图片、拒绝理由及规则说明。
+- 预约次数、冲突、组团独占、共享容量、取消和修改、提醒等近期规则一并核对；D128仍需联系辅导员预约。
+
+更新与升级说明：[2026-10-07 更新记录](CHANGELOG.md)、[数据库升级与验证](docs/upgrade-20261007.md)。
+完整核对：[近期两端改动检查记录](docs/qa/20261007-room-status-recent-cross-client-audit.md)。
+
+## 本地启动步骤
 
 ```bash
 npm run install:all
@@ -65,6 +76,7 @@ npm run check:backup-recovery
 npm run check:release
 npm run check:performance
 npm run check:acceptance
+npm run check:comprehensive
 ```
 
 真实 MySQL、Redis 与启动后 API 检查由 GitHub Actions 执行。后端集成测试使用 `cd server && npm run test:integration`，管理后台构建使用 `cd admin && npm run build`。
@@ -92,6 +104,10 @@ npm run check:acceptance
 - `docs/backup-recovery-dr-runbook.md`
 - `docs/observability-audit-runbook.md`
 - `docs/reservation-consistency-rollout.md`
+- `docs/upgrade-20261007.md`
+- `docs/reservation-policy-20261006.md`
+- `docs/qa/20261007-credit-booking-only.md`
+- `docs/qa/20261007-room-status-recent-cross-client-audit.md`
 
 ## 生产约束
 

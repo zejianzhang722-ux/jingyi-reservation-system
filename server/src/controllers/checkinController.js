@@ -9,6 +9,7 @@ const reservationLifecycleService = require('../services/reservationLifecycleSer
 const realtimeEventService = require('../services/realtimeEventService');
 const privacyAuditService = require('../services/privacyAuditService');
 const helpers = require('../utils/helpers');
+const checkinWindowPolicy = require('../services/checkinWindowPolicy');
 // 复用 scopedStatsController 的 buildingFilter 数据域过滤模式（无循环依赖）。
 const { buildingFilter } = require('./scopedStatsController');
 
@@ -63,19 +64,8 @@ const checkin = async function(req, res) {
     }
 
     const now = new Date();
-    const today = helpers.formatDate(now);
-    if (String(reservation.date).slice(0, 10) !== today) {
-      return response.error(res, '只能在预约当天签到', 400);
-    }
-
-    const currentMinutes = helpers.timeToMinutes(helpers.formatTime(now));
-    const startMinutes = helpers.timeToMinutes(reservation.start_time);
-    if (currentMinutes < startMinutes - 30) {
-      return response.error(res, '未到签到时间，最早可提前30分钟签到', 400);
-    }
-    if (currentMinutes > startMinutes + config.reservation.lateMinutes) {
-      return response.error(res, '已超过签到时间' + config.reservation.lateMinutes + '分钟', 400);
-    }
+    const window = checkinWindowPolicy.windowStatus(reservation, now);
+    if (!window.eligible) return response.error(res, window.reason, 400);
 
     const [existingCheckin] = await db.query('SELECT id FROM checkins WHERE reservation_id = ?', [reservationId]);
     ensureProductionDatabase();
@@ -110,12 +100,15 @@ const checkin = async function(req, res) {
     ensureProductionTransaction(transactional);
     if (transactional) await connection.beginTransaction();
 
-    // 凭证只在确认数据库事务可用后消费，避免数据库故障导致有效凭证被提前作废。
-    await credentialService.consume(credential, reservation);
-
     const runQuery = transactional
       ? function(sql, params) { return connection.execute(sql, params); }
       : db.query;
+
+    const [lockedRows] = await runQuery('SELECT * FROM reservations WHERE id = ?' + (transactional ? ' FOR UPDATE' : ''), [reservationId]);
+    const latestWindow = lockedRows[0] && checkinWindowPolicy.windowStatus(lockedRows[0]);
+    if (!latestWindow || !latestWindow.eligible) throw Object.assign(new Error(latestWindow ? latestWindow.reason : '预约不存在'), { httpStatus: 400 });
+    if (lockedRows[0].status !== 'approved') throw Object.assign(new Error('预约状态已变化，请刷新后重试'), { httpStatus: 409 });
+    await credentialService.consume(credential, lockedRows[0]);
 
     const [updateResult] = await runQuery(
       "UPDATE reservations SET status = 'checked_in' WHERE id = ? AND status = 'approved'",
@@ -231,6 +224,7 @@ const checkout = async function(req, res) {
   }
 
   await realtimeEventService.publishRoomStatusSafely(checkedOutRoomId, 'checkout');
+  await require('../services/danceGroupNotificationService').notifySafely(Number(req.body.reservationId), true);
   try {
     await creditService.addCredit(
       checkedOutUserId,
@@ -295,6 +289,10 @@ const applyManualCheckinWithinTransaction = async function(runner, options) {
     throw err;
   }
   const reservation = reservations[0];
+  if (options.supplementRequestId === undefined) {
+    const window = checkinWindowPolicy.windowStatus(reservation, options.now || new Date());
+    if (!window.eligible) throw Object.assign(new Error(window.reason), { httpStatus: 400 });
+  }
   if (reservation.status !== 'approved') {
     const err = new Error(reservation.status === 'checked_in' ? '已签到' : statusMessage);
     err.httpStatus = reservation.status === 'checked_in' ? 409 : 400;
@@ -478,16 +476,6 @@ const patrol = async function(req, res) {
         nextStatus: 'noshow',
         allowedCurrentStatuses: ['approved']
       });
-      try {
-        await creditService.addCredit(
-          reservations[0].user_id,
-          config.credit.noshowPenalty,
-          'noshow',
-          '巡查发现爽约'
-        );
-      } catch (creditErr) {
-        logger.error('巡查爽约已提交，但信用扣分失败:', creditErr);
-      }
     }
 
     return response.success(res, null, '巡查记录已提交');

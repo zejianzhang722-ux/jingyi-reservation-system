@@ -154,7 +154,7 @@ const reassign = async function(input) {
   const operator = await loadAdmin(db.query, operatorId);
   if (!operator) throw buildError('操作人不存在', errorCodes.ERROR_CODES.PERMISSION_DENIED, 404);
   if (normalizeRole(operator.role) !== 'super_admin') {
-    throw buildError('仅超级管理员（会长团）可操作岗位交接', errorCodes.ERROR_CODES.PERMISSION_DENIED, 403);
+    throw buildError('仅导生会会长团可操作岗位交接', errorCodes.ERROR_CODES.PERMISSION_DENIED, 403);
   }
 
   const fromAdmin = await loadAdmin(db.query, fromAdminId);

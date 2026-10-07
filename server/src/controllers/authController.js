@@ -8,6 +8,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const wechat = require('../utils/wechat');
 const adminCapabilityService = require('../services/adminCapabilityService');
+const adminName = require('../utils/adminNamePresenter');
 
 const getAdminCapabilities = async function(adminId) {
   try {
@@ -19,28 +20,8 @@ const getAdminCapabilities = async function(adminId) {
 };
 
 const getCalculatedCreditScore = async function(user) {
-  const fallback = parseInt(user.credit_score) || config.credit.initialScore || 100;
-  try {
-    const [logs] = await db.query(
-      'SELECT id, score_change, created_at FROM credits_log WHERE user_id = ? ORDER BY created_at ASC, id ASC LIMIT 200',
-      [user.id]
-    );
-    if (!logs || logs.length === 0) return fallback;
-    logs.sort(function(a, b) {
-      const timeA = new Date(a.created_at || 0).getTime();
-      const timeB = new Date(b.created_at || 0).getTime();
-      if (timeA !== timeB) return timeA - timeB;
-      const changeA = Number(a.score_change) || 0;
-      const changeB = Number(b.score_change) || 0;
-      if ((changeA < 0) !== (changeB < 0)) return changeA < 0 ? -1 : 1;
-      return 0;
-    });
-    return logs.reduce(function(score, log) {
-      return score + (Number(log.score_change) || 0);
-    }, config.credit.initialScore || 100);
-  } catch (err) {
-    return fallback;
-  }
+  const score = user.credit_score === null || user.credit_score === undefined ? NaN : Number(user.credit_score);
+  return Number.isFinite(score) ? score : config.credit.initialScore;
 };
 
 const generateTokens = function(user) {
@@ -147,10 +128,11 @@ const wechatLogin = async function(req, res) {
       }
     }
 
-    if (user.status === 'banned') {
-      return response.error(res, '账号已被封禁', 403);
+    if (require('../services/creditBookingPolicy').isAccountDisabled(user)) {
+      return response.error(res, '账号已被停用', 403);
     }
 
+    await require('../services/creditService').clearLegacyCreditRestriction(user);
     const tokens = generateTokens(user);
     try {
       await redis.set('token:' + user.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
@@ -173,7 +155,6 @@ const wechatLogin = async function(req, res) {
         college: user.college || '',
         major: user.major || '',
         grade: user.grade || '',
-        role: user.role || 'student',
         credit_score: creditScore
       }
     });
@@ -224,8 +205,8 @@ const adminLogin = async function(req, res) {
       userInfo: {
         id: admin.id,
         username: admin.username,
-        name: admin.real_name || admin.username || '',
-        realName: admin.real_name || '',
+        name: adminName(admin.real_name, admin.role) || admin.username || '',
+        realName: adminName(admin.real_name, admin.role) || '',
         role: admin.role,
         buildingId: admin.building_id,
         scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type,
@@ -270,7 +251,7 @@ const adminMiniappLogin = async function(req, res) {
       return response.error(res, '账号角色无效', 403);
     }
     if (admin.role === 'dorm_manager' && !require('../utils/adminScope').normalizeAdminScope(admin.role, admin.scope_type, admin.building_id)) {
-      return response.error(res, '宿管尚未分配负责楼栋，请联系超级管理员', 403);
+      return response.error(res, '宿管尚未分配负责楼栋，请联系导生会会长团', 403);
     }
 
     const tokens = generateTokens({
@@ -291,8 +272,8 @@ const adminMiniappLogin = async function(req, res) {
       userInfo: {
         id: admin.id,
         username: admin.username,
-        name: admin.real_name || admin.username || '',
-        realName: admin.real_name || '',
+        name: adminName(admin.real_name, admin.role) || admin.username || '',
+        realName: adminName(admin.real_name, admin.role) || '',
         role: admin.role,
         buildingId: admin.building_id,
         scopeType: admin.role === 'super_admin' || admin.role === 'counselor' ? 'global' : admin.scope_type,
@@ -322,9 +303,10 @@ const studentLogin = async function(req, res) {
       return response.error(res, '学号或一卡通卡号错误', 401);
     }
     const user = users[0];
-    if (user.status === 'banned') {
-      return response.error(res, '账号已被封禁', 403);
+    if (require('../services/creditBookingPolicy').isAccountDisabled(user)) {
+      return response.error(res, '账号已被停用', 403);
     }
+    await require('../services/creditService').clearLegacyCreditRestriction(user);
     const tokens = generateTokens(user);
     try {
       await redis.set('token:' + user.id, tokens.refreshToken, 'EX', 7 * 24 * 3600);
@@ -346,7 +328,6 @@ const studentLogin = async function(req, res) {
         college: user.college || '',
         major: user.major || '',
         grade: user.grade || '',
-        role: user.role || 'student',
         credit_score: creditScore
       }
     });

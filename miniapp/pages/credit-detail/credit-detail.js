@@ -1,8 +1,10 @@
+var dialog = require('../../utils/dialog')
 var request = require('../../utils/request')
 var util = require('../../utils/util')
 var auth = require('../../utils/auth')
 
 function toNumber(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback
   var n = Number(value)
   return isNaN(n) ? fallback : n
 }
@@ -15,7 +17,7 @@ function normalizeCreditRecord(item, index) {
     reason: item.description || item.reason || '暂无原因',
     type: item.type || 'credit',
     change: change,
-    scoreAfter: item.score_after !== undefined ? item.score_after : (item.score || ''),
+    scoreAfter: item.score_after !== undefined && item.score_after !== null ? item.score_after : (item.score !== undefined && item.score !== null ? item.score : ''),
     time: item.created_at || item.createdAt || item.date || ''
   }
 }
@@ -35,6 +37,8 @@ Page({
     mode: 'credit',
     creditScore: 100,
     creditColorValue: '#52C41A',
+    creditRules: null,
+    creditProgress: 0,
     records: [],
     stats: {
       totalReservations: 0,
@@ -61,24 +65,43 @@ Page({
     var that = this
     request.get('/user/credit', {}, { silent: true }).then(function (data) {
       var cachedUser = auth.getUserInfo() || {}
-      var score = toNumber(data.creditScore !== undefined ? data.creditScore : data.score, toNumber(cachedUser.credit_score || cachedUser.creditScore, 100))
+      var score = toNumber(data.creditScore !== undefined ? data.creditScore : data.score, toNumber(cachedUser.credit_score !== undefined ? cachedUser.credit_score : cachedUser.creditScore, 100))
+      var rules = data.rules || null
       var logs = data.records || data.recentLogs || []
       auth.setUserInfo(Object.assign({}, cachedUser, { credit_score: score, creditScore: score }))
       that.setData({
         creditScore: score,
         creditColorValue: util.getCreditColorValue(score),
+        creditRules: rules,
+        creditProgress: Math.max(0, Math.min(100, score / ((rules && rules.maxScore) || 120) * 100)),
         records: logs.map(normalizeCreditRecord),
         loading: false
       })
     }).catch(function () {
       var cachedUser = auth.getUserInfo() || {}
-      var fallbackScore = toNumber(cachedUser.credit_score || cachedUser.creditScore, 100)
+      var fallbackScore = toNumber(cachedUser.credit_score !== undefined ? cachedUser.credit_score : cachedUser.creditScore, 100)
       that.setData({
         creditScore: fallbackScore,
         creditColorValue: util.getCreditColorValue(fallbackScore),
+        creditProgress: Math.max(0, Math.min(100, fallbackScore / 120 * 100)),
         records: [],
         loading: false
       })
+    })
+  },
+
+  showCreditRules: function () {
+    var rules = this.data.creditRules
+    if (!rules) {
+      wx.showToast({ title: '规则暂未加载，请稍后重试', icon: 'none' })
+      this.loadCreditDetail()
+      return
+    }
+    dialog.show(this, {
+      title: '信用分规则',
+      sections: require('../../utils/credit-rules-presenter').sections(rules),
+      showCancel: false,
+      confirmText: '知道了'
     })
   },
 

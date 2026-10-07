@@ -24,10 +24,10 @@
       </view>
       <view class="notification-content">
         <view class="notification-title-row">
-          <text class="notification-title">{{item.title}}</text>
+          <text class="notification-title">{{item.title || item.typeLabel}}</text>
           <text class="notification-time">{{item.timeAgo || item.createdAt || item.created_at}}</text>
         </view>
-        <text class="notification-body">{{item.content}}</text>
+        <text class="notification-body">{{item.categoryLabel}} · {{item.content || '请查看相关通知详情'}}</text>
       </view>
     </view>
   </view>

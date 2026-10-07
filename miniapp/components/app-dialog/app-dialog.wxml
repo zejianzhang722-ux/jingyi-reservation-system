@@ -1,0 +1,21 @@
+<view wx:if="{{visible}}" class="dialog-overlay" catchtouchmove="stop">
+  <view class="dialog-panel" role="dialog" aria-label="{{title}}">
+    <view class="dialog-heading"><view><text class="dialog-kicker">敬一书院</text><text class="dialog-title">{{title}}</text></view><button class="dialog-close" aria-label="关闭" bindtap="onCancel" disabled="{{busy}}">×</button></view>
+    <scroll-view class="dialog-body" scroll-y="true" style="{{sections.length || fields.length > 2 ? 'height:52vh' : ''}}">
+      <image wx:if="{{imageUrl && !imageError}}" class="dialog-image" src="{{imageUrl}}" mode="widthFix" bindtap="onPreview" binderror="onImageError" /><text wx:if="{{imageError}}" class="field-hint">海报图片暂时无法加载，请稍后重试</text>
+      <text class="dialog-copy" wx:if="{{content}}">{{content}}</text>
+      <view class="dialog-section" wx:for="{{sections}}" wx:key="title" wx:for-item="section">
+        <text class="dialog-section-title">{{section.title}}</text>
+        <view class="dialog-point" wx:for="{{section.items}}" wx:key="*this" wx:for-item="point"><text class="point-dot">•</text><text>{{point}}</text></view>
+      </view>
+      <view wx:if="{{editable}}" class="dialog-form">
+        <text class="field-label">常用理由</text><picker range="{{reasons}}" value="{{reasonIndex}}" bindchange="onPreset"><view class="dialog-select">{{reasons[reasonIndex]}}<text>⌄</text></view></picker>
+        <text class="field-label">具体说明 <text class="field-required">必填</text></text><textarea class="dialog-textarea" value="{{draft}}" placeholder="{{placeholder}}" maxlength="500" bindinput="onInput" adjust-position="true" show-confirm-bar="false" />
+        <text class="field-hint">{{draft.length}} / 500 · 说明将发送给申请人</text>
+      </view>
+      <view class="dialog-field" wx:for="{{fields}}" wx:key="key"><text class="field-label">{{item.label}} <text class="field-required" wx:if="{{item.required}}">必填</text></text><picker wx:if="{{item.type === 'time'}}" mode="time" value="{{item.value}}" data-index="{{index}}" bindchange="onFieldInput"><view class="dialog-select"><text>{{item.value || '选择时间'}}</text><text>⌄</text></view></picker><picker wx:elif="{{item.type === 'date'}}" mode="date" value="{{item.value}}" data-index="{{index}}" bindchange="onFieldInput"><view class="dialog-select"><text>{{item.value || '选择日期'}}</text><text>⌄</text></view></picker><picker wx:elif="{{item.type === 'select'}}" range="{{item.options}}" range-key="label" data-index="{{index}}" bindchange="onFieldInput"><view class="dialog-select"><text>{{item.selectedLabel || '请选择'}}</text><text>⌄</text></view></picker><input wx:else class="dialog-input" type="{{item.type === 'number' ? 'number' : 'text'}}" value="{{item.value}}" placeholder="{{item.placeholder}}" data-index="{{index}}" bindinput="onFieldInput" maxlength="{{item.maxlength || 200}}" /></view>
+      <text wx:if="{{error}}" class="dialog-error">{{error}}</text>
+    </scroll-view>
+    <view class="dialog-actions"><button wx:if="{{showCancel}}" class="ui-btn ui-btn-secondary" bindtap="onCancel" disabled="{{busy}}">取消</button><button class="ui-btn ui-btn-primary" bindtap="onConfirm" loading="{{busy}}" disabled="{{busy}}">{{confirmText}}</button></view>
+  </view>
+</view>

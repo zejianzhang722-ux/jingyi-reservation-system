@@ -44,7 +44,7 @@ function toCard(row) {
     rejectReason: valueOf(row, ['rejectReason', 'reject_reason']),
     status: status,
     isPriority: status === 'counselor_pending',
-    queueLabel: status === 'counselor_pending' ? '重点待审' : '普通待审'
+    queueLabel: status === 'counselor_pending' ? '辅导员审核' : '预约审核'
   })
 }
 

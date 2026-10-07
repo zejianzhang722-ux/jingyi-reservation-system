@@ -48,7 +48,7 @@ async function main() {
   try {
     await waitlistService.joinWaitlist({
       userId: 1,
-      roomId: 8,
+      roomId: 13,
       seatId: 999999,
       date,
       startTime: '10:00',
@@ -61,7 +61,7 @@ async function main() {
 
   const created = await reservationService.createReservation({
     userId: 2,
-    roomId: 8,
+    roomId: 13,
     date,
     startTime: '11:00',
     endTime: '12:00',
@@ -80,7 +80,7 @@ async function main() {
     id: 900000 + Number(created.id),
     reservation_id: created.id,
     user_id: 2,
-    room_id: 8,
+    room_id: 13,
     checkin_time: new Date().toISOString(),
     checkout_time: null,
     checkin_type: 'manual',

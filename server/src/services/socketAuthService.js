@@ -39,12 +39,12 @@ const buildDependencies = function(options) {
 
 const loadStudent = async function(decoded, dependencies) {
   const [rows] = await dependencies.dbClient.query(
-    'SELECT id,nickname,real_name,role,building_id,status FROM users WHERE id = ?',
+    'SELECT id,nickname,real_name,role,building_id,status,restricted_until FROM users WHERE id = ?',
     [decoded.id]
   );
   if (!rows || !rows.length) throw socketError('学生账号不存在', 'SOCKET_ACCOUNT_NOT_FOUND');
   const user = rows[0];
-  if (user.status !== 'active') throw socketError('学生账号当前不可用', 'SOCKET_ACCOUNT_DISABLED');
+  if (require('./creditBookingPolicy').isAccountDisabled(user)) throw socketError('学生账号当前不可用', 'SOCKET_ACCOUNT_DISABLED');
   if (normalizeRole(user.role || 'student') !== 'student') throw socketError('令牌角色与当前账号不一致', 'SOCKET_ROLE_CHANGED');
   return {
     id: Number(user.id),

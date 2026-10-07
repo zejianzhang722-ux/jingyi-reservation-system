@@ -1,3 +1,4 @@
+var dialog = require('../../utils/dialog')
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
@@ -85,7 +86,8 @@ Page({
         return
       }
       var pageList = Array.isArray(data) ? data : ((data && data.list) || [])
-      if (!Array.isArray(pageList)) pageList = []
+      if (!Array.isArray(pageList)) pageList = [];
+      pageList = pageList.map(function(item) { return Object.assign({}, item, { previewUrl: that.imageUrl(item.image_url || item.imageUrl), imageFailed: false }) })
       var previousLength = append ? that.data.list.length : 0
       var list = append ? that.data.list.concat(pageList) : pageList.slice()
       var seenIds = {}
@@ -191,14 +193,30 @@ Page({
     })
   },
 
+  imageUrl: function(value) {
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    if (String(value).indexOf('/uploads/') === 0) return request.getBaseUrl().replace(/\/api\/v1\/?$/, '') + value;
+    return '';
+  },
+  onImageError: function(e) { var id = e.currentTarget.dataset.id; this.setData({ list: this.data.list.map(function(item) { return String(item.id) === String(id) ? Object.assign({}, item, { imageFailed: true }) : item }) }); },
+  onPreview: function(e) { if (!this.ensureAccess()) return; var row = this.data.list.find(function(item) { return String(item.id) === String(e.currentTarget.dataset.id) }); if (row && row.previewUrl && !row.imageFailed) wx.previewImage({ current: row.previewUrl, urls: [row.previewUrl] }); },
+  onViewDetail: function(e) {
+    if (!this.ensureAccess()) return;
+    var row = this.data.list.find(function(item) { return String(item.id) === String(e.currentTarget.dataset.id) }); if (!row) return;
+    dialog.show(this, { title: row.title || '海报申请详情', imageUrl: row.previewUrl, showCancel: false, confirmText: '关闭', sections: [
+      { title: '投放申请', items: ['申请人：' + (row.real_name || row.nickname || '未填写'), '申请组织：' + (row.organization || '未填写'), '投放位置：' + (row.position_name || row.position || '未填写'), '投放日期：' + String(row.start_date || '').slice(0,10) + ' 至 ' + String(row.end_date || '').slice(0,10), '联系信息：' + (row.contact_name || '未填写') + ' ' + (row.contact_phone || '')] },
+      { title: '内容说明', items: [row.description || '未填写内容说明', row.previewUrl ? '点击海报图片可放大查看。' : '申请人未上传海报图片，可填写理由退回补充。'] }
+    ] });
+  },
   onApprove: function (e) {
     if (!this.ensureAccess()) return
     var that = this
     var id = e.currentTarget.dataset.id
     if (this.isProcessing(id)) return
-    wx.showModal({
+    dialog.show(this, {
       title: '通过海报申请',
-      content: '确认通过这份海报投放申请？',
+      content: ((this.data.list.find(function(item) { return String(item.id) === String(id) }) || {}).previewUrl ? '' : '该申请未提供海报图片。') + '确认通过这份海报投放申请？',
       success: function (res) {
         if (!res.confirm) return
         if (!that.ensureAccess() || that.isProcessing(id)) return
@@ -212,8 +230,9 @@ Page({
     var that = this
     var id = e.currentTarget.dataset.id
     if (this.isProcessing(id)) return
-    wx.showModal({
+    dialog.show(this, {
       title: '拒绝海报申请',
+      reasons: ['未提供海报图片', '图片内容需调整', '投放时间需调整', '申请信息不完整'],
       content: '请输入拒绝理由',
       editable: true,
       placeholderText: '请说明需要修改的内容',

@@ -152,8 +152,8 @@ async function main() {
   assertExcludesAll(counselorManage.keys, ['announcement'], '辅导员移动菜单不应包含')
 
   const superAdminManage = getManageKeysForRole('super_admin')
-  assertIncludesAll(superAdminManage.keys, ['pending', 'counselorPending', 'reservation', 'rooms', 'users', 'violations', 'blacklist', 'feedback', 'poster', 'stats'], '超级管理员移动菜单应包含现场业务入口')
-  assertExcludesAll(superAdminManage.keys, ['announcement', 'accounts', 'backup', 'logs', 'config'], '超级管理员移动菜单不应包含电脑专属入口')
+  assertIncludesAll(superAdminManage.keys, ['pending', 'counselorPending', 'reservation', 'rooms', 'users', 'violations', 'blacklist', 'feedback', 'poster', 'stats'], '导生会会长团移动菜单应包含现场业务入口')
+  assertExcludesAll(superAdminManage.keys, ['announcement', 'accounts', 'backup', 'logs', 'config'], '导生会会长团移动菜单不应包含电脑专属入口')
 
   const managePage = counselorManage.page
   assert(typeof managePage.goToStatsOverview === 'function', '管理页应提供数据统计入口')
@@ -182,18 +182,18 @@ async function main() {
 
   const adminPolicy = require('../miniapp/utils/admin-policy')
   assert(adminPolicy.can('admin', 'ordinaryApproval'), '导生管理员应有普通审批能力')
-  assert(!adminPolicy.can('admin', 'counselorApproval'), '导生管理员不应有辅导员重点审核能力')
+  assert(!adminPolicy.can('admin', 'counselorApproval'), '导生管理员不应有辅导员审核能力')
   assert(adminPolicy.can('counselor', 'posterReview'), '辅导员应有海报审核能力')
-  assert(adminPolicy.can('super_admin', 'posterReview'), '超级管理员应复用现场移动能力')
+  assert(adminPolicy.can('super_admin', 'posterReview'), '导生会会长团应复用现场移动能力')
   assert(!adminPolicy.can('unknown', 'reservationView'), '未知角色不应获得移动管理能力')
   assert(adminPolicy.queueType('admin', 'counselor') === 'admin', '导生管理员不能切换到辅导员审批队列')
-  assert(adminPolicy.queueType('counselor', 'counselor') === 'counselor', '辅导员可进入重点审核队列')
-  assert(adminPolicy.queueType('super_admin', 'counselor') === 'counselor', '超级管理员可进入重点审核队列')
+  assert(adminPolicy.queueType('counselor', 'counselor') === 'counselor', '辅导员可进入辅导员审核队列')
+  assert(adminPolicy.queueType('super_admin', 'counselor') === 'counselor', '导生会会长团可进入辅导员审核队列')
   assert(adminPolicy.defaultQueueType('admin') === 'admin', '导生管理员默认进入普通审核')
   assert(adminPolicy.defaultQueueType('counselor') === 'counselor', '辅导员默认进入重点审核')
-  assert(adminPolicy.defaultQueueType('super_admin') === 'counselor', '超级管理员默认优先进入重点审核')
-  assert(adminPolicy.canQuickApprove('admin', 'pending'), '导生管理员可快速处理普通待审')
-  assert(!adminPolicy.canQuickApprove('counselor', 'counselor_pending'), '重点待审不得在卡片直接通过')
+  assert(adminPolicy.defaultQueueType('super_admin') === 'counselor', '导生会会长团默认优先进入重点审核')
+  assert(adminPolicy.canQuickApprove('admin', 'pending'), '导生管理员可快速处理预约审核')
+  assert(!adminPolicy.canQuickApprove('counselor', 'counselor_pending'), '辅导员审核不得在卡片直接通过')
 
   const approvalPresenter = require('../miniapp/utils/admin-approval-presenter')
   const priorityCard = approvalPresenter.toCard({
@@ -217,7 +217,7 @@ async function main() {
   assert(priorityCard.date === '2026-07-17' && priorityCard.timeSlot === '14:00-17:00', '审批卡应统一日期和时间段')
   assert(priorityCard.purpose === '观影活动' && priorityCard.participants === 20, '审批卡应统一用途和参与人数')
   assert(priorityCard.status === 'counselor_pending', '审批卡应保留审核状态')
-  assert(priorityCard.queueLabel === '重点待审' && priorityCard.isPriority, '重点预约应有文字标签')
+  assert(priorityCard.queueLabel === '辅导员审核' && priorityCard.isPriority, '重点预约应有文字标签')
 
   const detailAppJson = require('../miniapp/app.json')
   assert(detailAppJson.pages.indexOf('pages/admin-reservation-detail/admin-reservation-detail') !== -1, 'app.json 应注册管理员预约详情页')
@@ -243,7 +243,7 @@ async function main() {
   assert(ordinaryCard.roomName === 'B228自习室' && ordinaryCard.roomTypeLabel === '自习室' && ordinaryCard.buildingLabel === 'B座', '审批卡应兼容驼峰空间字段')
   assert(ordinaryCard.date === '2026-07-18' && ordinaryCard.timeSlot === '09:00-10:00', '审批卡应兼容驼峰时间字段')
   assert(ordinaryCard.purpose === '用途未填写' && ordinaryCard.participants === 2, '审批卡应兼容驼峰人数并补齐用途')
-  assert(ordinaryCard.status === 'pending' && !ordinaryCard.isPriority && ordinaryCard.queueLabel === '普通待审', '普通预约应有普通待审标签')
+  assert(ordinaryCard.status === 'pending' && !ordinaryCard.isPriority && ordinaryCard.queueLabel === '预约审核', '普通预约应有预约审核标签')
 
   const snakeCaseTimeSlotCard = approvalPresenter.toCard({ time_slot: '18:00-20:00' })
   assert(snakeCaseTimeSlotCard.timeSlot === '18:00-20:00', '审批卡应兼容蛇形时间段字段')
@@ -252,7 +252,7 @@ async function main() {
   assert(fallbackCard.userName === '姓名未提供' && fallbackCard.studentId === '学号未提供', '审批卡应补齐姓名和学号缺省值')
   assert(fallbackCard.roomName === '房间未提供' && fallbackCard.roomTypeLabel === '其他空间' && fallbackCard.buildingLabel === '全院', '审批卡应补齐空间缺省值')
   assert(fallbackCard.purpose === '用途未填写' && fallbackCard.participants === 0, '审批卡应补齐用途和人数缺省值')
-  assert(fallbackCard.queueLabel === '普通待审' && !fallbackCard.isPriority, '缺省状态应按普通待审展示')
+  assert(fallbackCard.queueLabel === '预约审核' && !fallbackCard.isPriority, '缺省状态应按预约审核展示')
 
   const originalPost = request.post
   const originalPut = request.put
@@ -310,17 +310,17 @@ async function main() {
     toastCalls.length = 0
     var usersPage = loadPage('miniapp/pages/admin-users/admin-users.js')
     usersPage.onLoad.call(usersPage)
-    assert(usersPage.data.canManageStudents === false, role + ' 移动端宿生页不得管理账号状态或调分')
+    assert(usersPage.data.canManageStudents === undefined, role + ' 移动端宿生页不应保留宿生管理开关（调分/停用属super_admin 专属，小程序不承载）')
     assert(!capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/user/list' }), role + ' 宿生页 onLoad 只校验权限，不应重复读取')
     usersPage.onShow.call(usersPage)
     assert(capabilityCalls.some(function(call) { return call.method === 'GET' && call.url === '/user/list' }), role + ' 移动端宿生页仍应允许查看列表')
     assert(capabilityCalls.filter(function(call) { return call.method === 'GET' && call.url === '/user/list' }).length === 1, role + ' 宿生页首次 onLoad + onShow 只能读取一次')
-    usersPage.onAdjustCredit.call(usersPage, { currentTarget: { dataset: { id: 1, score: 100 } } })
-    usersPage.onToggleStatus.call(usersPage, { currentTarget: { dataset: { id: 1, nextStatus: 'banned', action: '停用' } } })
-    assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/student-ops/') === 0 }), role + ' 直接调用宿生管理操作也不得发请求')
-    assert(toastCalls.some(function(call) { return call.title === '请在电脑后台处理此项功能' }), role + ' 宿生管理操作应提示前往电脑后台')
+    // 调分/停用入口已整体移除，宿生页不应再暴露任何写操作方法
+    assert(typeof usersPage.onAdjustCredit === 'undefined' && typeof usersPage.onToggleStatus === 'undefined', role + ' 宿生页不应保留调分/停用处理函数')
+    assert(!capabilityCalls.some(function(call) { return call.url.indexOf('/student-ops/') === 0 }), role + ' 宿生页不应发起宿生管理写请求')
   })
-  assert(usersWxml.indexOf('wx:if="{{canManageStudents}}"') !== -1, '宿生页操作区域应受移动端管理能力控制')
+  assert(usersWxml.indexOf('canManageStudents') === -1, '宿生页不应渲染受canManageStudents 控制的按钮组')
+  assert(usersWxml.indexOf('onAdjustCredit') === -1 && usersWxml.indexOf('onToggleStatus') === -1, '宿生页不应残留调分/停用入口')
 
   storage.userInfo.role = 'admin'
   capabilityCalls.length = 0
@@ -1074,14 +1074,14 @@ async function main() {
     var metricCardPattern = new RegExp('<view\\b(?=[^>]*data-target="' + testCase[0] + '")(?=[^>]*bindtap="onMetricTap")(?=[^>]*aria-role="button")[^>]*>')
     assert(metricCardPattern.test(homeWxml), testCase[0] + ' 指标卡应是可点击的无障碍入口')
   })
-  assert(/<view\b(?=[^>]*class="feedback-retry")(?=[^>]*catchtap="onRetryStats")[^>]*>/.test(homeWxml), '反馈统计重试必须阻止触发指标卡导航')
+  assert(/<view\b(?=[^>]*class="[^"]*\bfeedback-retry\b")(?=[^>]*catchtap="onRetryStats")[^>]*>/.test(homeWxml), '反馈统计重试必须阻止触发指标卡导航')
   assert(homeWxml.indexOf('feedbackStatus') !== -1 && homeWxml.indexOf('暂不可用') !== -1, '反馈指标失败时应显示不可用状态而不是可信 0')
   assert(homeWxml.indexOf("queueType === 'admin'") !== -1, '只有普通队列应显示快捷审批操作')
   assert(homeWxml.indexOf("item.status === 'pending'") !== -1, '普通队列也只能为 pending 卡片渲染快捷审批')
   assert(homeSource.indexOf('adminPolicy.canQuickApprove') !== -1, '快捷审批处理函数必须再次按角色和状态校验权限')
-  assert(homeWxml.indexOf('aria-label="切换到普通待审队列"') !== -1 && homeWxml.indexOf('aria-label="切换到重点待审队列"') !== -1, '审批队列切换应提供无障碍名称')
+  assert(homeWxml.indexOf('aria-label="切换到预约审核队列"') !== -1 && homeWxml.indexOf('aria-label="切换到辅导员审核队列"') !== -1, '审批队列切换应提供无障碍名称')
   assert(homeWxml.indexOf('aria-label="扫码签到"') !== -1 && homeWxml.indexOf('aria-label="查看预约详情"') !== -1, '扫码和查看操作应提供无障碍名称')
-  assert(homeWxml.indexOf('aria-label="重新加载反馈统计"') !== -1 && /\.retry-button\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss), '反馈重试应有无障碍名称且列表重试触控高度应不小于 88rpx')
+  assert(homeWxml.indexOf('aria-label="重新加载反馈统计"') !== -1 && /\.retry-button\s*\{[^}]*min-height:\s*(88rpx|var\(--btn-h-md\))/.test(homeWxss), '反馈重试应有无障碍名称且列表重试触控高度应不小于 88rpx')
   assert(homeWxml.indexOf('aria-label="通过预约"') !== -1 && homeWxml.indexOf('aria-label="拒绝预约"') !== -1, '快捷审批操作应提供无障碍名称')
   assert(/\.queue-tab\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss) && /\.scan-checkin-card\s*\{[^}]*min-height:\s*88rpx/.test(homeWxss), '队列和扫码主要触控区高度应不小于 88rpx')
   assert(homeWxml.indexOf('<navigator class="queue-tab') === -1, '队列切换应在当前页面完成，不应重复导航首页')
@@ -1124,7 +1124,7 @@ async function main() {
   storage.userInfo.role = 'super_admin'
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
   homePage.onLoad.call(homePage, {})
-  assert(homePage.data.queueType === 'counselor', '超级管理员首页默认应是重点队列')
+  assert(homePage.data.queueType === 'counselor', '导生会会长团首页默认应是重点队列')
 
   storage.userInfo.role = 'admin'
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
@@ -1137,7 +1137,7 @@ async function main() {
   assert(pendingCall && pendingCall.params.type === 'admin' && pendingCall.params.page === 1 && pendingCall.params.pageSize === 10, '普通审核入口应请求 admin 队列的 /audit/pending')
   assert(!approvalCalls.some(function(call) { return call.url === '/audit/pending' && call.params.type === 'counselor' }), '导生管理员不得请求 counselor 审核队列')
   assert(approvalCalls.some(function(call) { return call.url === '/stats/dashboard' }), '首页统计应只读取统一仪表盘接口')
-  assert(homePage.data.queueType === 'admin' && homePage.data.queueLabel === '普通预约审核', '普通审核入口应显示普通队列标签')
+  assert(homePage.data.queueType === 'admin' && homePage.data.queueLabel === '预约审核', '普通审核入口应显示普通队列标签')
   assert(homePage.data.inUseCount === 7, '首页使用中数量应读取仪表盘真实 usingCount 字段')
   assert(homePage.data.pendingList.length === 1 && homePage.data.pendingList[0].id === 101, '审核列表应处理 list/total/page/pageSize 响应')
   assert(approvalCalls.filter(function(call) { return call.url === '/audit/pending' }).length === 1, '首页首次 onLoad + onShow 只能产生一轮列表请求')
@@ -1186,21 +1186,21 @@ async function main() {
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
   assert(pendingCall && pendingCall.params.type === 'counselor', '辅导员默认应请求 counselor 队列')
-  assert(homePage.data.canSwitchQueue && homePage.data.queueLabel === '辅导员重点审核', '辅导员应可切换队列并显示重点审核标签')
+  assert(homePage.data.canSwitchQueue && homePage.data.queueLabel === '辅导员审核', '辅导员应可切换队列并显示重点审核标签')
 
   approvalCalls.length = 0
   storage.userInfo.role = 'super_admin'
   homePage = loadPage('miniapp/pages/admin-home/admin-home.js')
-  assert(typeof homePage.onQueueChange === 'function', '超级管理员首页应支持页内切换队列')
+  assert(typeof homePage.onQueueChange === 'function', '导生会会长团首页应支持页内切换队列')
   homePage.onLoad.call(homePage, { queueType: 'admin' })
   homePage.onShow.call(homePage)
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
-  assert(pendingCall && pendingCall.params.type === 'admin', '超级管理员应消费明确的普通队列参数')
+  assert(pendingCall && pendingCall.params.type === 'admin', '导生会会长团应消费明确的普通队列参数')
   approvalCalls.length = 0
   homePage.onQueueChange.call(homePage, { currentTarget: { dataset: { type: 'counselor' } } })
   await flushPromises()
-  assert(homePage.data.queueType === 'counselor', '超级管理员应可在当前页切换到重点队列')
+  assert(homePage.data.queueType === 'counselor', '导生会会长团应可在当前页切换到重点队列')
   assert(!navCalls.some(function(call) { return call.url && call.url.indexOf('/pages/admin-home/admin-home?') === 0 }), '队列切换不得重复导航当前首页')
   approvalCalls.length = 0
   homePage.onQueueChange.call(homePage, { currentTarget: { dataset: { type: 'counselor' } } })
@@ -1217,8 +1217,8 @@ async function main() {
   homePage.onShow.call(homePage)
   await flushPromises()
   pendingCall = approvalCalls.find(function(call) { return call.method === 'GET' && call.url === '/audit/pending' })
-  assert(pendingCall && pendingCall.params.type === 'counselor', '超级管理员应消费明确的辅导员队列参数')
-  assert(homePage.data.queueType === 'counselor', '超级管理员首页默认应是重点队列')
+  assert(pendingCall && pendingCall.params.type === 'counselor', '导生会会长团应消费明确的辅导员队列参数')
+  assert(homePage.data.queueType === 'counselor', '导生会会长团首页默认应是重点队列')
 
   const ordinaryQueueRead = deferred()
   const counselorQueueRead = deferred()
@@ -1226,7 +1226,7 @@ async function main() {
     if (url === '/audit/pending') return params.type === 'counselor' ? counselorQueueRead.promise : ordinaryQueueRead.promise
     return Promise.resolve({})
   }
-  homePage.setData({ queueType: 'admin', queueLabel: '普通预约审核', pendingList: [] })
+  homePage.setData({ queueType: 'admin', queueLabel: '预约审核', pendingList: [] })
   homePage.loadPendingList.call(homePage)
   homePage.onQueueChange.call(homePage, { currentTarget: { dataset: { type: 'counselor' } } })
   counselorQueueRead.resolve({ list: [{ id: 202, status: 'counselor_pending' }] })
@@ -1351,7 +1351,7 @@ async function main() {
 
   request.get = approvalGet
   metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'priority' } } })
-  assert(navCalls.length === 0, '导生管理员不得通过指标卡进入重点待审')
+  assert(navCalls.length === 0, '导生管理员不得通过指标卡进入辅导员审核')
   metricPage.onMetricTap.call(metricPage, { currentTarget: { dataset: { target: 'feedback' } } })
   assert(navCalls.length === 0, '导生管理员不得通过指标卡进入反馈管理')
 
@@ -1432,11 +1432,11 @@ async function main() {
   }
 
   var ordinaryPreset = await loadReservationPreset('admin', 'ordinary')
-  assert(ordinaryPreset.page.data.filterPreset === 'ordinary' && ordinaryPreset.page.data.filterLabel === '普通待审', '普通预约入口应显示普通待审筛选')
+  assert(ordinaryPreset.page.data.filterPreset === 'ordinary' && ordinaryPreset.page.data.filterLabel === '预约审核', '普通预约入口应显示预约审核筛选')
   assert(ordinaryPreset.call.params.status === 'pending' && ordinaryPreset.call.params.actionable === undefined && ordinaryPreset.call.params.date === undefined, '普通预约入口只应请求 pending 状态')
 
   var priorityPreset = await loadReservationPreset('counselor', 'priority')
-  assert(priorityPreset.page.data.filterPreset === 'priority' && priorityPreset.page.data.filterLabel === '重点待审', '辅导员重点入口应显示重点待审筛选')
+  assert(priorityPreset.page.data.filterPreset === 'priority' && priorityPreset.page.data.filterLabel === '辅导员审核', '辅导员重点入口应显示辅导员审核筛选')
   assert(priorityPreset.call.params.status === 'counselor_pending' && priorityPreset.call.params.actionable === undefined && priorityPreset.call.params.date === undefined, '辅导员重点入口只应请求 counselor_pending 状态')
 
   var actionablePreset = await loadReservationPreset('super_admin', 'actionable')
@@ -1464,12 +1464,12 @@ async function main() {
   assert(unknownPreset.call.params.status === undefined && unknownPreset.call.params.actionable === undefined && unknownPreset.call.params.date === undefined, '未知预约筛选不得透传任何筛选参数')
 
   var deniedPriorityPreset = await loadReservationPreset('admin', 'priority')
-  assert(deniedPriorityPreset.page.data.filterPreset === 'ordinary' && deniedPriorityPreset.page.data.filterLabel === '普通待审', '导生管理员打开重点待审时应降级为普通待审')
-  assert(deniedPriorityPreset.call.params.status === 'pending' && deniedPriorityPreset.call.params.actionable === undefined && deniedPriorityPreset.call.params.date === undefined, '导生管理员不得请求重点待审数据')
+  assert(deniedPriorityPreset.page.data.filterPreset === 'ordinary' && deniedPriorityPreset.page.data.filterLabel === '预约审核', '导生管理员打开辅导员审核时应降级为预约审核')
+  assert(deniedPriorityPreset.call.params.status === 'pending' && deniedPriorityPreset.call.params.actionable === undefined && deniedPriorityPreset.call.params.date === undefined, '导生管理员不得请求辅导员审核数据')
 
   var cachedPriorityPreset = await loadReservationPreset('counselor', 'priority', 'admin')
-  assert(cachedPriorityPreset.page.data.filterPreset === 'ordinary' && cachedPriorityPreset.page.data.filterLabel === '普通待审', '页面缓存期间角色降级后不得沿用重点待审筛选')
-  assert(cachedPriorityPreset.call.params.status === 'pending' && cachedPriorityPreset.call.params.actionable === undefined && cachedPriorityPreset.call.params.date === undefined, '角色降级后的请求必须改为普通待审')
+  assert(cachedPriorityPreset.page.data.filterPreset === 'ordinary' && cachedPriorityPreset.page.data.filterLabel === '预约审核', '页面缓存期间角色降级后不得沿用辅导员审核筛选')
+  assert(cachedPriorityPreset.call.params.status === 'pending' && cachedPriorityPreset.call.params.actionable === undefined && cachedPriorityPreset.call.params.date === undefined, '角色降级后的请求必须改为预约审核')
 
   var accountContextFirstRead = deferred()
   var accountContextCalls = []
@@ -1560,7 +1560,7 @@ async function main() {
   const reservationWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation/admin-reservation.wxml'), 'utf8')
   assert(!Object.prototype.hasOwnProperty.call(reservationPage.data, 'queueType') && !Object.prototype.hasOwnProperty.call(reservationPage.data, 'queueLabel'), '全部预约页不应保留审核队列状态')
   assert(reservationWxml.indexOf('全部预约') !== -1, '全部预约页标题应明确说明展示全部预约')
-  assert(reservationWxml.indexOf('queueLabel') === -1 && reservationWxml.indexOf('普通预约审核') === -1 && reservationWxml.indexOf('辅导员重点审核') === -1, '全部预约页不应显示审核队列标签')
+  assert(reservationWxml.indexOf('queueLabel') === -1 && reservationWxml.indexOf('预约审核') === -1 && reservationWxml.indexOf('辅导员审核') === -1, '全部预约页不应显示审核队列标签')
   assert(approvalCalls.some(function(call) { return call.method === 'GET' && call.url === '/reservation' }), '全部预约页仍应读取 /reservation')
   assert(approvalCalls.filter(function(call) { return call.url === '/reservation' }).length === 1, '全部预约页首次 onLoad + onShow 只能产生一轮列表请求')
   assert(reservationPage.data.list[0].canQuickAudit === true && reservationPage.data.list[1].canQuickAudit === false, '导生管理员只能快捷操作 pending 状态')
@@ -1729,7 +1729,7 @@ async function main() {
 
   storage.userInfo.role = 'admin'
   homePage.applyRole.call(homePage, 'admin', 'admin')
-  homePage.setData({ queueType: 'admin', queueLabel: '普通预约审核', pendingList: [], listStatus: 'loading' })
+  homePage.setData({ queueType: 'admin', queueLabel: '预约审核', pendingList: [], listStatus: 'loading' })
   const homeRequests = [deferred(), deferred()]
   const homeRequestParams = []
   let homeRequestIndex = 0
@@ -1909,7 +1909,7 @@ async function main() {
   assert(detailCalls[0] && detailCalls[0].url === '/reservation/501' && detailCalls[0].options.silent === true, '管理员详情应静默读取指定预约')
   assert(detailPage.data.pageStatus === 'ready' && detailPage.data.reservation.credit_score === 88 && detailPage.data.reservation.user_status === 'active', '详情转换后必须保留信用分和账号状态')
   assert(detailPage.data.reservation.createdAt === '2026-07-18 10:30:00' && detailPage.data.reservation.rejectReason === '材料不完整', '详情转换后必须统一提交时间和拒绝原因字段')
-  assert(detailPage.data.canApprove && detailPage.data.canReject, '导生管理员可审核普通待审预约')
+  assert(detailPage.data.canApprove && detailPage.data.canReject, '导生管理员可审核预约审核预约')
 
   detailFixture.status = 'counselor_pending'
   await detailPage.loadDetail.call(detailPage)
@@ -1919,10 +1919,10 @@ async function main() {
   assert(detailPage.data.canApprove && detailPage.data.canReject, '辅导员可审核重点预约')
   storage.userInfo.role = 'super_admin'
   await detailPage.loadDetail.call(detailPage)
-  assert(detailPage.data.canApprove && detailPage.data.canReject, '超级管理员可审核重点预约')
+  assert(detailPage.data.canApprove && detailPage.data.canReject, '导生会会长团可审核重点预约')
   detailFixture.status = 'pending'
   await detailPage.loadDetail.call(detailPage)
-  assert(detailPage.data.canApprove && detailPage.data.canReject, '超级管理员可审核普通预约')
+  assert(detailPage.data.canApprove && detailPage.data.canReject, '导生会会长团可审核普通预约')
   detailFixture.status = 'approved'
   await detailPage.loadDetail.call(detailPage)
   assert(!detailPage.data.canApprove && !detailPage.data.canReject, '终态预约不得显示审批操作')
@@ -2046,11 +2046,14 @@ async function main() {
   const detailWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxml'), 'utf8')
   const detailWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-reservation-detail/admin-reservation-detail.wxss'), 'utf8')
   assert(detailSource.indexOf('approvalPresenter.toCard') !== -1 && detailSource.indexOf('adminPolicy.can') !== -1, '管理员详情应复用审批展示转换并按能力判断操作')
-  assert(detailWxml.indexOf('重新加载') !== -1 && detailWxml.indexOf('重点审批说明') !== -1 && detailWxml.indexOf('普通待审说明') !== -1, '管理员详情应包含错误重试和两类审批说明')
+  assert(detailWxml.indexOf('重新加载') !== -1 && detailWxml.indexOf('辅导员审核说明') !== -1 && detailWxml.indexOf('预约审核说明') !== -1, '管理员详情应包含错误重试和两类审批说明')
   assert(detailWxml.indexOf('提交时间') !== -1 && detailWxml.indexOf('reservation.createdAt') !== -1, '管理员详情应展示预约提交时间')
   assert(detailWxml.indexOf('拒绝原因') !== -1 && detailWxml.indexOf('reservation.rejectReason') !== -1, '管理员详情在有拒绝原因时应展示原因')
   assert(detailWxml.indexOf('aria-label="通过预约"') !== -1 && detailWxml.indexOf('aria-label="拒绝预约"') !== -1, '详情审批关键操作应有无障碍名称')
-  assert(/\.action-button\s*\{[^}]*min-height:\s*88rpx/.test(detailWxss), '详情审批触控高度应不小于 88rpx')
+  assert(detailWxml.indexOf('ui-btn ui-btn-lg') !== -1, '详情审批操作应使用统一大号按钮 ui-btn-lg')
+  assert(detailWxml.indexOf('is-disabled') !== -1 && detailWxss.indexOf('.action-button[disabled]') === -1, '详情审批禁用态应改用 .is-disabled 类而非属性选择器')
+  const sharedButtonWxss = fs.readFileSync(path.join(root, 'miniapp/styles/button.wxss'), 'utf8')
+  assert(/\.ui-btn-lg\s*\{[^}]*min-height:\s*var\(--btn-h-lg\)/.test(sharedButtonWxss), '统一按钮大号高度应由 --btn-h-lg 提供（96rpx ≥ 88rpx）')
   assert(detailWxss.indexOf('safe-area-inset-bottom') !== -1, '详情底部操作区不得遮挡系统安全区')
 
   request.get = originalGet
@@ -2069,7 +2072,7 @@ async function main() {
   statsPage.onLoad.call(statsPage)
   await flushPromises()
   assert(statsPage.data.pageStatus === 'ready', '统计页合法零值和缺省结构应正常进入就绪状态')
-  assert(statsPage.data.showCounselorPending === false && statsPage.data.dashboard.activeRoomCount === 0, '导生管理员应隐藏重点待审并保留合法零值')
+  assert(statsPage.data.showCounselorPending === false && statsPage.data.dashboard.activeRoomCount === 0, '导生管理员应隐藏辅导员审核并保留合法零值')
   assert(statsPage.data.noshow.totalNoshow === 0 && Array.isArray(statsPage.data.noshow.topNoshowUsers), '统计页应归一化缺失的爽约结构')
   assert(Array.isArray(statsPage.data.creditDistribution) && statsPage.data.creditDistribution[0].levelLabel === '未知', '未知信用等级不得误显示为封禁')
 
@@ -2077,7 +2080,7 @@ async function main() {
   statsPage = loadPage('miniapp/pages/admin-stats/admin-stats.js')
   statsPage.onLoad.call(statsPage)
   await flushPromises()
-  assert(statsPage.data.showCounselorPending === true && statsPage.data.dashboard.counselorPendingCount === 9, '辅导员应显示重点待审')
+  assert(statsPage.data.showCounselorPending === true && statsPage.data.dashboard.counselorPendingCount === 9, '辅导员应显示辅导员审核')
 
   var statsShouldFail = true
   request.get = function(url) {
@@ -2175,8 +2178,8 @@ async function main() {
   var manageBadgePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
   manageBadgePage.onShow.call(manageBadgePage)
   await flushPromises()
-  assert(findManageItem(manageBadgePage, 'pending').badge === 4, '普通预约审核应显示普通待审数量')
-  assert(findManageItem(manageBadgePage, 'counselorPending').badge === 7, '重点预约审核应显示辅导员重点待审数量')
+  assert(findManageItem(manageBadgePage, 'pending').badge === 4, '预约审核应显示预约审核数量')
+  assert(findManageItem(manageBadgePage, 'counselorPending').badge === 7, '辅导员审核应显示辅导员辅导员审核数量')
 
   request.get = function() { return Promise.reject(new Error('network unavailable')) }
   manageBadgePage = loadPage('miniapp/pages/admin-manage/admin-manage.js')
@@ -2233,8 +2236,8 @@ async function main() {
   const manageSource = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.js'), 'utf8')
   const manageWxml = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.wxml'), 'utf8')
   const manageWxss = fs.readFileSync(path.join(root, 'miniapp/pages/admin-manage/admin-manage.wxss'), 'utf8')
-  assert(manageSource.indexOf("name: '普通预约审核'") !== -1 && manageSource.indexOf('共享空间等普通待审预约') !== -1, '普通审核入口应使用管理员能理解的名称和范围说明')
-  assert(manageSource.indexOf("name: '重点预约审核'") !== -1 && manageSource.indexOf('处理需辅导员把关的特殊空间预约') !== -1, '重点审核入口应准确说明需辅导员把关的特殊空间预约')
+  assert(manageSource.indexOf("name: '预约审核'") !== -1 && manageSource.indexOf('共享空间等预约申请') !== -1, '普通审核入口应使用管理员能理解的名称和范围说明')
+  assert(manageSource.indexOf("name: '辅导员审核'") !== -1 && manageSource.indexOf('处理需辅导员把关的特殊空间预约') !== -1, '重点审核入口应准确说明需辅导员把关的特殊空间预约')
   assert(manageWxml.indexOf('entry.badge') !== -1, '管理页审核入口应能展示待办徽标')
   assert(/padding:[^;]*calc\(180rpx \+ env\(safe-area-inset-bottom\)\)/.test(manageWxss), '管理页底部应为固定导航和安全区留足空间')
   assert(manageWxss.indexOf('#667085') !== -1, '管理页说明文字颜色不应过浅')
@@ -2293,9 +2296,9 @@ async function main() {
     var passwordItem = roleProfilePage.data.menuList.find(function(item) { return item.key === 'password' })
     assert(networkItem.name === '连接检查' && networkItem.desc === '检查当前是否能正常连接预约服务', '三类管理员均应看到面向使用者的连接检查说明')
     if (role === 'super_admin') {
-      assert(passwordItem.desc.indexOf('电脑后台') !== -1, '超级管理员账号安全说明应指向电脑后台管理')
+      assert(passwordItem.desc.indexOf('电脑后台') !== -1, '导生会会长团账号安全说明应指向电脑后台管理')
     } else {
-      assert(passwordItem.desc.indexOf('超级管理员') !== -1, role + ' 账号安全说明应提示联系超级管理员')
+      assert(passwordItem.desc.indexOf('导生会会长团') !== -1, role + ' 账号安全说明应提示联系导生会会长团')
     }
   })
   const profilePage = loadPage('miniapp/pages/admin-profile/admin-profile.js')

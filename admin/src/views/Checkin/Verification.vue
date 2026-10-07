@@ -18,7 +18,7 @@
       <el-alert v-if="reservationError" :title="reservationError" type="error" :closable="false" />
       <div v-loading="reservationBusy" class="reservation-cards">
         <article v-for="item in reservations" :key="item.id" class="reservation-card" :class="item.status">
-          <div class="reservation-top"><span class="reservation-number">预约 #{{ item.id }}</span><el-tag :type="statusTone(item.status)" effect="light">{{ statusLabels[item.status] || item.status }}</el-tag></div>
+          <div class="reservation-top"><span class="reservation-number">预约 #{{ item.id }}</span><el-tag :type="statusTone(item.status)" effect="light">{{ statusLabels[item.status] || '状态待确认' }}</el-tag></div>
           <h4>{{ item.roomName }}</h4><div class="reservation-time">{{ item.startTime?.slice(0, 5) }} <span>—</span> {{ item.endTime?.slice(0, 5) }}</div>
           <div class="reservation-person">{{ item.name }} <span>{{ item.studentId }}</span></div>
           <div class="reservation-purpose">{{ item.purpose }} · {{ item.participants }} 人</div>
@@ -55,7 +55,7 @@
             <el-descriptions-item label="预约人">{{ result.reservation.name }} · {{ result.reservation.studentId }}</el-descriptions-item>
             <el-descriptions-item label="功能房">{{ result.reservation.roomName }}</el-descriptions-item>
             <el-descriptions-item label="时段">{{ result.reservation.date }} {{ result.reservation.startTime }}—{{ result.reservation.endTime }}</el-descriptions-item>
-            <el-descriptions-item label="预约状态">{{ statusLabels[result.reservation.status] || result.reservation.status }}</el-descriptions-item>
+            <el-descriptions-item label="预约状态">{{ statusLabels[result.reservation.status] || '状态待确认' }}</el-descriptions-item>
           </el-descriptions>
           <div v-if="result.reservation && !done" class="message">
             <el-checkbox v-model="identityConfirmed">已核对现场身份，与预约人一致</el-checkbox>
@@ -107,8 +107,8 @@ const cameraActive = ref(false), video = ref(null), records = ref([]), recordsBu
 const canResolve = computed(() => me.value?.canResolve === true)
 const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const reservationDate = ref(localDate()), reservationStatus = ref(''), reservationSearch = ref(''), reservations = ref([]), summary = ref({ total: 0, waiting: 0, checkedIn: 0, finished: 0 }), reservationBusy = ref(false), reservationError = ref(''), reservationPage = ref(1), reservationTotal = ref(0), detailVisible = ref(false), selectedReservation = ref(null)
-const statusLabels = { approved: '待签到', checked_in: '使用中 · 已签到', completed: '已完成', pending: '待审核', pending_counselor: '待辅导员审核', cancelled: '已取消', rejected: '未通过', noshow: '未到场' }
-const statusTone = status => ({ approved: 'warning', checked_in: 'success', pending: 'info', pending_counselor: 'info', rejected: 'danger', noshow: 'danger' }[status] || 'info')
+const statusLabels = { approved: '待签到', checked_in: '使用中 · 已签到', completed: '已完成', pending: '待审核', counselor_pending: '待辅导员审核', cancelled: '已取消', rejected: '未通过', noshow: '未到场' }
+const statusTone = status => ({ approved: 'warning', checked_in: 'success', pending: 'info', counselor_pending: 'info', rejected: 'danger', noshow: 'danger' }[status] || 'info')
 let reservationVersion = 0
 function setStatus(status) { reservationStatus.value = status; refreshReservations() }
 function showReservation(item) { selectedReservation.value = item; detailVisible.value = true }

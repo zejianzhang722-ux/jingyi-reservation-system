@@ -27,6 +27,7 @@ async function expectCredentialError(action, expectedStatus, label) {
 }
 
 async function waitForMockRedis() {
+  await redis.ready()
   const deadline = Date.now() + 6000
   while (Date.now() < deadline) {
     if (redis.isMock()) return
@@ -38,14 +39,14 @@ async function waitForMockRedis() {
 function checkClientFlow() {
   const root = path.resolve(__dirname, '..')
   const qrPage = fs.readFileSync(path.join(root, 'miniapp/pages/qrcode/qrcode.js'), 'utf8')
-  const adminHome = fs.readFileSync(path.join(root, 'miniapp/pages/admin-home/admin-home.js'), 'utf8')
+  const adminHome = fs.readFileSync(path.join(root, 'miniapp/utils/dorm-page.js'), 'utf8')
   const reservationList = fs.readFileSync(path.join(root, 'miniapp/pages/my-reservations/my-reservations.js'), 'utf8')
   const reservationDetail = fs.readFileSync(path.join(root, 'miniapp/pages/reservation-detail/reservation-detail.js'), 'utf8')
   const validator = fs.readFileSync(path.join(root, 'server/src/middleware/validator.js'), 'utf8')
 
   assert(/scheduleCredentialRefresh/.test(qrPage), 'QR page must automatically rotate credentials')
   assert(/wx\.scanCode/.test(adminHome), 'administrator miniapp must scan dynamic QR codes')
-  assert(/payload\.credential/.test(adminHome), 'scanner must submit the signed credential')
+  assert(/credential: this\._credential/.test(adminHome) && /request\.post\('\/verification\/confirm', payload\)/.test(adminHome), 'scanner must submit the signed credential')
   assert(!/request\.post\('\/checkin'/.test(reservationList), 'reservation list must not perform credential-free check-in')
   assert(!/request\.post\('\/checkin'/.test(reservationDetail), 'reservation detail must not perform credential-free check-in')
   assert(/请提供动态签到凭证/.test(validator), 'check-in validator must require a dynamic credential')

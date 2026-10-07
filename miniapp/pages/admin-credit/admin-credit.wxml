@@ -1,43 +1,21 @@
 <view class="container motion-page motion-stack">
-  <view class="page-header">
-    <text class="title">信用管理</text>
-    <text class="subtitle">查看违规记录和可用的限制名单</text>
+  <view class="page-header"><text class="title">信用管理</text><text class="subtitle">查询信用记录，管理宿生预约权限</text></view>
+  <view class="tabs"><view class="tab {{activeTab === item.key ? 'active' : ''}}" wx:for="{{tabs}}" wx:key="key" data-key="{{item.key}}" bindtap="onTabTap">{{item.name}}</view></view>
+  <view class="filter-panel">
+    <view class="filter-search"><text class="search-mark">⌕</text><input placeholder="搜索姓名、学号" value="{{keyword}}" bindinput="onSearch" bindconfirm="onSearchConfirm" confirm-type="search" /><button class="search-button" bindtap="onSearchConfirm">搜索</button></view>
+    <view class="filter-row"><picker range="{{activeTab === 'violations' ? violationOptions : creditOptions}}" range-key="label" value="{{filterIndex}}" bindchange="onFilterChange"><view class="filter-select"><text>{{activeTab === 'violations' ? violationOptions[filterIndex].label : creditOptions[filterIndex].label}}</text><text>⌄</text></view></picker><button wx:if="{{activeTab === 'blacklist'}}" class="ui-btn ui-btn-primary setting-button" bindtap="onSetCredit" disabled="{{setting}}">设置信用</button></view>
   </view>
-
-  <view class="tabs">
-    <view class="tab {{activeTab === item.key ? 'active' : ''}}"
-          wx:for="{{tabs}}"
-          wx:key="key"
-          data-key="{{item.key}}"
-          bindtap="onTabTap">{{item.name}}</view>
+  <view class="management-state" wx:if="{{loading}}">正在读取信用记录</view>
+  <view wx:elif="{{activeTab === 'violations'}}">
+    <view class="result-caption"><text>已显示 {{filteredViolations.length}} 条 · 共 {{total}} 条</text><text>违规记录</text></view>
+    <view class="management-card" wx:for="{{filteredViolations}}" wx:key="id"><view class="credit-row"><text class="item-title">{{item.real_name || item.nickname || item.student_id}}</text><text class="score danger">{{item.score}} 分</text></view><text class="item-desc">{{item.student_id || '学号未提供'}} · {{item.description || (item.type === 'noshow' ? '预约爽约' : item.type === 'poster_violation' ? '海报违规' : '违规使用')}}</text><text class="item-time">{{item.created_at || '-'}}</text>
+      <button wx:if="{{tabs.length > 1}}" class="ui-btn ui-btn-secondary credit-detail-button" data-user-id="{{item.user_id}}" bindtap="onViewCredit">查看信用详情</button>
+    </view><view class="management-state" wx:if="{{!filteredViolations.length}}">没有符合条件的违规记录</view><button wx:if="{{hasMore}}" class="ui-btn ui-btn-secondary" bindtap="onMore">加载更多</button>
   </view>
-
-  <view wx:if="{{activeTab === 'violations'}}">
-    <view class="list-card" wx:if="{{violations.length > 0}}">
-      <view class="list-item" wx:for="{{violations}}" wx:key="id">
-        <view class="item-main">
-          <text class="item-title">{{item.real_name || item.nickname || item.student_id}}</text>
-          <text class="item-desc">{{item.description || item.type || '违规记录'}}</text>
-          <text class="item-time">{{item.created_at || '-'}}</text>
-        </view>
-        <text class="score danger">{{item.score}}</text>
-      </view>
-    </view>
-    <view class="empty" wx:else>暂无违规记录</view>
+  <view wx:else>
+    <view class="result-caption"><text>{{filteredBlacklist.length}} 位宿生</text><text>信用仅影响预约权限</text></view>
+    <view class="management-card" wx:for="{{filteredBlacklist}}" wx:key="id"><view class="credit-row"><text class="item-title">{{item.real_name || item.nickname || item.student_id}}</text><text class="score">{{item.credit_score}} 分</text></view><text class="item-desc">{{item.student_id}} · {{item.credit_score < 30 ? '仅当天预约' : item.credit_score < 60 ? '可提前1天预约' : item.credit_score < 80 ? '可提前2天预约' : '可提前3天预约'}}</text><text class="item-time" wx:if="{{item.restricted_until}}">含旧规则限制记录，可清理</text>
+      <view class="management-actions"><button class="ui-btn ui-btn-secondary" data-id="{{item.id}}" bindtap="onViewCredit">查看详情</button><button class="ui-btn ui-btn-primary" data-id="{{item.id}}" bindtap="onSetCredit" disabled="{{setting}}">设置</button><button wx:if="{{item.restricted_until}}" class="ui-btn ui-btn-ghost" data-id="{{item.id}}" bindtap="onUnban">清理旧限制</button></view>
+    </view><view class="management-state" wx:if="{{!filteredBlacklist.length}}">没有符合条件的宿生</view>
   </view>
-
-  <view wx:if="{{activeTab === 'blacklist'}}">
-    <view class="list-card" wx:if="{{blacklist.length > 0}}">
-      <view class="list-item" wx:for="{{blacklist}}" wx:key="id">
-        <view class="item-main">
-          <text class="item-title">{{item.real_name || item.nickname || item.student_id}}</text>
-          <text class="item-desc">信用分 {{item.credit_score}} · {{item.status}}</text>
-          <text class="item-time">限制至 {{item.restricted_until || '未设置'}}</text>
-        </view>
-        <text class="small-btn" data-id="{{item.id}}" bindtap="onUnban">解除</text>
-      </view>
-    </view>
-    <view class="empty" wx:else>暂无受限或封禁宿生</view>
-  </view>
-
-</view>
+</view><app-dialog id="app-dialog" />

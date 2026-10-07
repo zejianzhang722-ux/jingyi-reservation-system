@@ -1,6 +1,7 @@
 var request = require('../../utils/request')
 var util = require('../../utils/util')
 var auth = require('../../utils/auth')
+var roleModel = require('../../utils/role-model')
 var pageMotion = require('../../utils/page-motion')
 
 Page({
@@ -26,7 +27,7 @@ Page({
   },
 
   onLoad: function () {
-    if (auth.isLoggedIn() && auth.isAdmin()) {
+    if (auth.isLoggedIn() && roleModel.isGuideRole(auth.getUserRole())) {
       wx.reLaunch({ url: '/pages/admin-profile/admin-profile' })
       return
     }
@@ -34,7 +35,7 @@ Page({
   },
 
   onShow: function () {
-    if (auth.isLoggedIn() && auth.isAdmin()) {
+    if (auth.isLoggedIn() && roleModel.isGuideRole(auth.getUserRole())) {
       wx.reLaunch({ url: '/pages/admin-profile/admin-profile' })
       return
     }

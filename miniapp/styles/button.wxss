@@ -1,0 +1,69 @@
+/* 管理端统一按钮层。设计约束：
+   1) 不使用 * 通配选择器（WXSS 会编译报错）
+   2) backdrop-filter 必须同时写 -webkit- 前缀
+   3) 不修改 app.wxss 已有的 .btn-* 系列，避免波及 9 个学生端页面
+   4) 所有高度用 min-height 而非 height，保证文案不溢出
+   状态约定：禁用用 .is-disabled、加载用 .is-loading，均由 class 驱动 */
+
+.ui-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: var(--btn-h-md);
+  padding: 0 var(--btn-px-md);
+  border: 2rpx solid transparent;
+  border-radius: var(--btn-radius);
+  font-size: var(--btn-font-md);
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  transition: opacity 0.18s ease, transform 0.12s ease, background-color 0.18s ease;
+}
+
+.ui-btn-lg { min-height: var(--btn-h-lg); padding: 0 var(--btn-px-lg); font-size: var(--btn-font-lg); }
+/* 显式中等尺寸：与基础 .ui-btn 同值，供「需要写明尺寸」的语义场景使用 */
+.ui-btn-md { min-height: var(--btn-h-md); padding: 0 var(--btn-px-md); font-size: var(--btn-font-md); }
+.ui-btn-sm { min-height: var(--btn-h-sm); padding: 0 var(--btn-px-sm); font-size: var(--btn-font-sm); }
+.ui-btn-block { display: flex; width: 100%; }
+.ui-btn-group { display: flex; gap: var(--btn-gap); }
+.ui-btn-group.ui-btn-group-sm { gap: var(--btn-gap-sm); }
+
+/* 主色：收敛 #0066CC / #0066cc / #0b63ce / #0077ff / #0877e8 为一种 */
+.ui-btn-primary { background: var(--btn-primary-bg); color: #FFFFFF; }
+/* 通过：收敛 #237f3d / #52C41A / #2f8a3b 为一种 */
+.ui-btn-success  { background: var(--btn-success-bg); color: #FFFFFF; }
+/* 危险实心：收敛 #FF4D4F / #d14343 为一种 */
+.ui-btn-danger   { background: var(--btn-danger-bg); color: #FFFFFF; }
+/* 危险幽灵：拒绝等破坏性但需二次确认的操作，降低误触 */
+.ui-btn-danger-ghost { background: rgba(255, 255, 255, 0.65); color: var(--btn-danger-bg); border-color: var(--btn-danger-bg); }
+/* 次要幽灵：白底描边，用于「查看详情」等 */
+.ui-btn-ghost    { background: rgba(255, 255, 255, 0.65); color: #425066; border-color: rgba(0, 102, 204, 0.28); }
+
+.ui-btn:active { opacity: 0.86; transform: scale(0.98); }
+
+/* 禁用态：用 class 驱动（不用 [disabled] 属性选择器，避免样式静默失效） */
+.ui-btn.is-disabled,
+.ui-btn.is-disabled:active {
+  background: var(--btn-disabled-bg);
+  color: var(--btn-disabled-fg);
+  border-color: transparent;
+  opacity: 1;
+  transform: none;
+}
+
+/* 加载态：文案已由页面 setData 切换为「处理中」，此处只压暗 */
+.ui-btn.is-loading,
+.ui-btn.is-loading:active {
+  opacity: 0.62;
+  transform: none;
+}
+
+/* 原生 <button> 兜底：清除微信 UA 默认样式（背景、行高、after 边框） */
+button.ui-btn { background: var(--btn-primary-bg); line-height: 1.4; }
+button.ui-btn-success { background: var(--btn-success-bg); }
+button.ui-btn-danger { background: var(--btn-danger-bg); }
+button.ui-btn-danger-ghost { background: rgba(255, 255, 255, 0.65); color: var(--btn-danger-bg); border-color: var(--btn-danger-bg); }
+button.ui-btn-ghost { background: rgba(255, 255, 255, 0.65); color: #425066; border-color: rgba(0, 102, 204, 0.28); }
+button.ui-btn::after { border: 0; }
+button.ui-btn.is-disabled { background: var(--btn-disabled-bg); color: var(--btn-disabled-fg); }

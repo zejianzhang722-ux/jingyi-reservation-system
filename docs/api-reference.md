@@ -175,3 +175,28 @@
 - 客户端应把 409 视为业务竞争结果，把 429 视为限流结果，不应自动无限重试；
 - 写入请求重试时必须复用同一幂等键；
 - 生产监控接口必须配置高强度 `OPS_MONITOR_TOKEN`。
+
+## 2026-10-07 空间管理与信用接口补充
+
+| 方法与路径 | 权限 | 用途 |
+|---|---|---|
+| GET /admin/rooms | 获授权管理员及其数据范围 | 分页查询，status按当前有效状态过滤 |
+| GET /admin/rooms/:id | 获授权管理员及其数据范围 | 管理详情，包括baseStatus、status、statusSchedules及bookingPolicy |
+| PUT /admin/rooms/:id | 会长团（super_admin） | 修改基本信息、长期status或完整statusSchedules数组 |
+| GET /credit/students/:id | 会长团、辅导员及其数据范围 | 按用户编号或学号查信用、日志、当前预约权限 |
+| PUT /credit/students/:id | 会长团、辅导员及其数据范围 | 请求score整数与非空reason，记录实际分数变化 |
+| GET /credit/violations | 获授权管理员及其数据范围 | keyword、type、page、pageSize筛选与分页 |
+
+定时状态请求示例：
+
+```json
+{
+  "statusSchedules": [
+    { "status": "maintenance", "startAt": "2026-10-10 09:00", "endAt": "2026-10-10 12:00" }
+  ]
+}
+```
+
+该字段提交完整安排列表；删除某项后提交其余列表即可取消，空数组清除全部安排。最多50项，不允许重叠，开始包含、结束不包含；结束后恢复最新长期状态。修改status不自动删除已有安排。未来时段查询和新建、修改、加入组团均按预约所选区间检查；不会自动取消既有预约。D128仍仅联系辅导员。
+
+信用分不修改账号为封禁状态，不阻止低分登录；仅限制预约日期、每日次数及可预约时段。旧黑名单入口只允许清理历史有期限信用限制，不再新增信用封禁；人工停用账号单独管理。

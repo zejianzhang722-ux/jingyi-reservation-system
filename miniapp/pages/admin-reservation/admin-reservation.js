@@ -1,10 +1,11 @@
+var dialog = require('../../utils/dialog')
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
 
 var PRESETS = {
-  ordinary: { label: '普通待审', status: 'pending' },
-  priority: { label: '重点待审', status: 'counselor_pending', capability: 'counselorApproval' },
+  ordinary: { label: '预约审核', status: 'pending' },
+  priority: { label: '辅导员审核', status: 'counselor_pending', capability: 'counselorApproval' },
   actionable: { label: '全部可处理', actionable: 1 },
   today: { label: '今日预约', today: true },
   in_use: { label: '使用中', status: 'checked_in' }
@@ -18,7 +19,7 @@ function fingerprintValue(value) {
 
 Page({
   data: {
-    list: [],
+    list: [], roomId: '', roomName: '',
     filterPreset: '',
     filterLabel: '',
     filterStatus: '',
@@ -83,6 +84,7 @@ Page({
     ])
   },
   onLoad: function (options) {
+    this.setData({ roomId: (options && options.roomId) || '', roomName: (options && options.roomName) ? decodeURIComponent(options.roomName) : '' })
     if (!this.ensureAccess()) return
     this.applyPreset(options && options.preset, auth.getUserRole())
   },
@@ -123,7 +125,7 @@ Page({
     var that = this
     this._listRequestVersion = (this._listRequestVersion || 0) + 1
     var requestVersion = this._listRequestVersion
-    var params = { page: this.data.page, pageSize: 20 }
+    var params = { page: this.data.page, pageSize: 20 }; if (this.data.roomId) params.roomId = this.data.roomId
     if (this.data.filterStatus) params.status = this.data.filterStatus
     if (this.data.filterPreset === 'actionable') params.actionable = 1
     if (this.data.filterDate) params.date = this.data.filterDate
@@ -185,7 +187,7 @@ Page({
     var that = this
     var id = e.currentTarget.dataset.id
     if (!this.canQuickAuditItem(id) || this.isProcessing(id)) return
-    wx.showModal({
+    dialog.show(this, {
       title: '确认审批',
       content: '确定通过该预约？',
       success: function (res) {
@@ -209,7 +211,7 @@ Page({
     var that = this
     var id = e.currentTarget.dataset.id
     if (!this.canQuickAuditItem(id) || this.isProcessing(id)) return
-    wx.showModal({
+    dialog.show(this, {
       title: '拒绝预约',
       content: '请输入拒绝理由',
       editable: true,

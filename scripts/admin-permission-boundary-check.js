@@ -112,10 +112,11 @@ async function main() {
       'foreign building rows were returned'
     );
 
-    const manual = await api('/checkin/manual', {
+    const reviewer = await login('counselor', 'counselor123');
+    const manual = await api('/checkin/supplement/' + supplementCreated.json.data.id + '/review', {
       method: 'POST',
-      headers: headers(superAdmin.token),
-      body: JSON.stringify({ reservationId: 6 })
+      headers: headers(reviewer.token),
+      body: JSON.stringify({ action: 'approve', reason: 'permission-boundary-test' })
     });
     check(manual.status === 200, 'foreign checkout fixture', 'expected 200, got ' + manual.status);
     const foreignCheckout = await api('/checkin/checkout', {

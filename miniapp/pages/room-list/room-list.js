@@ -1,6 +1,7 @@
 var request = require('../../utils/request')
 var util = require('../../utils/util')
 var localData = require('../../utils/local-data')
+var bookingPolicy = require('../../utils/room-booking-policy')
 
 function getIconKey(type) {
   var map = {
@@ -89,7 +90,7 @@ Page({
       room.typeColor = localData.getTypeColor(r.type) || '#1890FF'
       room.facilities = room.facilities || ''
       room.facilityList = room.facilities ? room.facilities.split(',').filter(function (item) { return item }) : []
-      room.statusText = room.status === 'open' || room.status === 'active' ? '开放' : '关闭'
+      room = bookingPolicy.presentRoom(room)
       room.openTimeText = (room.open_start_time || '08:00') + '-' + (room.open_end_time || '22:00')
       room.capacityText = room.capacity ? room.capacity + '人' : '未设置'
       room.iconKey = getIconKey(room.type)

@@ -27,6 +27,9 @@ const persistedDir = process.env.MOCK_DATA_DIR
   : path.join(__dirname, '..', '..', 'data');
 const feedbackFile = path.join(persistedDir, 'mock-feedbacks.json');
 const userAvatarsFile = path.join(persistedDir, 'mock-user-avatars.json');
+const adminNotificationsFile = path.join(persistedDir, 'mock-admin-notifications.json');
+tables.admin_notifications = fs.existsSync(adminNotificationsFile) ? JSON.parse(fs.readFileSync(adminNotificationsFile, 'utf8')) : [];
+if (!Array.isArray(tables.admin_notifications)) throw new Error('管理通知文件格式错误');
 
 function loadFeedbacks() {
   try {
@@ -177,7 +180,7 @@ const counselorPassword = process.env.MOCK_COUNSELOR_PASSWORD || 'counselor123';
 
 tables.admins = [
   { id: 1, username: 'admin', password: bcrypt.hashSync(adminPassword, 10), real_name: '系统管理员', role: 'admin', building_id: null, scope_type: 'global', phone: '13800000001', status: 'active', last_login_at: null, created_at: now, updated_at: now },
-  { id: 2, username: 'superadmin', password: bcrypt.hashSync(superAdminPassword, 10), real_name: '超级管理员', role: 'super_admin', building_id: null, scope_type: 'global', phone: '13800000002', status: 'active', last_login_at: null, created_at: now, updated_at: now },
+  { id: 2, username: 'superadmin', password: bcrypt.hashSync(superAdminPassword, 10), real_name: '导生会会长团', role: 'super_admin', building_id: null, scope_type: 'global', phone: '13800000002', status: 'active', last_login_at: null, created_at: now, updated_at: now },
   { id: 3, username: 'counselor', password: bcrypt.hashSync(counselorPassword, 10), real_name: '辅导员', role: 'counselor', building_id: null, scope_type: 'global', phone: '13800000003', status: 'active', last_login_at: null, created_at: now, updated_at: now },
   { id: 4, username: 'building_admin', password: bcrypt.hashSync(adminPassword, 10), real_name: 'B座导生管理员', role: 'admin', building_id: 1, scope_type: 'building', phone: '13800000004', status: 'active', last_login_at: null, created_at: now, updated_at: now },
   { id: 5, username: 'dorm_b', password: bcrypt.hashSync(adminPassword, 10), real_name: 'B座宿管', role: 'dorm_manager', building_id: 1, scope_type: 'building', status: 'active', created_at: now, updated_at: now },
@@ -882,7 +885,7 @@ function handleInsert(sql, params) {
     const setPart = insertSetMatch[2];
     if (!tables[tableName]) tables[tableName] = [];
     const row = {};
-    const setPairs = setPart.split(',').map(function(s) { return s.trim(); });
+    const setPairs = splitSqlList(setPart).map(function(s) { return s.trim(); });
     for (const pair of setPairs) {
       const eqMatch = pair.match(/(\w+)\s*=\s*([\s\S]*)/);
       if (eqMatch) {
@@ -954,7 +957,7 @@ function handleUpdate(sql, params) {
   let affectedRows = 0;
   for (const row of tables[tableName]) {
     if (matchesWhere(row, wherePart)) {
-      const setPairs = setPart.split(',').map(function(s) { return s.trim(); });
+      const setPairs = splitSqlList(setPart).map(function(s) { return s.trim(); });
       for (const pair of setPairs) {
         const eqMatch = pair.match(/(\w+)\s*=\s*([\s\S]*)/);
         if (eqMatch) {

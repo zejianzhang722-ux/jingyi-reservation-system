@@ -6,6 +6,8 @@ const dayjs = require('dayjs');
 const helpers = require('../utils/helpers');
 const operationLogPresenter = require('../utils/operationLogPresenter');
 const runtimeConfigService = require('../services/runtimeConfigService');
+const adminName = require('../utils/adminNamePresenter');
+const roomPolicy = require('../services/roomBookingPolicy');
 
 const getAccounts = async function(req, res) {
   try {
@@ -30,7 +32,7 @@ const getAccounts = async function(req, res) {
       return {
         id: row.id,
         username: row.username,
-        realName: row.real_name,
+        realName: adminName(row.real_name, row.role),
         role: row.role,
         buildingId: row.building_id,
         phone: row.phone,
@@ -128,7 +130,7 @@ const deleteAccount = async function(req, res) {
       return response.error(res, '账号不存在', 404);
     }
     if (rows[0].role === 'super_admin') {
-      return response.error(res, '不能删除超级管理员账号', 403);
+      return response.error(res, '不能删除导生会会长团账号', 403);
     }
 
     await db.query("UPDATE admins SET status = 'disabled' WHERE id = ?", [accountId]);
@@ -173,11 +175,12 @@ const enrichRoomsWithTodayTimeline = async function(rooms) {
         return sum + (Number(r.participants) || 1);
       }, 0);
       const names = occupiedRows.map(function(r) { return r.real_name || r.nickname || ''; }).filter(Boolean);
-      const availableCount = Math.max(0, capacity - occupiedPeople);
+      const acceptsBooking = room.type !== 'party_room' && require('../services/roomStatusSchedule').bookingAllowed(room, { date: today, startTime: time, endTime });
+      const availableCount = acceptsBooking ? Math.max(0, capacity - occupiedPeople) : 0;
       return {
         time: time,
         endTime: endTime,
-        status: occupiedRows.length ? 'occupied' : 'available',
+        status: !acceptsBooking ? 'unavailable' : occupiedRows.length ? 'occupied' : 'available',
         occupied: occupiedRows.length > 0,
         availableCount: availableCount,
         totalCount: capacity,
@@ -189,7 +192,8 @@ const enrichRoomsWithTodayTimeline = async function(rooms) {
       return helpers.checkTimeConflict(r.start_time, r.end_time, nowTime, helpers.addMinutes(nowTime, 1));
     });
     const usingRows = currentRows.filter(function(r) { return r.status === 'checked_in'; });
-    const currentStatus = room.status === 'closed' ? 'closed' : (usingRows.length ? 'using' : (currentRows.length ? 'reserved' : 'free'));
+    room = roomPolicy.presentRoom(room);
+    const currentStatus = room.status !== 'open' ? room.status : (usingRows.length ? 'using' : (currentRows.length ? 'reserved' : 'free'));
     const currentNames = currentRows.map(function(r) { return r.real_name || r.nickname || ''; }).filter(Boolean);
 
     return Object.assign({}, room, {
@@ -210,7 +214,6 @@ const getRooms = async function(req, res) {
 
     if (type) { countSql += ' AND r.type = ?'; listSql += ' AND r.type = ?'; params.push(type); }
     if (buildingId) { countSql += ' AND r.building_id = ?'; listSql += ' AND r.building_id = ?'; params.push(buildingId); }
-    if (status) { countSql += ' AND r.status = ?'; listSql += ' AND r.status = ?'; params.push(status); }
     if (keyword) {
       countSql += ' AND (r.name LIKE ? OR r.description LIKE ?)';
       listSql += ' AND (r.name LIKE ? OR r.description LIKE ?)';
@@ -220,6 +223,11 @@ const getRooms = async function(req, res) {
     const countParams = params.slice();
     const [countResult] = await db.query(countSql, countParams);
 
+    if (status) {
+      const [allRooms] = await db.query(listSql + ' ORDER BY r.building_id, r.floor, r.name', params);
+      const matching = (await enrichRoomsWithTodayTimeline(allRooms)).filter(room => room.status === status);
+      return response.paginate(res, matching.slice(Number(offset), Number(offset) + Number(pageSize)), matching.length, page, pageSize);
+    }
     listSql += ' ORDER BY r.building_id, r.floor, r.name LIMIT ? OFFSET ?';
     params.push(parseInt(pageSize), parseInt(offset));
 
@@ -245,7 +253,7 @@ const getRoomDetail = async function(req, res) {
       return response.error(res, '功能房不存在', 404);
     }
 
-    return response.success(res, rooms[0]);
+    return response.success(res, roomPolicy.presentRoom(rooms[0]));
   } catch (err) {
     logger.error('获取功能房详情异常:', err);
     return response.error(res, err.message);
@@ -282,11 +290,16 @@ const getBuildings = async function(req, res) {
 
 const createRoom = async function(req, res) {
   try {
-    const { name, type, buildingId, floor, location, area, capacity, openStartTime, openEndTime, maxDuration, needAudit, needCounselorAudit, description, facilities, imageUrl } = req.body;
+    const { name, type, buildingId, floor, location, area, capacity, openStartTime, openEndTime, maxDuration, needAudit, needCounselorAudit, description, facilities, imageUrl, status = 'open' } = req.body;
+    if (!['open', 'closed', 'maintenance', 'counselor_only'].includes(status)) return response.error(res, '请选择有效的空间状态', 400);
+    if (openStartTime || openEndTime) {
+      const valid = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
+      if (!valid(openStartTime) || !valid(openEndTime) || openStartTime >= openEndTime) return response.error(res, '请选择有效的开放时段，关闭时间须晚于开放时间', 400);
+    }
 
     const [result] = await db.query(
       'INSERT INTO rooms (name, type, building_id, floor, location, area, capacity, open_start_time, open_end_time, max_duration, need_audit, need_counselor_audit, description, facilities, image_url, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-      [name, type, buildingId, floor || null, location || '', area || null, capacity || null, openStartTime || null, openEndTime || null, maxDuration || 240, needAudit ? 1 : 0, needCounselorAudit ? 1 : 0, description || '', facilities || '', imageUrl || '', 'open']
+      [name, type, buildingId, floor || null, location || '', area || null, capacity || null, openStartTime || null, openEndTime || null, maxDuration || 240, needAudit ? 1 : 0, needCounselorAudit ? 1 : 0, description || '', Array.isArray(facilities) ? facilities.join(',') : (facilities || ''), imageUrl || '', status]
     );
 
     await logOperation(req.user.id, 'create_room', 'rooms', result.insertId, '创建功能房: ' + name);
@@ -302,6 +315,19 @@ const updateRoom = async function(req, res) {
   try {
     const roomId = req.params.id;
     const fields = req.body;
+    const [existing] = await db.query('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    if (!existing.length) return response.error(res, '功能房不存在', 404);
+    if (fields.statusSchedules !== undefined) {
+      try { fields.statusSchedules = require('../services/roomStatusSchedule').normalize(fields.statusSchedules); }
+      catch (err) { return response.error(res, err.message, 400); }
+    }
+    if (fields.status !== undefined && !['open', 'closed', 'maintenance', 'counselor_only'].includes(fields.status)) return response.error(res, '请选择有效的空间状态', 400);
+    if (fields.openStartTime !== undefined || fields.openEndTime !== undefined) {
+      const start = String(fields.openStartTime ?? existing[0].open_start_time ?? '').slice(0,5);
+      const end = String(fields.openEndTime ?? existing[0].open_end_time ?? '').slice(0,5);
+      const valid = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+      if (!valid(start) || !valid(end) || start >= end) return response.error(res, '请选择有效的开放时段，关闭时间须晚于开放时间', 400);
+    }
 
     const updates = [];
     const params = [];
@@ -311,13 +337,13 @@ const updateRoom = async function(req, res) {
       openStartTime: 'open_start_time', openEndTime: 'open_end_time',
       maxDuration: 'max_duration', needAudit: 'need_audit',
       needCounselorAudit: 'need_counselor_audit', description: 'description',
-      facilities: 'facilities', imageUrl: 'image_url', status: 'status'
+      facilities: 'facilities', imageUrl: 'image_url', status: 'status', statusSchedules: 'status_schedules'
     };
 
     for (const [key, value] of Object.entries(fields)) {
       if (fieldMap[key]) {
         updates.push(fieldMap[key] + ' = ?');
-        params.push(value);
+          params.push(key === 'statusSchedules' ? JSON.stringify(value) : key === 'facilities' && Array.isArray(value) ? value.join(',') : value);
       }
     }
 

@@ -1,10 +1,11 @@
+var dialog = require('../../utils/dialog')
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
 var approvalPresenter = require('../../utils/admin-approval-presenter')
 
 var STATUS_LABELS = {
-  pending: '普通待审', counselor_pending: '重点待审', approved: '已通过', rejected: '已拒绝',
+  pending: '预约审核', counselor_pending: '辅导员审核', approved: '已通过', rejected: '已拒绝',
   cancelled: '已取消', checked_in: '使用中', completed: '已完成', noshow: '未到场'
 }
 var USER_STATUS_LABELS = { active: '正常', restricted: '受限', disabled: '停用', banned: '已封禁', blocked: '冻结' }
@@ -65,8 +66,8 @@ Page({
       var reservation = approvalPresenter.toCard(data || {})
       reservation.credit_score = data && data.credit_score
       reservation.user_status = data && data.user_status
-      reservation.userStatusLabel = USER_STATUS_LABELS[reservation.user_status] || reservation.user_status || '未知'
-      reservation.statusLabel = STATUS_LABELS[reservation.status] || reservation.status || '未知状态'
+      reservation.userStatusLabel = USER_STATUS_LABELS[reservation.user_status] || '状态待确认'
+      reservation.statusLabel = STATUS_LABELS[reservation.status] || '状态待确认'
       var canAudit = that.canAuditReservation(reservation)
       that.setData({ reservation: reservation, pageStatus: 'ready', errorMessage: '', canApprove: canAudit, canReject: canAudit })
     }).catch(function (err) {
@@ -103,7 +104,7 @@ Page({
   onApprove: function () {
     var that = this
     if (this.data.processing || !this.canAuditReservation(this.data.reservation)) return
-    wx.showModal({ title: '确认通过', content: '确定通过这条预约申请吗？', success: function (result) {
+    dialog.show(this, { title: '确认通过', content: '确定通过这条预约申请吗？', success: function (result) {
       if (!result.confirm || that.data.processing) return
       that.submitAudit('approve', {}, '已通过')
     } })
@@ -111,7 +112,7 @@ Page({
   onReject: function () {
     var that = this
     if (this.data.processing || !this.canAuditReservation(this.data.reservation)) return
-    wx.showModal({ title: '拒绝预约', content: '请填写拒绝理由', editable: true, placeholderText: '拒绝理由（必填）', success: function (result) {
+    dialog.show(this, { title: '拒绝预约', content: '请填写拒绝理由', editable: true, placeholderText: '拒绝理由（必填）', success: function (result) {
       if (!result.confirm) return
       var reason = String(result.content || '').trim()
       if (!reason) { wx.showToast({ title: '请填写拒绝理由', icon: 'none' }); return }

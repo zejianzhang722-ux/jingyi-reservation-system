@@ -52,3 +52,10 @@ Thumbs.db
 .trae/
 .workbuddy/
 server/data/mock-verification-state.json
+
+# Local diagnostic output and generated test data
+.runlogs/
+.am.bak
+server/data/mock-admin-notifications.json
+server/repro-check.js
+docs/screenshots/dorm-manager/preview-qr.txt

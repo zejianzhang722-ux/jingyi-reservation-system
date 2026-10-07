@@ -20,20 +20,25 @@ const sendStartReminders = async function(referenceDate) {
   const helpers = require('../utils/helpers');
   const notificationService = require('./notificationService');
   const now = resolveReferenceDate(referenceDate);
-  const today = helpers.formatDate(now);
-  const reminderTime = helpers.addMinutes(helpers.formatTime(now), 30);
-  const [upcoming] = await db.query(
+  const target = new Date(now.getTime() + 10 * 60000);
+  const today = helpers.formatDate(target);
+  const reminderTime = helpers.formatTime(target) + ':00';
+  const [rows] = db.isMock() ? [require('../config/mock-db').__tables.reservations] : await db.query(
     "SELECT r.*, rm.name AS room_name FROM reservations r " +
     "JOIN rooms rm ON r.room_id = rm.id " +
-    "WHERE r.date = ? AND r.start_time = ? AND r.status = 'approved'",
-    [today, reminderTime]
+    "WHERE r.status = 'approved' AND CONCAT(r.date, ' ', r.start_time) > ? AND CONCAT(r.date, ' ', r.start_time) <= ?",
+    [helpers.formatDateTime(now), today + ' ' + reminderTime]
   );
+  const policy = require('./checkinWindowPolicy');
+  const upcoming = rows.filter(reservation => reservation.status === 'approved' &&
+    policy.startDate(reservation).getTime() > now.getTime() && policy.startDate(reservation).getTime() <= target.getTime());
   for (const reservation of upcoming) {
+    const mockRoom = db.isMock() && require('../config/mock-db').__tables.rooms.find(room => Number(room.id) === Number(reservation.room_id));
     await notificationService.createNotification(
       reservation.user_id,
       'reservation_reminder',
       '预约提醒',
-      '您在' + reservation.room_name + '的预约将在30分钟后开始',
+      '您在' + (reservation.room_name || (mockRoom && mockRoom.name) || '功能房') + '的预约将在10分钟内开始，请在开始前15分钟至开始后15分钟内签到',
       { reservationId: reservation.id }
     );
   }
@@ -92,11 +97,11 @@ const expireWaitlist = async function() {
 const TASK_DEFINITIONS = [
   {
     name: 'detect-noshow',
-    cron: '*/5 * * * *',
+    cron: '* * * * *',
     ttlMs: 4 * 60 * 1000,
     renewEveryMs: 60 * 1000,
     dedupeTtlMs: 10 * 60 * 1000,
-    run: function() { return reservationLifecycleService.detectNoshow(); }
+    run: function(now) { return reservationLifecycleService.detectNoshow(now); }
   },
   {
     name: 'reservation-start-reminders',
@@ -129,6 +134,14 @@ const TASK_DEFINITIONS = [
     renewEveryMs: 60 * 1000,
     dedupeTtlMs: 20 * 60 * 1000,
     run: expireWaitlist
+  },
+  {
+    name: 'dance-group-admin-notices',
+    cron: '* * * * *',
+    ttlMs: 50 * 1000,
+    renewEveryMs: 15 * 1000,
+    dedupeTtlMs: 3 * 60 * 1000,
+    run: function(now) { return require('./danceGroupNotificationService').reconcile(now); }
   },
   {
     name: 'restore-users',

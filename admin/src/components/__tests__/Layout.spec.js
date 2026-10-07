@@ -153,9 +153,12 @@ describe('Layout navigation wiring', () => {
     menuCalls.length = 0
     store.setUserInfo(counselor)
     await settle()
-    expect(menuCalls).toContainEqual(['close', 'today'])
-    expect(menuCalls).toContainEqual(['close', 'reservation'])
+    // Account changes remount the menu. Closing entries from the previous
+    // instance can crash Element Plus; only the new account's groups apply.
+    expect(menuCalls).not.toContainEqual(['close', 'today'])
+    expect(menuCalls).not.toContainEqual(['close', 'reservation'])
     expect(menuCalls).toContainEqual(['open', 'content'])
     expect(wrapper.text()).toContain('辅导员工作区')
+    wrapper.unmount()
   })
 })

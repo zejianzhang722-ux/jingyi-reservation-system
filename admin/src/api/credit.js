@@ -13,6 +13,9 @@ export function getBlacklist(params, options = {}) {
   return request.get('/credit/blacklist', { ...options, params })
 }
 
+export function getStudentCredit(id) { return request.get('/credit/students/' + encodeURIComponent(id)) }
+export function setStudentCredit(id, data) { return request.put('/credit/students/' + encodeURIComponent(id), data) }
+
 export function toggleBan(data) {
   const id = data.userId || data.studentId || data.studentNo
   return request.put('/credit/blacklist/' + id, data)

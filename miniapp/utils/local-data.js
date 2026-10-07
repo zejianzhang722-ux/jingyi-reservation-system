@@ -269,28 +269,7 @@ function getTypeMap() {
 }
 
 function getRulesByRoomType(roomType) {
-  var rules = {
-    study_room: '敬一书院自习室管理制度\n\n一、开放时间\n1. B228、B520、C110、D510自习室24小时开放\n2. D418自习室开放时间为8:00-21:00\n\n二、预约规则\n1. 须提前预约座位，凭预约码签到\n2. 单次预约时长不超过4小时\n3. 每日最多预约3次\n4. 预约开始后15分钟内未签到视为爽约\n\n三、使用规范\n1. 保持安静，手机调至静音或振动模式\n2. 禁止占座，离开超过30分钟需签退\n3. 保持环境整洁，垃圾随身带走\n4. 爱护公共设施，损坏照价赔偿\n5. 禁止在自习室内进食\n\n四、信用分管理\n1. 初始信用分100分\n2. 爽约一次扣20分\n3. 信用分低于60分将限制预约7天\n4. 信用分低于30分将封禁预约30天',
-    seminar_room: '敬一书院共享空间管理制度\n\n一、开放时间\n每日8:00-22:00\n\n二、预约规则\n1. 须提前预约，单次预约不超过3小时\n2. 需填写用途分类和参与人数\n3. 每日最多预约2次\n\n三、使用规范\n1. 使用投影、白板等设备需提前说明\n2. 自带电器需提前报备\n3. 使用完毕后恢复桌椅摆放\n4. 保持环境整洁，关闭空调和灯光\n5. 控制音量，避免影响周围\n\n四、违规处理\n1. 未经预约使用：扣10信用分\n2. 损坏设备：照价赔偿+扣20信用分\n3. 超时未退房：扣10信用分',
-    media_room: '敬一书院影音室管理制度\n\n一、开放时间\n每日8:00-23:00\n\n二、预约规则\n1. 须提前预约，需辅导员审批\n2. 单次预约不超过3小时\n3. 需填写参与人数和用途\n\n三、使用规范\n1. 使用前检查设备完好\n2. 严禁播放违规内容\n3. 音量控制在合理范围\n4. 使用完毕关闭所有设备\n5. 禁止携带食物和饮料\n6. 保持室内清洁\n\n四、违规处理\n1. 损坏设备照价赔偿\n2. 播放违规内容永久取消使用资格',
-    competition_room: '敬一书院备赛间管理制度\n\n一、开放时间\n24小时开放\n\n二、预约规则\n1. 须提前预约，单次预约不超过6小时\n2. 需填写竞赛名称和参与人数\n3. 优先保障省级以上竞赛备赛\n\n三、使用规范\n1. 仅限竞赛备赛使用\n2. 保持环境整洁\n3. 爱护公共设施\n4. 使用完毕恢复原状\n5. 禁止无关人员进入\n\n四、违规处理\n1. 非竞赛用途使用：扣15信用分\n2. 损坏设备照价赔偿',
-    dance_room: '敬一书院舞蹈室管理制度\n\n一、开放时间\n每日17:00-22:00\n\n二、预约规则\n1. 须提前预约，单次预约不超过3小时\n2. 需填写参与人数\n\n三、使用规范\n1. 进入舞蹈室须换舞蹈鞋或脱鞋\n2. 禁止穿鞋底较硬的鞋进入\n3. 爱护镜子、地板等设施\n4. 音量控制在合理范围\n5. 使用完毕关闭音响和灯光\n6. 保持室内清洁\n\n四、违规处理\n1. 损坏镜子或地板照价赔偿\n2. 扰民扣10信用分',
-    reading_room: '敬一书院阅览室管理制度\n\n一、开放时间\n每日9:00-22:00\n\n二、使用规范\n1. 保持安静，禁止大声喧哗\n2. 爱护图书，阅后放回原处\n3. 禁止在阅览室进食\n4. 保持环境整洁\n5. 禁止占座\n\n三、图书管理\n1. 图书仅限室内阅读，不得外借\n2. 损坏图书照价赔偿\n3. 发现图书缺失请及时报告',
-    multi_purpose_hall: '敬一书院多功能厅管理制度\n\n一、开放时间\n每日8:00-23:00\n\n二、预约规则\n1. 须提前预约，需辅导员审批\n2. 单次预约不超过3小时\n3. 需填写活动内容和参与人数\n\n三、使用规范\n1. 使用前检查设备完好\n2. 活动结束后恢复桌椅摆放\n3. 关闭所有电器设备\n4. 保持环境整洁\n5. 控制音量避免扰民\n\n四、违规处理\n1. 损坏设备照价赔偿\n2. 未恢复原状扣10信用分',
-    default: '敬一书院功能房使用管理制度\n\n一、预约规则\n1. 须提前预约，按预约时间使用\n2. 预约开始后15分钟内须签到\n3. 单次预约时长不超过规定上限\n4. 每日最多预约3次\n\n二、使用规范\n1. 保持环境整洁安静\n2. 爱护公共设施设备\n3. 使用完毕恢复原状\n4. 关闭电器设备\n5. 遵守书院各项规章制度\n\n三、信用分管理\n1. 爽约扣20信用分\n2. 违规扣10信用分\n3. 信用分过低将限制预约\n\n四、违规处理\n1. 损坏设施照价赔偿\n2. 严重违规取消使用资格'
-  };
-
-  if (roomType === 'roadshow_space') return rules.competition_room;
-  if (roomType === 'innovation_workshop') return rules.competition_room;
-  if (roomType === 'party_room') return rules.default;
-  if (roomType === 'national_defense_studio') return rules.default;
-  if (roomType === 'study_center') return rules.seminar_room;
-  if (roomType === 'career_center') return rules.default;
-  if (roomType === 'job_studio') return rules.default;
-  if (roomType === 'mentor_room') return rules.seminar_room;
-  if (roomType === 'psychology_room') return rules.default;
-  if (roomType === 'tutor') return rules.default;
-  return rules[roomType] || rules.default;
+  return require('./reservation-rules')();
 }
 
 module.exports = {

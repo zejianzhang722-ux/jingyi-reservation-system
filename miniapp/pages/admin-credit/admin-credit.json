@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "信用管理"
+  "navigationBarTitleText": "信用管理",
+  "usingComponents": {
+    "app-dialog": "/components/app-dialog/app-dialog"
+  }
 }

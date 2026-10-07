@@ -192,7 +192,7 @@ const trailList = ref([])
 const TRAIL_STAGE_LABELS = { first: '一审', counselor: '二审' }
 const TRAIL_ACTION_LABELS = { approve: '通过', reject: '驳回', remark: '批注', transfer: '转派' }
 const TRAIL_ACTION_TYPES = { approve: 'success', reject: 'danger', remark: 'info', transfer: 'warning' }
-const TRAIL_ROLE_LABELS = { admin: '管理员', super_admin: '超级管理员', counselor: '辅导员', system: '系统', student: '学生' }
+const TRAIL_ROLE_LABELS = { admin: '管理员', super_admin: '导生会会长团', counselor: '辅导员', system: '系统', student: '学生' }
 const trailStageLabel = stage => TRAIL_STAGE_LABELS[stage] || '审核'
 const trailActionLabel = action => TRAIL_ACTION_LABELS[action] || '记录'
 const trailActionType = action => TRAIL_ACTION_TYPES[action] || 'info'

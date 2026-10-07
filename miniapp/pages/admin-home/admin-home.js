@@ -1,14 +1,10 @@
+var dialog = require('../../utils/dialog')
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
+var roleModel = require('../../utils/role-model')
 var adminPolicy = require('../../utils/admin-policy')
 var approvalPresenter = require('../../utils/admin-approval-presenter')
 var pageMotion = require('../../utils/page-motion')
-
-var ROLE_NAMES = {
-  super_admin: '超级管理员',
-  admin: '导生管理员',
-  counselor: '书院辅导员'
-}
 
 var METRIC_TARGETS = {
   ordinary: {
@@ -72,7 +68,7 @@ Page({
   },
   ensureAdmin: function () {
     var role = auth.getUserRole()
-    if (auth.isLoggedIn() && role === 'dorm_manager') { wx.reLaunch({ url: auth.getAdminHome() }); return false }
+    if (auth.isLoggedIn() && roleModel.isDormRole(role)) { wx.reLaunch({ url: auth.getAdminHome() }); return false }
     if (!auth.isLoggedIn() || !auth.isAdmin() || !adminPolicy.can(role, 'ordinaryApproval')) {
       wx.reLaunch({ url: '/pages/login/login' })
       return false
@@ -87,9 +83,9 @@ Page({
     }
     this._loadedRole = role
     this.setData({
-      roleName: ROLE_NAMES[role] || '管理员',
+      roleName: roleModel.label(role),
       queueType: queueType,
-      queueLabel: queueType === 'counselor' ? '辅导员重点审核' : '普通预约审核',
+      queueLabel: queueType === 'counselor' ? '辅导员审核' : '预约审核',
       canSwitchQueue: adminPolicy.can(role, 'counselorApproval'),
       canManageFeedback: adminPolicy.can(role, 'feedbackManage')
     })
@@ -348,7 +344,8 @@ Page({
     wx.showToast({ title: message || '扫码签到失败', icon: 'none', duration: 2500 })
   },
   onScanCheckin: function () {
-    wx.navigateTo({ url: '/pages/verification/verification' })
+    if (!this.ensureAdmin() || !adminPolicy.can(auth.getUserRole(), 'scanCheckin')) return
+    wx.navigateTo({ url: roleModel.scanPath(auth.getUserRole()) })
   },
   onApprove: function (event) {
     var that = this
@@ -356,7 +353,7 @@ Page({
     if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
     var expectedRole = auth.getUserRole()
     var expectedQueue = this.data.queueType
-    wx.showModal({
+    dialog.show(this, {
       title: '确认审批',
       content: '确定通过该预约申请？',
       success: function (result) {
@@ -381,7 +378,7 @@ Page({
     if (!this.canQuickApproveItem(id) || this.isProcessing(id)) return
     var expectedRole = auth.getUserRole()
     var expectedQueue = this.data.queueType
-    wx.showModal({
+    dialog.show(this, {
       title: '拒绝预约',
       content: '请输入拒绝理由',
       editable: true,

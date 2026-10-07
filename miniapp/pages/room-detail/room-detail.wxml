@@ -7,7 +7,7 @@
         <text class="detail-number">{{room.roomNumber || room.room_number || '功能空间'}}</text>
       </view>
       <view class="detail-status {{room.status === 'open' || room.status === 'active' ? 'status-open' : 'status-closed'}}">
-        {{room.status === 'open' || room.status === 'active' ? '开放' : '关闭'}}
+        {{room.statusText}}
       </view>
     </view>
 
@@ -26,7 +26,7 @@
       </view>
       <view class="info-row">
         <text class="info-label">审核要求</text>
-        <text class="info-value">{{room.need_counselor || room.need_counselor_audit ? '需辅导员审核' : '按系统规则审核'}}</text>
+        <text class="info-value">{{room.bookingPolicy.counselorOnly ? '联系辅导员安排' : (room.need_counselor || room.need_counselor_audit ? '需辅导员审核' : '按系统规则审核')}}</text>
       </view>
     </view>
 
@@ -44,7 +44,8 @@
   </view>
 
   <view class="detail-actions" wx:if="{{room && !loading}}">
-    <view class="action-btn btn-primary" bindtap="onReserveTap">{{room.canGroupReserve ? '个人预约' : '查看时间并预约'}}</view>
+    <text wx:if="{{room.bookingPolicy.message}}">{{room.bookingPolicy.message}}</text>
+    <view class="action-btn btn-primary" wx:if="{{room.canPersonalReserve}}" bindtap="onReserveTap">{{room.canGroupReserve ? '个人预约' : '查看时间并预约'}}</view>
     <view class="action-btn btn-group" wx:if="{{room.canGroupReserve}}" bindtap="onGroupReserveTap">发起组团预约</view>
     <view class="action-btn btn-outline" bindtap="onViewRules">查看管理制度</view>
     <view class="action-btn btn-outline" bindtap="onCompareTap">功能房对比</view>

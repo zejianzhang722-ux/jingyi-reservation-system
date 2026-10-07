@@ -12,8 +12,8 @@
         <el-option label="爽约" value="noshow" />
         <el-option label="超时未签退" value="overtime" />
         <el-option label="损坏设施" value="damage" />
-        <el-option label="违规使用" value="misuse" />
-        <el-option label="海报违规" value="poster" />
+        <el-option label="违规使用" value="violation" />
+        <el-option label="海报违规" value="poster_violation" />
         <el-option label="其他" value="other" />
       </el-select>
 
@@ -99,6 +99,8 @@
 </template>
 
 <script setup>
+import request from '@/utils/request'
+import { violationRow } from '@/utils/managementPresenter'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getViolations, createViolation } from '@/api/credit'
 import { ElMessage } from 'element-plus'
@@ -117,7 +119,9 @@ const typeMap = {
   noshow: { label: '爽约', tagType: 'danger' },
   overtime: { label: '超时未签退', tagType: 'warning' },
   damage: { label: '损坏设施', tagType: 'danger' },
+  violation: { label: '违规使用', tagType: 'warning' },
   misuse: { label: '违规使用', tagType: 'warning' },
+  poster_violation: { label: '海报违规', tagType: 'warning' },
   poster: { label: '海报违规', tagType: 'warning' },
   other: { label: '其他', tagType: 'info' }
 }
@@ -143,8 +147,7 @@ const rules = {
   description: [{ required: true, message: '请输入描述', trigger: 'blur' }]
 }
 
-// 🔧 后端 GET /credit/violations 只支持 type / userId / page / pageSize，不支持 keyword，
-// 关键词改为对已加载数据做前端过滤；表格渲染与导出共用同一份过滤逻辑。
+// 保留相同的展示筛选，查询先在服务端执行以保证跨页搜索结果完整。
 function matchKeyword(row, keyword) {
   if (!keyword) return true
   const text = keyword.trim().toLowerCase()
@@ -155,9 +158,9 @@ function matchKeyword(row, keyword) {
 
 const filteredTableData = computed(() => tableData.value.filter(row => matchKeyword(row, filters.keyword)))
 
-// 列表查询参数单一来源；后端只认 type，keyword 不进请求参数。
+// 列表与导出共用服务端的姓名、学号及类型筛选。
 function buildParams() {
-  return { type: filters.type }
+  return { type: filters.type, keyword: filters.keyword }
 }
 
 async function loadData() {
@@ -165,7 +168,7 @@ async function loadData() {
   loadError.value = ''
   try {
     const res = await getViolations({ ...buildParams(), page: pagination.page, pageSize: pagination.pageSize }, { silentError: true })
-    tableData.value = res.data?.list || []
+    tableData.value = (res.data?.list || []).map(violationRow)
     pagination.total = res.data?.total || 0
   } catch (e) {
     loadError.value = '违规记录加载失败，请重试'
@@ -197,7 +200,10 @@ async function confirmCreate() {
 
   submitLoading.value = true
   try {
-    await createViolation(form)
+    const found = await request.get('/user/list', { params: { keyword: form.studentId.trim(), pageSize:100 } })
+    const student = (found.data?.list || []).find(row => String(row.student_id || row.student_no) === form.studentId.trim())
+    if (!student) { ElMessage.warning('未找到该学号的宿生，请核对'); return }
+    await createViolation({ userId: student.id, type: form.type, score: -Math.abs(form.deduction), description: form.description.trim() })
     ElMessage.success('创建成功')
     createDialogVisible.value = false
     loadData()
@@ -217,7 +223,7 @@ async function handleExport() {
       maxPages: 50,
       options: { silentError: true }
     })
-    const rows = list.filter(row => matchKeyword(row, filters.keyword))
+    const rows = list.map(violationRow).filter(row => matchKeyword(row, filters.keyword))
     if (!exportXlsx(exportColumns, rows, '导出_违规记录')) return
     ElMessage.success(`导出成功，共 ${rows.length} 条`)
   } catch (e) {

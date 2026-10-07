@@ -1,7 +1,13 @@
 {
   "entryPagePath": "pages/index/index",
-  "requiredPrivateInfos": ["getLocation"],
-  "permission": { "scope.userLocation": { "desc": "办理现场签到时校验与功能房的距离，定位不可用时会如实记录" } },
+  "requiredPrivateInfos": [
+    "getLocation"
+  ],
+  "permission": {
+    "scope.userLocation": {
+      "desc": "办理现场签到时校验与功能房的距离，定位不可用时会如实记录"
+    }
+  },
   "pages": [
     "pages/index/index",
     "pages/room-list/room-list",
@@ -30,6 +36,7 @@
     "pages/verification/verification",
     "pages/dorm-reservations/dorm-reservations",
     "pages/dorm-scan/dorm-scan",
+    "pages/admin-scan/admin-scan",
     "pages/dorm-records/dorm-records",
     "pages/dorm-spaces/dorm-spaces",
     "pages/admin-manage/admin-manage",
@@ -41,7 +48,8 @@
     "pages/admin-credit/admin-credit",
     "pages/admin-stats/admin-stats",
     "pages/admin-rooms/admin-rooms",
-    "pages/admin-profile/admin-profile"
+    "pages/admin-profile/admin-profile",
+    "pages/admin-room-detail/admin-room-detail"
   ],
   "window": {
     "backgroundTextStyle": "light",

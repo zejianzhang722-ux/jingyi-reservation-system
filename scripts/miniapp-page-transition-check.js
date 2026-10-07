@@ -49,6 +49,11 @@ for (const [motionClass, pages] of Object.entries(groups)) {
   for (const page of pages) {
     const wxml = read(`miniapp/pages/${page}/${page}.wxml`)
     const firstTag = wxml.split(/\r?\n/, 1)[0]
+    if (['study-room', 'room-timeline'].includes(page)) {
+      expect(!firstTag.includes('motion-page') && !firstTag.includes(motionClass), `${page} 弹窗祖先不能带 transform 转场`)
+      expect(wxml.includes('room-header motion-page motion-stack'), `${page} 顶部信息应保留轻量转场`)
+      continue
+    }
     expect(firstTag.includes('motion-page'), `${page} 根节点缺少 motion-page`)
     expect(firstTag.includes(motionClass), `${page} 根节点缺少 ${motionClass}`)
     expect(!firstTag.includes('page-fade-in'), `${page} 仍包含重复的 page-fade-in`)

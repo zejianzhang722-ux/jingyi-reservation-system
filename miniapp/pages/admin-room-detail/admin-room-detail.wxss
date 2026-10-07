@@ -1,0 +1,2 @@
+@import "../../styles/admin-management.wxss";
+.room-status{display:inline-block;padding:8rpx 18rpx;border-radius:30rpx;font-size:24rpx;background:#edf5ff;color:#24659f}.management-title{margin-top:18rpx;font-size:38rpx}.status-open{background:#ebf8ee;color:#257642}.status-maintenance{background:#fff1e4;color:#9c601d}.status-closed{background:#f0f2f5;color:#6b798a}

@@ -12,7 +12,7 @@
   <view class="state-card error-state" wx:elif="{{pageStatus === 'error'}}">
     <text class="state-title">加载失败</text>
     <text class="state-message">{{errorMessage}}</text>
-    <button class="retry-button" bindtap="onRetry" aria-label="重新加载统计数据">重新加载</button>
+    <button class="ui-btn retry-button" bindtap="onRetry" aria-label="重新加载统计数据">重新加载</button>
   </view>
 
   <block wx:else>
@@ -23,11 +23,11 @@
       </view>
       <view class="stat-card">
         <text class="stat-value">{{dashboard.ordinaryPendingCount}}</text>
-        <text class="stat-label">普通待审</text>
+        <text class="stat-label">预约审核</text>
       </view>
       <view class="stat-card warning" wx:if="{{showCounselorPending}}">
         <text class="stat-value">{{dashboard.counselorPendingCount}}</text>
-        <text class="stat-label">重点待审</text>
+        <text class="stat-label">辅导员审核</text>
       </view>
       <view class="stat-card" wx:else>
         <text class="stat-value">{{dashboard.activeRoomCount}}</text>
@@ -42,7 +42,7 @@
     <view class="section">
       <view class="section-head">
         <text class="section-title">近 30 天使用排行</text>
-        <button class="refresh-button" bindtap="onRefresh" aria-label="刷新统计数据">刷新</button>
+        <button class="ui-btn refresh-button" bindtap="onRefresh" aria-label="刷新统计数据">刷新</button>
       </view>
       <view wx:if="{{usageRows.length > 0}}">
         <view class="rank-row" wx:for="{{usageRows}}" wx:key="roomId">

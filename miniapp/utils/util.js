@@ -71,13 +71,16 @@ function getCreditColorValue(score) {
 function getStatusText(status) {
   var map = {
     pending: '待审核',
+    counselor_pending: '待辅导员审核',
     approved: '已通过',
+    rejected: '已拒绝',
+    checked_in: '使用中',
     using: '使用中',
     completed: '已完成',
     cancelled: '已取消',
     noshow: '已爽约'
   }
-  return map[status] || status
+  return map[status] || '状态待确认'
 }
 
 function getStatusClass(status) {
@@ -89,12 +92,7 @@ function isTimeConflict(start1, end1, start2, end2) {
 }
 
 function canCancel(reservation) {
-  if (reservation.status !== 'pending' && reservation.status !== 'approved' && reservation.status !== 'counselor_pending') return false
-  var now = new Date()
-  var startTime = reservation.startTime || reservation.start_time
-  var date = new Date(reservation.date + 'T' + startTime)
-  var diff = date.getTime() - now.getTime()
-  return diff > 3 * 60 * 60 * 1000
+  return !!reservation && ['pending', 'approved', 'counselor_pending'].indexOf(reservation.status) >= 0
 }
 
 function canCheckIn(reservation) {
@@ -125,6 +123,15 @@ function getRoomTypeIcon(type) {
 
 function getRoomTypeName(type) {
   var map = {
+    study_room: '自习室',
+    seminar_room: '共享空间',
+    media_room: '影音室',
+    competition_room: '备赛间',
+    roadshow_space: '路演空间',
+    dance_room: '舞蹈室',
+    multi_purpose_hall: '多功能厅',
+    reading_room: '阅览室',
+    party_room: '党团活动室',
     study: '自习室',
     discussion: '研讨室',
     media: '影音室',
@@ -136,7 +143,7 @@ function getRoomTypeName(type) {
     other: '其他',
     poster: '海报栏'
   }
-  return map[type] || type
+  return map[type] || '其他空间'
 }
 
 function throttle(fn, delay) {

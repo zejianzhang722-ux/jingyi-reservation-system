@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "管理控制台",
   "usingComponents": {
-    "admin-nav": "/components/admin-nav/admin-nav"
+    "admin-nav": "/components/admin-nav/admin-nav",
+    "app-dialog": "/components/app-dialog/app-dialog"
   }
 }

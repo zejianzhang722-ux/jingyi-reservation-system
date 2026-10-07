@@ -1,3 +1,4 @@
+var dialog = require('../../utils/dialog')
 var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var adminPolicy = require('../../utils/admin-policy')
@@ -115,7 +116,7 @@ Page({
     if (!this.ensureFeedbackAccess()) return
     var that = this
     var id = e.currentTarget.dataset.id
-    wx.showModal({
+    dialog.show(this, {
       title: '确认处理',
       content: '确定将该反馈标记为已处理？',
       success: function (res) {

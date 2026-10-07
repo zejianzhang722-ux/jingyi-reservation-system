@@ -1,0 +1,2 @@
+<include src="../../templates/dorm-layout.wxml" />
+<admin-nav selected="manage"></admin-nav>

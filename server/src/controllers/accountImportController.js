@@ -6,6 +6,7 @@ const config = require('../config');
 const { normalizeAdminScope } = require('../utils/adminScope');
 
 const roleMap = {
+  '导生会会长团': 'super_admin',
   superadmin: 'super_admin',
   '超级管理员': 'super_admin',
   '导生管理员': 'admin',

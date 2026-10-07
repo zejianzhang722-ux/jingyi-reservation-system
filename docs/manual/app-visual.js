@@ -38,5 +38,5 @@
   search.addEventListener('input',renderSearch);
   document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();sidebar.classList.add('open');search.focus();}if(e.key==='Escape'){sidebar.classList.remove('open');search.blur();}});
   window.addEventListener('hashchange',()=>{render();window.scrollTo({top:0,behavior:'auto'});});
-  document.getElementById('updated').textContent='更新于 2026-09 · 59 个实机页面';render();
+  document.getElementById('updated').textContent='更新于 2026-10-07 · '+window.MANUAL.pages.length+' 个实机页面';render();
 })();

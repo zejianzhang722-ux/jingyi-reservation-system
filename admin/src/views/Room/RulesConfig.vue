@@ -46,8 +46,8 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="每日预约上限(次)">
-              <el-input-number v-model="form.dailyLimit" :min="1" :max="10" style="width: 100%" />
+            <el-form-item label="同类每日上限(次)">
+              <el-input-number :model-value="3" disabled style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -56,6 +56,8 @@
             </el-form-item>
           </el-col>
         </el-row>
+
+        <el-alert title="按预约所选日期，同一种功能房最多3次；取消或拒绝后释放次数。所有功能房及参加的组团时间不得重叠。" type="info" :closable="false" />
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="每周预约上限(次)">
@@ -146,7 +148,7 @@ const form = reactive({
   closeTime: '22:00',
   minDuration: 60,
   maxDuration: 180,
-  dailyLimit: 2,
+  dailyLimit: 3,
   advanceDays: 3,
   weeklyLimit: 10,
   slotInterval: 60,

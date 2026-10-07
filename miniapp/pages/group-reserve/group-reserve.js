@@ -1,4 +1,6 @@
 var request = require('../../utils/request')
+var localData = require('../../utils/local-data')
+var bookingPolicy = require('../../utils/room-booking-policy')
 
 Page({
   data: {
@@ -36,9 +38,10 @@ Page({
   loadRoomInfo: function (roomId) {
     var that = this
     request.get('/room/' + roomId).then(function (data) {
-      that.setData({ room: data, loading: false })
+      that.setData({ room: bookingPolicy.presentRoom(data), loading: false })
     }).catch(function () {
-      that.setData({ loading: false })
+      var room = localData.getRoomById(roomId)
+      that.setData({ room: room ? bookingPolicy.presentRoom(room) : null, loading: false })
     })
   },
 
@@ -79,7 +82,21 @@ Page({
     this.setData({ 'form.description': e.detail.value })
   },
 
+  validateGroupForm: function () {
+    var blocked = bookingPolicy.blockReason(this.data.room, 'group')
+    if (blocked) return blocked
+    var count = Number(this.data.form.maxMembers)
+    if (!Number.isInteger(count) || count < 2) return '请填写至少2人的实际参与人数（含发起人）'
+    if (this.data.room.capacity && count > Number(this.data.room.capacity)) return '实际参与人数不能超过功能房容量'
+    if (!String(this.data.form.title || '').trim()) return '请填写标题'
+    if (!this.data.form.date) return '请选择日期'
+    if (!this.data.form.startHour || !this.data.form.endHour || this.data.form.endHour <= this.data.form.startHour) return '请选择有效的开始和结束时间'
+    return ''
+  },
+
   onCreateGroup: function () {
+    var error = this.validateGroupForm()
+    if (error) { wx.showToast({ title: error, icon: 'none' }); return }
     var form = this.data.form
     if (!form.title) {
       wx.showToast({ title: '请填写标题', icon: 'none' })

@@ -14,6 +14,8 @@
         title="保存后立即写入 system_config，并在 30 秒内对所有服务实例生效。扣分请填正数。"
       />
 
+      <el-alert title="信用分不限制登录，仅影响预约。良好：提前3天、每天3次；提醒：提前2天、每天2次；受限：提前1天、每天1次、08:00–20:00；严格受限：仅当天、每天1次、09:00–17:00。次数按同类功能房计算。" type="info" :closable="false" class="tip" />
+
       <el-form :model="form" label-width="180px" class="config-form">
         <el-divider content-position="left">基础设置</el-divider>
         <el-row :gutter="20">
@@ -77,26 +79,16 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="限制天数">
-              <el-input-number v-model="form.restrictDays" :min="0" :max="365" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
 
-        <el-divider content-position="left">封禁规则</el-divider>
+
+        <el-divider content-position="left">预约严格限制区间</el-divider>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="封禁阈值">
+            <el-form-item label="严格限制阈值">
               <el-input-number v-model="form.banThreshold" :min="0" :max="200" style="width: 100%" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="封禁天数">
-              <el-input-number v-model="form.banDays" :min="0" :max="365" style="width: 100%" />
-            </el-form-item>
-          </el-col>
+
         </el-row>
       </el-form>
 
@@ -124,8 +116,8 @@ const CREDIT_FIELDS = [
   'initialScore', 'maxScore',
   'noshowPenalty', 'violationPenalty',
   'goodReward', 'feedbackReward', 'goodThreshold',
-  'warningThreshold', 'restrictThreshold', 'restrictDays',
-  'banThreshold', 'banDays'
+  'warningThreshold', 'restrictThreshold',
+  'banThreshold'
 ]
 
 const FIELD_LABELS = {
@@ -139,7 +131,7 @@ const FIELD_LABELS = {
   warningThreshold: '预警阈值',
   restrictThreshold: '限制预约阈值',
   restrictDays: '限制天数',
-  banThreshold: '封禁阈值',
+  banThreshold: '严格限制阈值',
   banDays: '封禁天数'
 }
 

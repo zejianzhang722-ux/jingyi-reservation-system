@@ -79,7 +79,7 @@ assert.deepEqual(superNavigationNames.slice(0, 4), ['Dashboard', 'ReservationPen
 assert.ok(superNavigationNames.includes('SystemLogs'))
 assert.ok(superNavigationNames.includes('SystemBackup'))
 
-assert.match(ROLE_LABELS.super_admin, /超级|系统/)
+assert.equal(ROLE_LABELS.super_admin, '导生会会长团')
 assert.match(ROLE_LABELS.admin, /管理/)
 assert.match(ROLE_LABELS.counselor, /辅导员/)
 

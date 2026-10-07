@@ -6,8 +6,36 @@ const errorCodes = require('../config/errorCodes');
 const commandService = require('./reservationCommandService');
 const notificationService = require('./notificationService');
 const realtimeEventService = require('./realtimeEventService');
+const checkinWindowPolicy = require('./checkinWindowPolicy');
+
+const validateNoshow = async function(reservation, options, query) {
+  if (options.nextStatus !== 'noshow') return;
+  if (!checkinWindowPolicy.isOverdue(reservation, options.now || new Date())) {
+    throw commandService.httpError(409, '仍在签到时段内，不能标记爽约');
+  }
+  const [checkins] = await query('SELECT id FROM checkins WHERE reservation_id = ?', [reservation.id]);
+  if (checkins.length) throw commandService.httpError(409, '预约已签到，不能标记爽约');
+};
+
+const applyNoshowCredit = async function(connection, reservation, options) {
+  if (options.nextStatus !== 'noshow') return null;
+  const result = await require('./creditService').addCreditWithinTransaction(
+    connection, reservation.user_id, config.credit.noshowPenalty, 'noshow',
+    '超时未签到，自动标记爽约', { reservationId: reservation.id, dedupeKey: 'noshow:' + reservation.id }
+  );
+  if (!result) throw commandService.httpError(503, '预约用户不存在，爽约处理已取消');
+  return result;
+};
+
+const notifyNoshow = async function(reservation, creditResult) {
+  if (creditResult) await require('./creditService').notifyCreditThreshold(reservation.user_id, creditResult);
+  await notificationService.createNotification(reservation.user_id, 'noshow', '预约爽约提醒',
+    '预约开始后超过15分钟未签到，已标记爽约并扣除' + Math.abs(config.credit.noshowPenalty) + '信用分',
+    { reservationId: reservation.id });
+};
 
 const ACTIVE_STATUSES = commandService.ACTIVE_STATUSES;
+let mockLifecycleQueue = Promise.resolve();
 
 /**
  * 归一化「期望版本号」（R-02 乐观锁）。
@@ -51,13 +79,19 @@ const mapReservation = function(row, status) {
 
 const validateRelease = function(reservation, options) {
   if (!reservation) throw commandService.httpError(404, '预约不存在');
-  const allowedStatuses = options.allowedCurrentStatuses || ACTIVE_STATUSES;
-  if (!allowedStatuses.includes(reservation.status)) {
-    throw commandService.httpError(409, '预约已被处理或当前状态无法释放');
-  }
   if (options.actorRole === 'student' && Number(reservation.user_id) !== Number(options.actorUserId)) {
     throw commandService.httpError(403, '无权操作此预约');
   }
+  const cancelling = !options.nextStatus || options.nextStatus === 'cancelled';
+  if (cancelling && reservation.status === 'cancelled') return;
+  const allowedStatuses = cancelling ? ['approved', 'pending', 'counselor_pending'] : (options.allowedCurrentStatuses || ACTIVE_STATUSES);
+  if (!allowedStatuses.includes(reservation.status)) {
+    throw commandService.httpError(409, '预约已被处理或当前状态无法释放');
+  }
+};
+
+const synchronizeCancelledGroup = async function(query, reservationId) {
+  await query("UPDATE reservation_groups SET status = 'cancelled', updated_at = NOW() WHERE reservation_id = ? AND status != 'cancelled'", [reservationId]);
 };
 
 const updateReleasedReservation = async function(connection, reservation, options) {
@@ -186,12 +220,21 @@ const releaseAndPromoteMysql = async function(options) {
   let reservation;
   let promotion;
   let nextStatus;
+  let creditResult;
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute('SELECT * FROM reservations WHERE id = ? FOR UPDATE', [Number(options.reservationId)]);
     reservation = rows[0];
     validateRelease(reservation, options);
+    if ((!options.nextStatus || options.nextStatus === 'cancelled') && reservation.status === 'cancelled') {
+      await synchronizeCancelledGroup((sql, params) => connection.execute(sql, params), reservation.id);
+      await connection.commit();
+      return { reservation: mapReservation(reservation), promotedReservation: null, waitlistEntry: null, idempotent: true };
+    }
+    await validateNoshow(reservation, options, (sql, params) => connection.execute(sql, params));
     nextStatus = await updateReleasedReservation(connection, reservation, options);
+    if (nextStatus === 'cancelled') await synchronizeCancelledGroup((sql, params) => connection.execute(sql, params), reservation.id);
+    creditResult = await applyNoshowCredit(connection, reservation, options);
     promotion = await promoteWithinTransaction(connection, reservation);
     await connection.commit();
   } catch (err) {
@@ -207,7 +250,9 @@ const releaseAndPromoteMysql = async function(options) {
   }
 
   await notifyPromotion(promotion);
+  if (nextStatus === 'noshow') await notifyNoshow(reservation, creditResult);
   await publishLifecycleRooms(reservation, promotion, 'reservation-lifecycle-committed');
+  if (['cancelled', 'rejected', 'noshow'].includes(nextStatus)) await require('./danceGroupNotificationService').notifySafely(reservation.id, true);
   return {
     reservation: mapReservation(reservation, nextStatus),
     promotedReservation: promotion ? promotion.promoted : null,
@@ -218,6 +263,7 @@ const releaseAndPromoteMysql = async function(options) {
 const copyMockState = function(tables) {
   return {
     reservations: JSON.parse(JSON.stringify(tables.reservations || [])),
+    groups: JSON.parse(JSON.stringify(tables.reservation_groups || [])),
     reservationSlots: JSON.parse(JSON.stringify(tables.reservation_slots || [])),
     waitlist: JSON.parse(JSON.stringify(tables.reservation_waitlist || []))
   };
@@ -225,8 +271,46 @@ const copyMockState = function(tables) {
 
 const restoreMockState = function(tables, snapshot) {
   tables.reservations = snapshot.reservations;
+  tables.reservation_groups = snapshot.groups;
   tables.reservation_slots = snapshot.reservationSlots;
   tables.reservation_waitlist = snapshot.waitlist;
+};
+
+// 只记录本次爽约的信用副作用；不恢复整张用户/积分表，避免覆盖无关更新。
+const mockCreditWork = function(tables, reservation) {
+  const userId = Number(reservation.user_id);
+  const user = tables.users.find(row => Number(row.id) === userId);
+  const original = user && { status: user.status, restricted_until: user.restricted_until,
+    hasUntil: Object.prototype.hasOwnProperty.call(user, 'restricted_until') };
+  const priorLogIds = new Set((tables.credits_log || []).filter(log => Number(log.user_id) === userId &&
+    log.type === 'noshow' && Number(log.related_id) === Number(reservation.id)).map(log => Number(log.id)));
+  let creditDelta = 0;
+  let lastStatus = null;
+  return {
+    query: async function(sql, params) {
+      const scoreWrite = /^UPDATE users SET credit_score/i.test(sql) && Number(params[1]) === userId;
+      const statusWrite = /^UPDATE users SET status/i.test(sql) && Number(params[params.length - 1]) === userId;
+      const before = scoreWrite && user ? Number(user.credit_score) : 0;
+      try { return await db.query(sql, params); }
+      finally {
+        if (scoreWrite && user) creditDelta += Number(user.credit_score) - before;
+        if (statusWrite && user) lastStatus = { status: user.status, restricted_until: user.restricted_until };
+      }
+    },
+    rollback: function() {
+      const current = tables.users.find(row => Number(row.id) === userId);
+      if (current) {
+        current.credit_score = Number(current.credit_score) - creditDelta;
+        if (original && lastStatus && current.status === lastStatus.status && String(current.restricted_until) === String(lastStatus.restricted_until)) {
+          current.status = original.status;
+          if (original.hasUntil) current.restricted_until = original.restricted_until;
+          else delete current.restricted_until;
+        }
+      }
+      tables.credits_log = (tables.credits_log || []).filter(log => !(Number(log.user_id) === userId &&
+        log.type === 'noshow' && Number(log.related_id) === Number(reservation.id) && !priorLogIds.has(Number(log.id))));
+    }
+  };
 };
 
 const releaseAndPromoteMock = async function(options) {
@@ -235,10 +319,19 @@ const releaseAndPromoteMock = async function(options) {
   if (!tables.reservation_waitlist) tables.reservation_waitlist = [];
   const snapshot = copyMockState(tables);
   let promotion = null;
+  let creditWork = null;
+  let committed = false;
   try {
     const reservation = tables.reservations.find(function(row) {
       return Number(row.id) === Number(options.reservationId);
     });
+    validateRelease(reservation, options);
+    if ((!options.nextStatus || options.nextStatus === 'cancelled') && reservation.status === 'cancelled') {
+      await synchronizeCancelledGroup(db.query, reservation.id);
+      return { reservation: mapReservation(reservation), promotedReservation: null, waitlistEntry: null, idempotent: true };
+    }
+    await validateNoshow(reservation, options, db.query);
+    // Awaiting the check above allows another request to win; recheck before the status write.
     validateRelease(reservation, options);
     // 乐观锁（R-02）：mock 模式同样支持 version 校验与自增，行为与 MySQL 路径一致。
     const expectedVersion = normalizeExpectedVersion(options.expectedVersion);
@@ -250,6 +343,7 @@ const releaseAndPromoteMock = async function(options) {
     reservation.version = Number(reservation.version || 1) + 1;
     reservation.updated_at = helpers.formatDateTime(new Date());
     if (nextStatus === 'cancelled') reservation.cancelled_at = reservation.updated_at;
+    if (nextStatus === 'cancelled') await synchronizeCancelledGroup(db.query, reservation.id);
     if (nextStatus === 'rejected') reservation.reject_reason = options.reason || '';
     tables.reservation_slots = tables.reservation_slots.filter(function(slot) {
       return Number(slot.reservation_id) !== Number(reservation.id);
@@ -297,21 +391,36 @@ const releaseAndPromoteMock = async function(options) {
       }
     }
 
+    if (nextStatus === 'noshow') creditWork = mockCreditWork(tables, reservation);
+    const creditResult = await applyNoshowCredit(creditWork || { query: db.query }, reservation, options);
+    committed = true;
     await notifyPromotion(promotion);
+    if (nextStatus === 'noshow') {
+      try { await notifyNoshow(reservation, creditResult); }
+      catch (err) { logger.error('爽约已提交，通知将由后续扫描重试:', err); }
+    }
     await publishLifecycleRooms(reservation, promotion, 'reservation-lifecycle-mock');
+    if (['cancelled', 'rejected', 'noshow'].includes(nextStatus)) await require('./danceGroupNotificationService').notifySafely(reservation.id, true);
     return {
       reservation: mapReservation(reservation, nextStatus),
       promotedReservation: promotion ? promotion.promoted : null,
       waitlistEntry: promotion ? promotion.entry : null
     };
   } catch (err) {
-    restoreMockState(tables, snapshot);
+    if (!committed) {
+      if (creditWork) creditWork.rollback();
+      restoreMockState(tables, snapshot);
+    }
     throw err;
   }
 };
 
 const releaseAndPromote = async function(options) {
-  if (db.isMock()) return releaseAndPromoteMock(options);
+  if (db.isMock()) {
+    const run = mockLifecycleQueue.then(() => releaseAndPromoteMock(options));
+    mockLifecycleQueue = run.catch(() => {});
+    return run;
+  }
   return releaseAndPromoteMysql(options);
 };
 
@@ -355,30 +464,26 @@ const promoteReleasedReservation = async function(source) {
   return promotion ? promotion.promoted : null;
 };
 
-const detectNoshow = async function() {
-  const now = new Date();
-  const today = helpers.formatDate(now);
-  const [reservations] = await db.query(
-    "SELECT r.* FROM reservations r WHERE r.date = ? AND r.status = 'approved' AND CONCAT(r.date, ' ', r.start_time) < DATE_SUB(NOW(), INTERVAL 15 MINUTE)",
-    [today]
+const detectNoshow = async function(referenceDate) {
+  const now = referenceDate instanceof Date ? referenceDate : new Date();
+  const [reservations] = db.isMock() ? [require('../config/mock-db').__tables.reservations.slice()] : await db.query(
+    "SELECT r.* FROM reservations r WHERE r.status IN ('approved', 'noshow') AND CONCAT(r.date, ' ', r.start_time) < ? AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id = r.user_id AND n.dedupe_key = CONCAT('noshow:reservation:', r.id))",
+    [helpers.formatDateTime(new Date(now.getTime() - 15 * 60000))]
   );
 
   for (const reservation of reservations) {
     try {
-      const [checkins] = await db.query('SELECT id FROM checkins WHERE reservation_id = ?', [reservation.id]);
-      if (checkins.length) continue;
+      if (!['approved', 'noshow'].includes(reservation.status) || !checkinWindowPolicy.isOverdue(reservation, now)) continue;
+      if (reservation.status === 'noshow') {
+        await notifyNoshow(reservation);
+        continue;
+      }
       await releaseAndPromote({
         reservationId: reservation.id,
         nextStatus: 'noshow',
-        allowedCurrentStatuses: ['approved']
+        allowedCurrentStatuses: ['approved'],
+        now
       });
-      const creditService = require('./creditService');
-      await creditService.addCredit(
-        reservation.user_id,
-        config.credit.noshowPenalty,
-        'noshow',
-        '超时未签到，自动标记爽约'
-      );
       logger.info('爽约检测: 预约ID=' + reservation.id + ', 用户ID=' + reservation.user_id);
     } catch (err) {
       if (Number(err.httpStatus) === 409) continue;

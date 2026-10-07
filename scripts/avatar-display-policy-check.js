@@ -5,7 +5,7 @@ const path = require('path')
 const express = require('../server/node_modules/express')
 const mediaRouter = require('../server/src/routes/media')
 
-const uploadsDir = path.resolve(__dirname, '../server/uploads')
+const uploadsDir = path.resolve(__dirname, '../server', require('../server/src/config').upload.dir)
 const fixtureName = 'avatar-display-policy-test.png'
 const fixturePath = path.join(uploadsDir, fixtureName)
 const tinyPng = Buffer.from(

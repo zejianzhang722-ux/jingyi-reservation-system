@@ -2,6 +2,7 @@ var request = require('../../utils/request')
 var auth = require('../../utils/auth')
 var localData = require('../../utils/local-data')
 var subscribeMessage = require('../../services/subscribeMessage')
+var bookingPolicy = require('../../utils/room-booking-policy')
 
 function padTime(value) {
   return (value < 10 ? '0' : '') + value
@@ -32,7 +33,7 @@ function isPositiveInteger(value) {
 }
 
 function supportsGroupReservation(room) {
-  return !!room && ['study_room', 'study'].indexOf(String(room.type || '')) === -1
+  return !!room && bookingPolicy.presentRoom(room).canGroupReserve
 }
 
 Page({
@@ -52,6 +53,9 @@ Page({
     agreedRules: false,
     submitting: false,
     canGroupReserve: false,
+    groupOnly: false,
+    bookingBlocked: false,
+    bookingMessage: '',
     reservationMode: 'personal',
     timeStr: '',
     durationStr: '',
@@ -107,22 +111,11 @@ Page({
   loadRoomInfo: function (roomId) {
     var that = this
     request.get('/room/' + roomId).then(function (data) {
-      var resolvedId = localData.resolveRoomId(data.id || data.room_id || data.roomId || data.name || data.room_number || roomId)
-      that.setData({
-        roomId: resolvedId || roomId,
-        room: data,
-        canGroupReserve: supportsGroupReservation(data),
-        reservationMode: supportsGroupReservation(data) ? that.data.reservationMode : 'personal'
-      })
+      that.applyRoom(data)
     }).catch(function () {
       var data = localData.getRoomById(roomId)
       if (data) {
-        that.setData({
-          roomId: data.id || roomId,
-          room: data,
-          canGroupReserve: supportsGroupReservation(data),
-          reservationMode: supportsGroupReservation(data) ? that.data.reservationMode : 'personal'
-        })
+        that.applyRoom(data)
       }
     })
   },
@@ -193,8 +186,19 @@ Page({
     this.setData({ 'discussionFields.hasOwnAppliance': e.detail.value })
   },
 
+  applyRoom: function (data) {
+    var room = bookingPolicy.presentRoom(data)
+    var policy = room.bookingPolicy
+    var resolvedId = localData.resolveRoomId(data.id || data.room_id || data.roomId || data.name || data.room_number || this.data.roomId)
+    this.setData({ roomId: resolvedId || this.data.roomId, room: room,
+      canGroupReserve: room.canGroupReserve, groupOnly: policy.groupOnly,
+      bookingBlocked: room.bookingBlocked, bookingMessage: policy.message,
+      reservationMode: policy.groupOnly ? 'group' : room.canGroupReserve ? this.data.reservationMode : 'personal' })
+  },
+
   onReservationModeChange: function (e) {
     var mode = e.currentTarget.dataset.mode
+    if (mode === 'personal' && bookingPolicy.forRoom(this.data.room).groupOnly) return
     if (mode === 'group' && !this.data.canGroupReserve) return
     this.setData({ reservationMode: mode === 'group' ? 'group' : 'personal' })
   },
@@ -212,6 +216,8 @@ Page({
   },
 
   validateForm: function () {
+    var blocked = bookingPolicy.blockReason(this.data.room, this.data.reservationMode)
+    if (blocked) return blocked
     if (!auth.getToken()) return '登录已过期，请重新登录后再预约'
     if (!Number(this.data.roomId)) return '房间信息异常，请返回重新选择功能房'
     if (!this.data.agreedRules) return '请先阅读并同意管理制度'
@@ -239,7 +245,7 @@ Page({
       if (!isPositiveInteger(this.data.mediaFields.participantCount)) return '请输入有效参与人数'
       if (room.capacity && Number(this.data.mediaFields.participantCount) > Number(room.capacity)) return '参与人数不能超过功能房容量'
     }
-    if (roomType === 'competition_room' || roomType === 'roadshow_space' || roomType === 'competition' || roomType === 'roadshow') {
+    if (bookingPolicy.forRoom(room).sharedCapacity || roomType === 'roadshow_space' || roomType === 'roadshow') {
       if (!this.data.competitionFields.competitionName) return '请输入项目名称'
       if (!isPositiveInteger(this.data.competitionFields.participantCount)) return '请输入有效参与人数'
       if (room.capacity && Number(this.data.competitionFields.participantCount) > Number(room.capacity)) return '参与人数不能超过功能房容量'
@@ -276,7 +282,7 @@ Page({
       data.participantCount = Number(this.data.mediaFields.participantCount)
       data.participants = Number(this.data.mediaFields.participantCount)
       data.purpose = this.data.mediaFields.purpose
-    } else if (roomType === 'competition_room' || roomType === 'roadshow_space' || roomType === 'competition' || roomType === 'roadshow') {
+    } else if (bookingPolicy.forRoom(this.data.room).sharedCapacity || roomType === 'roadshow_space' || roomType === 'roadshow') {
       data.competitionName = this.data.competitionFields.competitionName
       data.purpose = this.data.competitionFields.competitionName
       data.participantCount = Number(this.data.competitionFields.participantCount)

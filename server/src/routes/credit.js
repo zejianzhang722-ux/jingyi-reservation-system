@@ -11,6 +11,8 @@ const { violationRules, paginationRules } = require('../middleware/validator');
 router.get('/violations', auth, adminScope.loadAdminScope, paginationRules, creditController.violationList);
 router.post('/violation', auth, requireAdmin, adminScope.loadAdminScope, adminScope.userFromBody('userId'), violationRules, creditController.createViolation);
 router.get('/blacklist', auth, requireRole('counselor', 'super_admin'), creditController.blacklist);
+router.get('/students/:id', auth, requireRole('counselor', 'super_admin'), adminScope.loadAdminScope, creditController.studentDetail);
+router.put('/students/:id', auth, requireRole('counselor', 'super_admin'), adminScope.loadAdminScope, creditController.setStudentCredit);
 router.put('/blacklist/:userId', auth, requireRole('counselor', 'super_admin'), creditController.updateBlacklist);
 
 module.exports = router;

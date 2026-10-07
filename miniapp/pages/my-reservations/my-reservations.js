@@ -14,6 +14,7 @@ function normalizeReservations(list) {
     next.statusText = util.getStatusText(next.status) || '未知状态'
     next.canCheckIn = util.canCheckIn(next)
     next.canCancel = util.canCancel(next)
+    next.canViewVoucher = ['approved', 'checked_in', 'using'].indexOf(next.status) >= 0
     return next
   })
 }

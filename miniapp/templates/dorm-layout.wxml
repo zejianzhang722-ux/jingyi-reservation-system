@@ -34,7 +34,7 @@
   </view>
   <view wx:if="{{section === 'scan'}}" class="card" id="scan-panel">
     <button id="scan-trigger" type="primary" bindtap="scan" disabled="{{busy || uncertain}}">扫描宿生动态预约码</button>
-    <text class="hint">请让宿生打开预约详情中的最新动态预约码。</text>
+    <text class="hint">请让宿生打开预约详情中的最新动态预约码。可在预约开始前15分钟至开始后15分钟内办理签到。</text>
     <view wx:if="{{error}}" class="warning">{{error}}</view>
     <view wx:if="{{result}}">
       <view class="message {{result.checkedIn ? 'success' : ''}}"><text class="subtitle">{{result.checkedIn ? '已签到 · 核对信息后开门' : result.message}}</text><text wx:if="{{result.checkedIn}}" class="hint">请按下方信息核对房间与使用时段，再现场开门。</text></view>

@@ -69,7 +69,7 @@ const listCapabilities = async function(req, res) {
       : Number(req.user.id);
     if (targetId !== Number(req.user.id) && !isSuperAdmin(req)) {
       return response.errorWithCode(res, 403, errorCodes.ERROR_CODES.PERMISSION_DENIED, {
-        message: '仅超级管理员可查看他人授权'
+        message: '仅导生会会长团可查看他人授权'
       });
     }
     const records = await adminCapabilityService.listByAdmin(targetId);
@@ -84,7 +84,7 @@ const grantCapability = async function(req, res) {
   try {
     if (!isSuperAdmin(req)) {
       return response.errorWithCode(res, 403, errorCodes.ERROR_CODES.PERMISSION_DENIED, {
-        message: '仅超级管理员可授予临时能力'
+        message: '仅导生会会长团可授予临时能力'
       });
     }
     const body = req.body || {};
@@ -106,7 +106,7 @@ const revokeCapability = async function(req, res) {
   try {
     if (!isSuperAdmin(req)) {
       return response.errorWithCode(res, 403, errorCodes.ERROR_CODES.PERMISSION_DENIED, {
-        message: '仅超级管理员可撤销临时能力'
+        message: '仅导生会会长团可撤销临时能力'
       });
     }
     const revoked = await adminCapabilityService.revoke({ grantId: req.params.id });
@@ -145,7 +145,7 @@ const reassignHandover = async function(req, res) {
   try {
     if (!isSuperAdmin(req)) {
       return response.errorWithCode(res, 403, errorCodes.ERROR_CODES.PERMISSION_DENIED, {
-        message: '仅超级管理员（会长团）可操作岗位交接'
+        message: '仅导生会会长团可操作岗位交接'
       });
     }
     const body = req.body || {};

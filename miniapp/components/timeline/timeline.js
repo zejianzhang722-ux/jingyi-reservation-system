@@ -1,4 +1,5 @@
 var util = require('../../utils/util')
+var selectionAtPoint = require('./selection').selectionAtPoint
 
 Component({
   properties: {
@@ -347,29 +348,33 @@ Component({
       var blockEnd = Number(e.currentTarget.dataset.end)
 
       if (blockType !== 'free') return
-
-      this.setData({
-        selectedSeat: seatId,
-        selectedStart: Math.floor(blockStart * 2) / 2,
-        selectedEnd: Math.ceil(blockEnd * 2) / 2
-      })
-
-      var rawStartH = Math.floor(blockStart * 2) / 2
-      var rawEndH = Math.ceil(blockEnd * 2) / 2
-      this.triggerEvent('selecttime', {
-        seatId: seatId,
-        startHour: Math.floor(rawStartH),
-        startMin: (rawStartH % 1 >= 0.5) ? 30 : 0,
-        endHour: Math.floor(rawEndH),
-        endMin: (rawEndH % 1 >= 0.5) ? 30 : 0
-      })
+      var self = this
+      var x = e.detail && e.detail.x
+      var select = function (rect) {
+        var range = selectionAtPoint(blockStart, blockEnd, x, rect)
+        if (!range) return
+        self.setData({ selectedSeat: seatId, selectedStart: range.start, selectedEnd: range.end })
+        self.triggerEvent('selecttime', {
+          seatId: seatId,
+          startHour: Math.floor(range.start),
+          startMin: range.start % 1 >= 0.5 ? 30 : 0,
+          endHour: Math.floor(range.end),
+          endMin: range.end % 1 >= 0.5 ? 30 : 0
+        })
+      }
+      if (e.currentTarget.id) {
+        this.createSelectorQuery().select('#' + e.currentTarget.id).boundingClientRect(select).exec()
+      } else {
+        select(null)
+      }
     },
 
     scrollToCurrentTime: function () {
       if (!this.data.isToday) return;
       var now = new Date();
       var currentHourVal = now.getHours() + now.getMinutes() / 60;
-      var scrollLeft = Math.max(0, (currentHourVal - this.data.openHour) * this.data.halfHourWidth * 2 - 100);
+      var info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+      var scrollLeft = Math.max(0, (currentHourVal - this.data.openHour) * this.data.halfHourWidth * 2 * info.windowWidth / 750 - 100);
       this.setData({ scrollLeft: scrollLeft });
     },
 

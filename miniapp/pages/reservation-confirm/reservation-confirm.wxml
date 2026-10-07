@@ -18,7 +18,8 @@
       </view>
     </view>
 
-    <view class="confirm-section">
+    <text wx:if="{{bookingMessage}}">{{bookingMessage}}</text>
+    <view class="confirm-section" wx:if="{{!bookingBlocked}}">
       <text class="confirm-section-title">个人信息</text>
       <view class="confirm-row">
         <text class="confirm-label">学号</text>
@@ -41,13 +42,13 @@
     <view class="confirm-section" wx:if="{{canGroupReserve}}">
       <text class="confirm-section-title">预约方式</text>
       <view class="reservation-mode-list">
-        <view class="reservation-mode {{reservationMode === 'personal' ? 'reservation-mode-active' : ''}}" data-mode="personal" bindtap="onReservationModeChange">
+        <view wx:if="{{!groupOnly}}" class="reservation-mode {{reservationMode === 'personal' ? 'reservation-mode-active' : ''}}" data-mode="personal" bindtap="onReservationModeChange">
           <text class="reservation-mode-title">个人预约</text>
           <text class="reservation-mode-desc">本人使用，按填写人数提交</text>
         </view>
         <view class="reservation-mode reservation-mode-group {{reservationMode === 'group' ? 'reservation-mode-active' : ''}}" data-mode="group" bindtap="onReservationModeChange">
           <text class="reservation-mode-title">组团预约</text>
-          <text class="reservation-mode-desc">创建组团并邀请成员加入</text>
+          <text class="reservation-mode-desc">填写实际参与人数，可邀请成员登记</text>
         </view>
       </view>
     </view>
@@ -59,13 +60,14 @@
         <input class="confirm-input" placeholder="如：课程项目讨论组" value="{{groupFields.title}}" bindinput="onGroupTitleInput" maxlength="100" />
       </view>
       <view class="confirm-input-row">
-        <text class="confirm-label"><text class="required-star">*</text>人数上限</text>
-        <input class="confirm-input" placeholder="至少2人" type="number" value="{{groupFields.maxMembers}}" bindinput="onGroupMaxMembersInput" maxlength="2" />
+        <text class="confirm-label"><text class="required-star">*</text>实际参与人数</text>
+        <input class="confirm-input" placeholder="含发起人，至少2人" type="number" value="{{groupFields.maxMembers}}" bindinput="onGroupMaxMembersInput" maxlength="2" />
       </view>
       <view class="confirm-input-row group-description-row">
         <text class="confirm-label">组团说明</text>
         <textarea class="confirm-textarea" placeholder="说明活动内容或加入要求" value="{{groupFields.description}}" bindinput="onGroupDescriptionInput" maxlength="200" />
       </view>
+      <text>实际参与人数含发起人，创建时预留对应人数；可邀请成员登记，无需先加入。</text>
     </view>
 
     <view class="confirm-section" wx:if="{{reservationMode === 'personal' && (room.type === 'discussion' || room.type === 'seminar' || room.type === 'seminar_room' || room.type === 'shared_space')}}">
@@ -102,14 +104,14 @@
       </view>
     </view>
 
-    <view class="confirm-section" wx:if="{{reservationMode === 'personal' && (room.type === 'competition' || room.type === 'roadshow' || room.type === 'competition_room' || room.type === 'roadshow_space')}}">
-      <text class="confirm-section-title">备赛/路演信息</text>
+    <view class="confirm-section" wx:if="{{reservationMode === 'personal' && (room.bookingPolicy.sharedCapacity || room.type === 'roadshow' || room.type === 'roadshow_space')}}">
+      <text class="confirm-section-title">项目与使用人数</text>
       <view class="confirm-input-row">
         <text class="confirm-label"><text class="required-star">*</text>项目名称</text>
         <input class="confirm-input" placeholder="请输入项目名称" value="{{competitionFields.competitionName}}" bindinput="onCompetitionNameInput" data-field="competitionFields" />
       </view>
       <view class="confirm-input-row">
-        <text class="confirm-label"><text class="required-star">*</text>参与人数</text>
+        <text class="confirm-label"><text class="required-star">*</text>实际参与人数</text>
         <input class="confirm-input" placeholder="请输入人数" type="number" confirm-type="done" maxlength="3" value="{{competitionFields.participantCount}}" bindinput="onParticipantCountInput" data-field="competitionFields" />
       </view>
     </view>
@@ -123,7 +125,7 @@
     </view>
   </view>
 
-  <view class="submit-btn {{submitting ? 'btn-disabled' : 'btn-primary'}}" bindtap="onSubmit">
+  <view wx:if="{{room && !bookingBlocked}}" class="submit-btn {{submitting ? 'btn-disabled' : 'btn-primary'}}" bindtap="onSubmit">
     {{submitting ? '提交中...' : (reservationMode === 'group' ? '创建组团预约' : '确认预约')}}
   </view>
 </view>

@@ -1,6 +1,6 @@
 <view class="container motion-page motion-stack">
   <view class="page-tip">
-    <text>组团预约按整房占用，发起人承担签到与爽约责任。成员加入即登记，不单独占座。</text>
+    <text>组团预约按实际参与人数预留（含发起人）；成员可登记，无需先加入。发起人承担签到与爽约责任。</text>
   </view>
 
   <view class="loading" wx:if="{{loading && !groups.length}}">加载中...</view>
@@ -32,8 +32,8 @@
           <text class="info-value">{{item.date}} {{item.startHour}}-{{item.endHour}}</text>
         </view>
         <view class="info-row">
-          <text class="info-label">人数</text>
-          <text class="info-value">{{item.memberCount}}/{{item.maxMembers}}</text>
+          <text class="info-label">实际参与人数</text>
+          <text class="info-value">{{item.maxMembers}}人（含发起人），已登记{{item.memberCount}}人</text>
         </view>
       </view>
       <view class="card-footer">

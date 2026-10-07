@@ -3,6 +3,7 @@ const logger = require('../config/logger');
 const response = require('../utils/response');
 const helpers = require('../utils/helpers');
 const dayjs = require('dayjs');
+const roomPolicy = require('../services/roomBookingPolicy');
 
 const list = async function(req, res) {
   try {
@@ -12,14 +13,14 @@ const list = async function(req, res) {
 
     if (type) { sql += ' AND r.type = ?'; params.push(type); }
     if (buildingId) { sql += ' AND r.building_id = ?'; params.push(buildingId); }
-    if (status) { sql += ' AND r.status = ?'; params.push(status); }
+
     if (keyword) { sql += ' AND (r.name LIKE ? OR r.description LIKE ?)'; params.push('%' + keyword + '%', '%' + keyword + '%'); }
 
     sql += ' ORDER BY r.building_id, r.floor, r.name';
 
     const [rooms] = await db.query(sql, params);
 
-    return response.success(res, rooms);
+    return response.success(res, rooms.map(roomPolicy.presentRoom).filter(room => !status || room.status === status));
   } catch (err) {
     logger.error('获取功能房列表异常:', err);
     return response.error(res, err.message);
@@ -48,7 +49,7 @@ const detail = async function(req, res) {
     room.seat_total = seatCount[0].total;
     room.seat_available = seatCount[0].available;
 
-    return response.success(res, room);
+    return response.success(res, roomPolicy.presentRoom(room));
   } catch (err) {
     logger.error('获取功能房详情异常:', err);
     return response.error(res, err.message);
@@ -88,7 +89,7 @@ const timeline = async function(req, res) {
     );
 
     const [reservations] = await db.query(
-      "SELECT r.*, u.nickname, u.real_name FROM reservations r LEFT JOIN users u ON r.user_id = u.id WHERE r.room_id = ? AND r.date = ? AND r.status IN ('approved', 'checked_in')",
+      "SELECT r.*, u.nickname, u.real_name FROM reservations r LEFT JOIN users u ON r.user_id = u.id WHERE r.room_id = ? AND r.date = ? AND r.status IN ('pending', 'counselor_pending', 'approved', 'checked_in')",
       [roomId, date]
     );
     logger.info('Timeline query - roomId:' + roomId + ' date:' + date + ' reservations:' + reservations.length + ' seats:' + seatList.length);
@@ -107,12 +108,13 @@ const timeline = async function(req, res) {
 
     const timelineData = hours.map(function(hour) {
       const slotEnd = helpers.addMinutes(hour, 30);
+      const acceptsBooking = room.type !== 'party_room' && require('../services/roomStatusSchedule').bookingAllowed(room, { date, startTime: hour, endTime: slotEnd });
 
       if (hasSeats) {
         const seatStatuses = seatList.map(function(seat) {
           let status = 'available';
 
-          if (seat.status === 'maintenance') {
+          if (!acceptsBooking || seat.status !== 'available') {
             status = 'unavailable';
           } else {
             const conflict = reservations.find(function(r) {
@@ -145,7 +147,7 @@ const timeline = async function(req, res) {
         if (availableCount === 0) {
           const hasCheckedIn = seatStatuses.some(function(s) { return s.status === 'checked_in'; });
           const hasMyReservation = seatStatuses.some(function(s) { return s.status === 'myReservation'; });
-          slotStatus = hasCheckedIn ? 'checked_in' : (hasMyReservation ? 'myReservation' : 'occupied');
+          slotStatus = !acceptsBooking ? 'unavailable' : hasCheckedIn ? 'checked_in' : (hasMyReservation ? 'myReservation' : 'occupied');
         } else if (availableCount < totalCount) {
           slotStatus = 'available';
         }
@@ -169,9 +171,10 @@ const timeline = async function(req, res) {
         });
 
         let status = 'available';
-        const occupiedCount = conflictReservations.length;
+        const occupiedCount = roomPolicy.peakOccupancy(conflictReservations, hour, slotEnd);
+        const sharedCapacity = roomPolicy.forRoom(room).sharedCapacity;
         let activeReservation = null;
-        if (occupiedCount > 0) {
+        if (occupiedCount > 0 && (!sharedCapacity || occupiedCount >= Number(room.capacity))) {
           activeReservation = conflictReservations.find(function(r) { return r.status === 'checked_in'; }) ||
             conflictReservations.find(function(r) { return req.user && r.user_id === req.user.id; }) ||
             conflictReservations[0];
@@ -185,12 +188,13 @@ const timeline = async function(req, res) {
         }
 
         const canViewDetails = canViewReservationDetails(activeReservation);
+        if (!acceptsBooking) status = 'unavailable';
 
         return {
           time: hour,
           endTime: slotEnd,
           status: status,
-          availableCount: status === 'available' ? room.capacity : Math.max(0, room.capacity - occupiedCount),
+          availableCount: !acceptsBooking ? 0 : sharedCapacity ? Math.max(0, room.capacity - occupiedCount) : status === 'available' ? room.capacity : 0,
           totalCount: room.capacity || 1,
           reservationId: canViewDetails ? activeReservation.id : null,
           userName: canViewDetails ? (activeReservation.real_name || activeReservation.nickname || '') : '',
@@ -208,6 +212,7 @@ const timeline = async function(req, res) {
       openStartTime: openStart,
       openEndTime: openEnd,
       maxDuration: room.max_duration,
+      bookingPolicy: roomPolicy.forRoom(room),
       timeline: timelineData
     });
   } catch (err) {
@@ -225,7 +230,7 @@ const listByType = async function(req, res) {
       [type]
     );
 
-    return response.success(res, rooms);
+    return response.success(res, rooms.map(roomPolicy.presentRoom));
   } catch (err) {
     logger.error('按类型查询功能房异常:', err);
     return response.error(res, err.message);
@@ -241,7 +246,7 @@ const listByBuilding = async function(req, res) {
       ['%' + building + '%']
     );
 
-    return response.success(res, rooms);
+    return response.success(res, rooms.map(roomPolicy.presentRoom));
   } catch (err) {
     logger.error('按楼栋查询功能房异常:', err);
     return response.error(res, err.message);
@@ -261,7 +266,7 @@ const compare = async function(req, res) {
       roomIds
     );
 
-    return response.success(res, rooms);
+    return response.success(res, rooms.map(roomPolicy.presentRoom));
   } catch (err) {
     logger.error('功能房对比异常:', err);
     return response.error(res, err.message);

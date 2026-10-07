@@ -1,0 +1,110 @@
+/* 管理员扫码核验页：只读复用宿管版式的结构，视觉切换到导生会蓝色主题。
+   约束：不使用 * 通配选择器（WXSS 编译报错）；backdrop-filter 必须成对写前缀。 */
+@import "../verification/verification.wxss";
+
+/* 底栏 admin-nav 为 fixed 定位，页面底部预留安全间距 */
+.page {
+  padding: 28rpx 28rpx calc(180rpx + env(safe-area-inset-bottom));
+  background: #eef3fb;
+}
+
+/* 主色由宿管的墨绿收敛为导生会蓝 */
+.hero {
+  background: linear-gradient(135deg, #003D7A, #0066CC);
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1rpx solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8rpx 28rpx rgba(31, 64, 104, 0.10);
+}
+
+.message {
+  background: #E6F0FF;
+}
+
+.warning {
+  background: #FFF7E6;
+  color: #8a5b14;
+}
+
+.navigation .nav-scan {
+  background: #0066CC;
+}
+
+button[type=primary],
+#scan-trigger,
+#confirm-signin {
+  background: #0066CC;
+  color: #FFFFFF;
+}
+
+input,
+textarea {
+  background: #F2F6FC;
+  border: 1rpx solid #d9e3f2;
+}
+
+.reservation-item {
+  border-color: #dbe6f5;
+  border-left-color: #9dbde3;
+  background: #F7FAFE;
+}
+
+.reservation-item.approved {
+  border-left-color: #C4943A;
+}
+
+.reservation-item.checked_in {
+  border-left-color: #2F8A3B;
+}
+
+.details {
+  background: #F4F7FC;
+}
+
+.record {
+  border-top-color: #e3ebf6;
+}
+
+.hint,
+.number,
+.record text,
+.filter {
+  color: #4d5c72;
+}
+
+.summary-grid .wait {
+  background: #FFF7E6;
+  color: #795010;
+}
+
+.summary-grid .present {
+  background: #E7F5EC;
+  color: #145c46;
+}
+
+.pagination button {
+  border-radius: var(--btn-radius);
+}
+
+/* 仅覆盖管理员扫码页，宿管原有的大按钮保持不变。 */
+button {
+  box-sizing: border-box;
+  min-height: var(--btn-h-md);
+  padding: 20rpx var(--btn-px-md);
+  margin: var(--btn-gap) 0;
+  border-radius: var(--btn-radius);
+  font-size: var(--btn-font-md);
+  font-weight: 600;
+  line-height: 1.4;
+  background: #f2f6fc;
+  color: #425066;
+}
+button::after { border: 0; }
+button[size=mini] { min-height: var(--btn-h-md); font-size: var(--btn-font-md); }
+button[disabled], #scan-trigger[disabled], #confirm-signin[disabled] {
+  background: var(--btn-disabled-bg);
+  color: var(--btn-disabled-fg);
+}
+button[loading] { opacity: 0.62; }

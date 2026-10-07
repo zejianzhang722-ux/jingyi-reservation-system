@@ -6,11 +6,12 @@ async function main() {
   const required = [
     'buildings', 'rooms', 'seats', 'users', 'admins', 'reservations',
     'checkins', 'credits_log', 'violations', 'posters', 'poster_positions',
-    'feedbacks', 'reading_room_logs', 'notifications', 'reservation_waitlist',
+    'reading_room_logs', 'notifications', 'reservation_waitlist',
     'reservation_groups', 'reservation_group_members', 'operation_logs',
     'announcements', 'system_config'
   ];
   for (const name of required) assert.ok(tables[name]?.length > 0, name + ' should have demo rows');
+  assert.ok(Array.isArray(tables.feedbacks), 'feedback storage must exist without inventing student feedback');
   for (const group of tables.reservation_groups) {
     const reservation = tables.reservations.find(row => row.id === group.reservation_id);
     assert.ok(reservation, 'group ' + group.id + ' must link to a reservation');

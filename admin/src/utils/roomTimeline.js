@@ -22,7 +22,7 @@ const timelineStatus = {
   myReservation: { key: 'using', label: '使用中' },
   checked_in: { key: 'using', label: '使用中' },
   using: { key: 'using', label: '使用中' },
-  unavailable: { key: 'maintenance', label: '维护' },
+  unavailable: { key: 'maintenance', label: '不可预约' },
   maintenance: { key: 'maintenance', label: '维护' },
   unknown: { key: 'unknown', label: '状态未知' }
 }

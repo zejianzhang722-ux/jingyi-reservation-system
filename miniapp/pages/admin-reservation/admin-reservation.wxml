@@ -1,6 +1,6 @@
 <view class="container motion-page motion-stack">
   <view class="header">
-    <text class="title">全部预约</text>
+    <text class="title">{{roomName ? roomName + " · 预约" : "全部预约"}}</text>
     <view class="search-bar">
       <input class="search-input" placeholder="搜索用户/房间" value="{{keyword}}" bindinput="onSearch" placeholder-style="color:#999" />
     </view>
@@ -21,7 +21,7 @@
     <view class="reservation-item" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="onViewDetail">
       <view class="item-top">
         <text class="item-user">{{item.userName || item.user_name || '未知'}}</text>
-        <text class="item-status status-{{item.status}}">{{statusMap[item.status] || item.status}}</text>
+        <text class="item-status status-{{item.status}}">{{statusMap[item.status] || '状态待确认'}}</text>
       </view>
       <view class="item-info">
         <text class="info-row">房间: {{item.roomName || item.room_name || '-'}}</text>
@@ -30,14 +30,16 @@
       </view>
       <view class="detail-hint" wx:if="{{item.status === 'counselor_pending'}}">查看并审核</view>
       <view class="item-actions" wx:if="{{item.canQuickAudit}}" catchtap="">
-        <text wx:if="{{processingById[item.id]}}">处理中</text>
+        <text class="ui-btn is-disabled is-loading" wx:if="{{processingById[item.id]}}">处理中</text>
         <block wx:else>
-          <view class="btn-approve" data-id="{{item.id}}" catchtap="onApprove">通过</view>
-          <view class="btn-reject" data-id="{{item.id}}" catchtap="onReject">拒绝</view>
+          <view class="ui-btn ui-btn-success" data-id="{{item.id}}" catchtap="onApprove">通过</view>
+          <view class="ui-btn ui-btn-danger" data-id="{{item.id}}" catchtap="onReject">拒绝</view>
         </block>
       </view>
     </view>
   </view>
   <view class="empty" wx:else><text>暂无预约记录</text></view>
-  <view class="load-more" wx:if="{{hasMore && list.length > 0}}" bindtap="onLoadMore"><text>加载更多</text></view>
+  <view class="ui-btn ui-btn-ghost load-more" wx:if="{{hasMore && list.length > 0}}" bindtap="onLoadMore" aria-role="button" aria-label="加载更多预约">加载更多</view>
 </view>
+
+<app-dialog id="app-dialog" />

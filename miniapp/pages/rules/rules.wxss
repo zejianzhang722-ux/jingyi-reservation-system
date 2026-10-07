@@ -1,3 +1,4 @@
+@import "../../styles/rules-content.wxss";
 .rules-card {
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-blur);

@@ -4,13 +4,13 @@
   </view>
   <view class="state-card error-card" wx:elif="{{pageStatus === 'error'}}" aria-role="alert">
     <text class="state-title">加载失败</text><text class="state-desc">{{errorMessage}}</text>
-    <button class="retry-button" bindtap="onRetry" aria-role="button" aria-label="重新加载预约详情">重新加载</button>
+    <button class="ui-btn retry-button" bindtap="onRetry" aria-role="button" aria-label="重新加载预约详情">重新加载</button>
   </view>
   <block wx:elif="{{pageStatus === 'ready' && reservation}}">
     <view class="summary-card">
       <view class="summary-top"><view><text class="eyebrow">预约 #{{reservation.id}}</text><text class="room-name">{{reservation.roomName}}</text></view><text class="status-tag {{reservation.isPriority ? 'priority' : ''}}">{{reservation.statusLabel}}</text></view>
-      <view class="priority-note" wx:if="{{reservation.isPriority}}"><text class="priority-title">重点审批说明</text><text class="priority-text">该预约需由辅导员或超级管理员在详情页完成审核。</text></view>
-      <view class="priority-note ordinary-note" wx:elif="{{reservation.status === 'pending'}}"><text class="priority-title">普通待审说明</text><text class="priority-text">请核对预约时段、用途和人数，确认无冲突后再完成审核。</text></view>
+      <view class="priority-note" wx:if="{{reservation.isPriority}}"><text class="priority-title">辅导员审核说明</text><text class="priority-text">该预约需由辅导员或导生会会长团在详情页完成审核。</text></view>
+      <view class="priority-note ordinary-note" wx:elif="{{reservation.status === 'pending'}}"><text class="priority-title">预约审核说明</text><text class="priority-text">请核对预约时段、用途和人数，确认无冲突后再完成审核。</text></view>
     </view>
     <view class="detail-card">
       <text class="section-title">申请人</text>
@@ -32,7 +32,9 @@
     </view>
   </block>
   <view class="action-bar" wx:if="{{pageStatus === 'ready' && reservation && (canApprove || canReject)}}">
-    <button class="action-button reject-button" disabled="{{processing}}" bindtap="onReject" aria-role="button" aria-label="拒绝预约">{{processing ? '处理中' : '拒绝'}}</button>
-    <button class="action-button approve-button" disabled="{{processing}}" bindtap="onApprove" aria-role="button" aria-label="通过预约">{{processing ? '处理中' : '通过'}}</button>
+    <button class="ui-btn ui-btn-lg ui-btn-danger-ghost {{processing ? 'is-disabled is-loading' : ''}}" disabled="{{processing}}" loading="{{processing}}" bindtap="onReject" aria-role="button" aria-label="拒绝预约">{{processing ? '处理中' : '拒绝'}}</button>
+    <button class="ui-btn ui-btn-lg ui-btn-primary {{processing ? 'is-disabled is-loading' : ''}}" disabled="{{processing}}" loading="{{processing}}" bindtap="onApprove" aria-role="button" aria-label="通过预约">{{processing ? '处理中' : '通过'}}</button>
   </view>
 </view>
+
+<app-dialog id="app-dialog" />

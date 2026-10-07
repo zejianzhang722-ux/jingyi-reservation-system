@@ -9,7 +9,7 @@
       </view>
     </view>
     <view class="room-card-footer">
-      <view class="room-card-rate">
+      <view class="room-card-rate" wx:if="{{showAvailability}}">
         <text class="room-card-rate-label">空闲率</text>
         <text class="room-card-rate-value" style="color:{{statusColor}}">{{freeRate}}</text>
       </view>

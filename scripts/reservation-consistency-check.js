@@ -57,7 +57,7 @@ async function main() {
   await expectError(function() {
     return reservationService.createReservation({
       userId: 1,
-      roomId: 8,
+      roomId: 13,
       date,
       startTime: '13:00',
       endTime: '14:00',
@@ -71,7 +71,7 @@ async function main() {
 
   const baseRequest = {
     userId: 1,
-    roomId: 8,
+    roomId: 13,
     seatId: null,
     date,
     startTime: '18:00',

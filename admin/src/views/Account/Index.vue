@@ -31,7 +31,7 @@
         @export="handleExport"
       >
         <el-select v-if="activeTab === 'manager'" v-model="filters.role" placeholder="角色筛选" clearable style="width: 180px" @change="onSearch">
-          <el-option label="超级管理员" value="super_admin" />
+          <el-option label="导生会会长团" value="super_admin" />
           <el-option label="导生管理员" value="admin" />
           <el-option label="辅导员" value="counselor" />
         </el-select>
@@ -149,7 +149,7 @@
           <div class="upload-tip">
             {{ activeTab === 'student'
               ? '宿生模板：账号（学号）、姓名、密码（一卡通卡号）、楼栋、电话。'
-              : '管理账号模板：账号、姓名、密码、角色、管理范围（全院/指定楼栋）、楼栋、电话。辅导员和超级管理员固定为全院。' }}
+              : '管理账号模板：账号、姓名、密码、角色、管理范围（全院/指定楼栋）、楼栋、电话。辅导员和导生会会长团固定为全院。' }}
           </div>
         </template>
       </el-upload>
@@ -220,7 +220,7 @@ const isEditingCurrentAccount = computed(() => isEdit.value && String(form.id) =
 
 const roleMap = {
   dorm_manager: { label: '宿管', type: 'warning' },
-  super_admin: { label: '超级管理员', type: 'danger' },
+  super_admin: { label: '导生会会长团', type: 'danger' },
   admin: { label: '导生管理员', type: '' },
   counselor: { label: '辅导员', type: 'success' },
   student: { label: '宿生', type: 'info' }
@@ -231,14 +231,14 @@ const statusMap = {
   disabled: { label: '停用', type: 'danger' },
   inactive: { label: '停用', type: 'danger' },
   banned: { label: '封禁', type: 'danger' },
-  restricted: { label: '受限', type: 'warning' }
+  restricted: { label: '预约受限', type: 'warning' }
 }
 
 const roleOptions = computed(() => {
   if (activeTab.value === 'student') return [{ label: '宿生', value: 'student' }]
   const all = [
     { label: '宿管', value: 'dorm_manager' },
-    { label: '超级管理员', value: 'super_admin' },
+    { label: '导生会会长团', value: 'super_admin' },
     { label: '导生管理员', value: 'admin' },
     { label: '辅导员', value: 'counselor' }
   ]
@@ -253,7 +253,7 @@ const statusOptions = computed(() => {
     { label: '正常', value: 'active' },
     { label: '停用/封禁', value: 'disabled' }
   ]
-  if (activeTab.value === 'student') options.push({ label: '受限', value: 'restricted' })
+  if (activeTab.value === 'student') options.push({ label: '预约受限', value: 'restricted' })
   return options
 })
 

@@ -21,14 +21,20 @@ const token = login.data.token;
 const headers = { Authorization: `Bearer ${token}` };
 
 const allPending = await request('/reservation?status=pending&page=1&pageSize=20', { headers });
-const auditPending = await request('/audit/pending?page=1&pageSize=20', { headers });
+const auditPending = await request('/audit/pending?type=admin&page=1&pageSize=20', { headers });
 const counselorPending = await request('/audit/counselor/pending?page=1&pageSize=20', { headers });
 
-assert.equal(allPending.data.total, 2, '全部预约的待审核总数应为 2');
-assert.equal(allPending.data.list.length, 2, '全部预约应返回 2 条待审核记录');
-assert.equal(auditPending.data.total, 3, '预约审核应包含普通待审与辅导员待审共 3 条');
-assert.equal(auditPending.data.list.length, 3, '预约审核列表应返回 3 条记录');
-assert.equal(counselorPending.data.total, 1, '辅导员审核应只返回 1 条辅导员待审记录');
+const mock = await import('../server/src/config/mock-db.js');
+const pendingRows = mock.default.__tables.reservations.filter(row => row.status === 'pending');
+assert.equal(allPending.data.total, pendingRows.length, '全部预约应返回全部普通待审记录');
+assert.equal(allPending.data.list.length, pendingRows.length, '普通待审分页应完整');
+assert.ok(pendingRows.length > 0, '测试种子须包含普通待审预约');
+assert.equal(auditPending.data.total, pendingRows.length, '普通审核队列不应混入辅导员待审');
+assert.equal(auditPending.data.list.length, pendingRows.length, '普通审核列表应完整');
+assert.ok(auditPending.data.list.every(row => row.status === 'pending'), '普通审核队列只含 pending');
+const counselorRows = mock.default.__tables.reservations.filter(row => row.status === 'counselor_pending');
+assert.equal(counselorPending.data.total, counselorRows.length, '辅导员审核应返回全部辅导员待审记录');
+assert.ok(counselorRows.length > 0 && counselorPending.data.list.every(row => row.status === 'counselor_pending'), '辅导员审核状态应准确');
 
 for (const row of [...allPending.data.list, ...auditPending.data.list, ...counselorPending.data.list]) {
   assert.ok(row.userName, '预约人不能为空');

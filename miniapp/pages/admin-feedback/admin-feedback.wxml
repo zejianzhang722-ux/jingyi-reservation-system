@@ -22,15 +22,15 @@
       <view class="item-footer">
         <text class="item-time">{{item.createdAt || item.created_at}}</text>
         <view class="item-actions" wx:if="{{item.status !== 'resolved'}}">
-          <view class="btn-reply" data-id="{{item.id}}" bindtap="showReply">回复</view>
-          <view class="btn-resolve" data-id="{{item.id}}" bindtap="onResolve">标记已处理</view>
+          <view class="ui-btn ui-btn-primary ui-btn-md" data-id="{{item.id}}" bindtap="showReply">回复</view>
+          <view class="ui-btn ui-btn-ghost ui-btn-md" data-id="{{item.id}}" bindtap="onResolve">标记已处理</view>
         </view>
       </view>
       <view class="reply-form" wx:if="{{replyId === item.id}}">
         <textarea class="reply-input" placeholder="输入回复内容" value="{{replyContent}}" bindinput="onReplyInput" maxlength="200" />
         <view class="reply-btns">
-          <view class="reply-btn btn-cancel-reply" bindtap="cancelReply">取消</view>
-          <view class="reply-btn btn-submit-reply" bindtap="submitReply">发送</view>
+          <view class="ui-btn ui-btn-ghost" bindtap="cancelReply">取消</view>
+          <view class="ui-btn ui-btn-primary" bindtap="submitReply">发送</view>
         </view>
       </view>
     </view>
@@ -39,3 +39,5 @@
     <text>暂无反馈</text>
   </view>
 </view>
+
+<app-dialog id="app-dialog" />

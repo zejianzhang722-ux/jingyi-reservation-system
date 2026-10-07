@@ -2,6 +2,7 @@ Option Explicit
 Dim fso, shell, root, node, app, errorLog, quote, inner, command, result
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
+shell.Environment("Process")("ENABLE_SCHEDULER") = "true"
 root = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
 node = fso.BuildPath(root, "nodejs\node.exe")
 app = fso.BuildPath(root, "server\src\app.js")

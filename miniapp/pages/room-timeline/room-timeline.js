@@ -1,6 +1,8 @@
+var rulesPresenter = require('../../utils/rules-presenter')
 var request = require('../../utils/request')
 var util = require('../../utils/util')
 var localData = require('../../utils/local-data')
+var bookingPolicy = require('../../utils/room-booking-policy')
 
 Page({
   data: {
@@ -30,7 +32,7 @@ Page({
     selectedSeat: null,
     isToday: true,
     showRulesModal: true,
-    rulesContent: '',
+    rulesContent: '', rulesSections: [],
     rulesScrolledToBottom: false,
     rulesCountdown: 5,
     rulesAgreed: false,
@@ -41,17 +43,18 @@ Page({
   onLoad: function (options) {
     var roomIdentity = options.roomId || options.roomName || options.room || options.name || options.roomCode || options.room_number || ''
     var roomId = Number(localData.resolveRoomId(roomIdentity))
-    if (!roomId) {
+    if (!Number.isInteger(roomId) || roomId <= 0) {
       this.setData({ loading: false })
       wx.showToast({ title: '请重新选择功能房', icon: 'none' })
       return
     }
-    this.setData({ roomId: roomId })
+    var today = util.formatDate(new Date(), 'YYYY-MM-DD')
+    this.setData({ roomId: roomId, selectedDate: today, isToday: true })
     this.setData({ reservationMode: options.reservationMode === 'group' ? 'group' : 'personal' })
     var roomType = options.roomType ? decodeURIComponent(options.roomType) : ''
     var rulesContent = localData.getRulesByRoomType(roomType)
     this.setData({
-      rulesContent: rulesContent,
+      rulesContent: rulesContent, rulesSections: rulesPresenter.sections(rulesContent),
       showRulesModal: true,
       rulesScrolledToBottom: false,
       rulesCountdown: 5,
@@ -59,20 +62,19 @@ Page({
     })
     this.startRulesCountdown()
     this.loadRoomInfo(roomId)
-    var today = util.formatDate(new Date(), 'YYYY-MM-DD')
-    this.setData({ selectedDate: today, isToday: true })
   },
 
   loadRoomInfo: function (roomId) {
     var that = this
     request.get('/room/' + roomId).then(function (data) {
+      data = that.applyRoomPolicy(data)
       var openEnd = data.open_end_time || '23:00'
       var closeH = parseInt(openEnd.split(':')[0])
       var closeM = parseInt(openEnd.split(':')[1])
       if (closeM > 0) closeH = closeH + 1
       that.setData({
         room: data,
-        rulesContent: localData.getRulesByRoomType(data.type),
+        rulesContent: localData.getRulesByRoomType(data.type), rulesSections: rulesPresenter.sections(localData.getRulesByRoomType(data.type)),
         openHour: parseInt((data.open_start_time || '08:00').split(':')[0]),
         closeHour: closeH,
         maxHours: data.max_duration ? Math.floor(data.max_duration / 60) : 4,
@@ -80,17 +82,18 @@ Page({
       })
       wx.setNavigationBarTitle({ title: data.name || '预约' })
       that.computeHourLists()
-      that.loadTimeline()
+      if (!data.bookingBlocked) that.loadTimeline()
     }).catch(function () {
       var data = localData.getRoomById(roomId)
       if (data) {
+        data = that.applyRoomPolicy(data)
         var openEnd = data.open_end_time || '23:00'
         var closeH = parseInt(openEnd.split(':')[0])
         var closeM = parseInt(openEnd.split(':')[1])
         if (closeM > 0) closeH = closeH + 1
         that.setData({
           room: data,
-          rulesContent: localData.getRulesByRoomType(data.type),
+          rulesContent: localData.getRulesByRoomType(data.type), rulesSections: rulesPresenter.sections(localData.getRulesByRoomType(data.type)),
           openHour: parseInt((data.open_start_time || '08:00').split(':')[0]),
           closeHour: closeH,
           maxHours: data.max_duration ? Math.floor(data.max_duration / 60) : 4,
@@ -98,14 +101,29 @@ Page({
         })
         wx.setNavigationBarTitle({ title: data.name || '预约' })
         that.computeHourLists()
-        that.loadTimeline()
+        if (!data.bookingBlocked) that.loadTimeline()
       } else {
         that.setData({ loading: false })
       }
     })
   },
 
+  applyRoomPolicy: function (data) {
+    var room = bookingPolicy.presentRoom(data)
+    if (room.bookingPolicy.groupOnly) this.setData({ reservationMode: 'group' })
+    if (room.bookingBlocked) {
+      if (this.data.rulesTimer) clearInterval(this.data.rulesTimer)
+      this.setData({ loading: false, showRulesModal: false, showTimePicker: false, timeline: [], seats: [] })
+    }
+    return room
+  },
+
   loadTimeline: function () {
+    // A child date-picker may attach before onLoad has received the room ID.
+    // Room details complete the initial load; early date changes only update state.
+    var roomId = Number(this.data.roomId)
+    if (!Number.isInteger(roomId) || roomId <= 0 || !this.data.room || !this.data.selectedDate) return
+    if (bookingPolicy.blockReason(this.data.room, this.data.reservationMode)) { this.setData({ loading: false }); return }
     var that = this
     request.get('/room/' + this.data.roomId + '/timeline', { date: this.data.selectedDate }).then(function (data) {
       var apiTimeline = data.timeline || []
@@ -119,7 +137,7 @@ Page({
               if (!seatMap[s.seatId]) {
                 seatMap[s.seatId] = { id: s.seatId, name: String(s.seatNumber), seatId: s.seatId }
               }
-              if (s.status === 'occupied' || s.status === 'myReservation') {
+              if (bookingPolicy.isBlockedSlot(s.status)) {
                 var startH = parseInt(slot.time.split(':')[0])
                 var startM = parseInt(slot.time.split(':')[1])
                 var endH = parseInt(slot.endTime.split(':')[0])
@@ -137,7 +155,7 @@ Page({
         seats = Object.values(seatMap)
       } else {
         apiTimeline.forEach(function (slot) {
-          if (slot.status === 'occupied' || slot.status === 'myReservation') {
+          if (bookingPolicy.isBlockedSlot(slot.status)) {
             var startH = parseInt(slot.time.split(':')[0])
             var startM = parseInt(slot.time.split(':')[1])
             var endH = parseInt(slot.endTime.split(':')[0])
@@ -265,7 +283,10 @@ Page({
   },
 
   onTimelineSelect: function (e) {
+    var blocked = bookingPolicy.blockReason(this.data.room, this.data.reservationMode)
+    if (blocked) { wx.showToast({ title: blocked, icon: 'none' }); return }
     var detail = e.detail
+    var selectedSeat = this.data.seats.find(function (seat) { return String(seat.id) === String(detail.seatId) })
     var startH = Math.floor(detail.startHour)
     var startM = detail.startMin || 0
     var endH = Math.floor(detail.endHour)
@@ -285,6 +306,7 @@ Page({
     }
     this.setData({
       showTimePicker: true,
+      selectedSeatName: selectedSeat ? selectedSeat.name : '',
       selectedSeat: detail.seatId || null,
       selectedStartHour: startH,
       selectedStartMin: startM,
@@ -319,9 +341,16 @@ Page({
   },
 
   onConfirmTime: function () {
+    var blocked = bookingPolicy.blockReason(this.data.room, this.data.reservationMode)
+    if (blocked) { wx.showToast({ title: blocked, icon: 'none' }); return }
     var startTotalMin = this.data.selectedStartHour * 60 + (this.data.selectedStartMin || 0)
     var endTotalMin = this.data.selectedEndHour * 60 + (this.data.selectedEndMin || 0)
     var durationMin = endTotalMin - startTotalMin
+    var selectedSeat = this.data.selectedSeat
+    var overlap = (this.data.timeline || []).some(function (slot) {
+      return (!slot.seatId || String(slot.seatId) === String(selectedSeat)) && slot.startHour * 60 < endTotalMin && slot.endHour * 60 > startTotalMin
+    })
+    if (overlap) { wx.showToast({ title: '所选时段不可预约，请选择空闲时段', icon: 'none' }); return }
     if (durationMin > this.data.maxHours * 60) {
       wx.showToast({ title: '超出单次预约时长上限（' + this.data.maxHours + '小时），请重新选择', icon: 'none' })
       return
@@ -356,6 +385,8 @@ Page({
   onCancelTime: function () {
     this.setData({ showTimePicker: false })
   },
+
+  preventBackgroundScroll: function () {},
 
   scrollToCurrentTime: function () {
     var today = util.formatDate(new Date(), 'YYYY-MM-DD')

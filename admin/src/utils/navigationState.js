@@ -5,7 +5,7 @@ const WORKSPACE_LABELS = {
   dorm_manager: '宿管核验工作区',
   admin: '导生工作区',
   counselor: '辅导员工作区',
-  super_admin: '超级管理工作区'
+  super_admin: '会长团工作区'
 }
 
 const DEFAULT_OPEN_GROUPS = {
@@ -79,6 +79,7 @@ export function findActiveGroupKey(navigation = [], routePath = '') {
 
 export function createNavigationMenuSync() {
   let appliedGroups = new Set()
+  let boundMenu = null
 
   return {
     markOpen(groupKey) {
@@ -89,6 +90,7 @@ export function createNavigationMenuSync() {
     },
     sync(menu, groups = [], activeGroupKey = '', options = {}) {
       if (!menu?.open || !menu?.close) return
+      if (menu !== boundMenu) { appliedGroups = new Set(); boundMenu = menu }
       const desiredGroups = new Set(groups)
       if (activeGroupKey) desiredGroups.add(activeGroupKey)
 

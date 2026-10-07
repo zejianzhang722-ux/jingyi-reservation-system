@@ -51,7 +51,7 @@
             v-for="slot in room.todaySlots.slice(0, 8)"
             :key="slot.time"
             class="timeline-block"
-            :class="{ occupied: slot.occupied }"
+            :class="{ occupied: slot.occupied, unavailable: slot.status === 'unavailable' }"
             :title="slot.detail"
           ></div>
         </div>
@@ -166,16 +166,16 @@ const typeLabels = {
 }
 
 function getTypeLabel(type) {
-  return typeLabels[type] || type
+  return typeLabels[type] || '其他空间'
 }
 
 function getRoomStatusType(status) {
-  const map = { free: 'success', using: '', reserved: 'warning', maintenance: 'danger', open: 'success', closed: 'info' }
+  const map = { free: 'success', using: '', reserved: 'warning', maintenance: 'danger', open: 'success', closed: 'info', counselor_only: 'warning' }
   return map[status] || 'info'
 }
 
 function getRoomStatusLabel(status) {
-  const map = { free: '空闲', using: '使用中', reserved: '已预约', maintenance: '维护中', open: '开放', closed: '关闭' }
+  const map = { free: '空闲', using: '使用中', reserved: '已预约', maintenance: '维护中', open: '开放', closed: '关闭', counselor_only: '联系辅导员预约' }
   return map[status] || '未知'
 }
 
@@ -346,6 +346,7 @@ onBeforeUnmount(() => {
   border-radius: 2px;
 }
 
+.timeline-block.unavailable { background: #b8c2d1; }
 .timeline-block.occupied {
   background-color: #FF4D4F;
 }

@@ -1,4 +1,5 @@
 var request = require('./request')
+var roleModel = require('./role-model')
 
 function normalizeUserInfo(userInfo) {
   var data = Object.assign({}, userInfo || {})
@@ -151,17 +152,16 @@ function checkAuth() {
 function isAdmin() {
   var userInfo = getUserInfo()
   if (!userInfo) return false
-  var role = userInfo.role || ''
-  return role === 'admin' || role === 'super_admin' || role === 'counselor' || role === 'dorm_manager'
+  return roleModel.isAdminRole(userInfo.role)
 }
 
 function getUserRole() {
   var userInfo = getUserInfo()
-  return userInfo ? (userInfo.role || 'student') : 'student'
+  return roleModel.normalizeRole(userInfo ? userInfo.role : '')
 }
 
 module.exports = {
-  getAdminHome: function () { return getUserRole() === 'dorm_manager' ? '/pages/verification/verification' : '/pages/admin-home/admin-home' },
+  getAdminHome: function () { return roleModel.homePath(getUserRole()) },
   login: login,
   mockLogin: mockLogin,
   setAuthData: setAuthData,

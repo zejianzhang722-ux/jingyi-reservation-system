@@ -1,22 +1,26 @@
+@import "../../styles/admin-management.wxss";
 .container { padding: 20rpx; min-height: 100vh; }
 .header { margin-bottom: 20rpx; }
 .title { font-size: 36rpx; font-weight: bold; color: #333; }
 .subtitle { display: block; margin-top: 8rpx; color: #8a94a6; font-size: 24rpx; }
 .filter-tabs { display: flex; margin-bottom: 20rpx; white-space: nowrap; padding-bottom: 8rpx; }
-.tab { padding: 10rpx 24rpx; border-radius: 20rpx; font-size: 24rpx; background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: #666; border: 1rpx solid var(--glass-border); flex-shrink: 0; }
+.tab { display: flex; align-items: center; justify-content: center; min-height: var(--btn-h-md); padding: 0 var(--btn-px-sm); border-radius: 20rpx; font-size: var(--btn-font-sm); background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: #666; border: 1rpx solid var(--glass-border); flex-shrink: 0; }
 .tab + .tab { margin-left: 12rpx; }
-.tab.active { background: #0066CC; color: #fff; border-color: #0066CC; }
+.tab.active { background: var(--btn-primary-bg); color: #fff; border-color: var(--btn-primary-bg); }
 .room-list { }
 .room-item { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1rpx solid var(--glass-border); border-radius: 12rpx; padding: 24rpx; margin-bottom: 16rpx; box-shadow: var(--glass-shadow); display: flex; justify-content: space-between; align-items: center; }
 .room-info { flex: 1; }
 .room-header { display: flex; align-items: center; gap: 12rpx; margin-bottom: 8rpx; }
 .room-name { font-size: 30rpx; font-weight: bold; color: #333; }
 .room-status { font-size: 22rpx; padding: 4rpx 12rpx; border-radius: 4rpx; }
-.status-open { background: #f6ffed; color: #52c41a; }
-.status-closed { background: #fff1f0; color: #ff4d4f; }
-.status-maintenance { background: #fff7e6; color: #fa8c16; }
+.status-open { background: var(--success-light); color: var(--success); }
+.status-closed { background: var(--danger-light); color: var(--danger); }
+.status-maintenance { background: var(--warning-light); color: var(--warning); }
 .room-detail { }
 .detail-text { display: block; font-size: 24rpx; color: #999; margin-top: 4rpx; }
+/* 说明：.room-actions / .btn-toggle 当前在 admin-rooms.wxml 中无任何元素引用，
+   onToggleStatus 也未绑定（房间开关属super_admin 专属，小程序不承载）。
+   此处仅把颜色收敛到统一 token，避免遗留硬编码色值；死代码清理不在本次范围。 */
 .room-actions { flex-shrink: 0; margin-left: 20rpx; }
-.btn-toggle { padding: 12rpx 24rpx; border-radius: 8rpx; font-size: 24rpx; background: #0066CC; color: #fff; }
+.btn-toggle { min-height: var(--btn-h-md); padding: 0 var(--btn-px-md); border-radius: var(--btn-radius); font-size: var(--btn-font-md); background: var(--btn-primary-bg); color: #fff; }
 .empty { text-align: center; padding: 100rpx 0; color: #999; font-size: 28rpx; }

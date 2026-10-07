@@ -3,6 +3,8 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const helpers = require('../utils/helpers');
 const config = require('../config');
+const dailyPolicy = require('./reservationDailyPolicy');
+const roomPolicy = require('./roomBookingPolicy');
 
 const ACTIVE_STATUSES = ['approved', 'pending', 'counselor_pending', 'checked_in'];
 const SEAT_REQUIRED_TYPES = ['study_room', 'study'];
@@ -59,7 +61,8 @@ const buildRequestFingerprint = function(input) {
     startTime: normalizeTime(input.startTime),
     endTime: normalizeTime(input.endTime),
     purpose: String(input.purpose || '').trim(),
-    participants: normalizeParticipants(input.participants)
+    participants: normalizeParticipants(input.participants),
+    groupBooking: input.groupBooking === true
   };
   return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 };
@@ -89,16 +92,12 @@ const getStatusForRoom = function(room) {
 
 const validateMockReservationInput = function(input, user, room, seat) {
   if (!user) throw createHttpError(404, '用户不存在');
-  if (user.status === 'banned' || user.status === 'restricted') {
-    throw createHttpError(403, '账号已被限制预约');
-  }
-  if (Number(user.credit_score) < Number(config.credit.restrictThreshold)) {
-    throw createHttpError(403, '信用分过低，无法预约');
-  }
+  require('./creditBookingPolicy').validate(input, user);
   if (!helpers.isDateInRange(input.date, config.reservation.advanceDays)) {
     throw createHttpError(400, '预约日期不在允许范围内（今天至' + config.reservation.advanceDays + '天后）');
   }
   if (!room) throw createHttpError(404, '功能房不存在');
+  roomPolicy.validateInput(input, room);
   if (room.status !== 'open') throw createHttpError(400, '该功能房当前不可预约');
   if (SEAT_REQUIRED_TYPES.includes(room.type || '') && !input.seatId) {
     throw createHttpError(400, '自习室预约必须选择座位', 'SEAT_REQUIRED');
@@ -152,7 +151,8 @@ const ensureMockSlotsBackfilled = function(tables) {
         id: tables.reservation_slots.length + 1,
         reservation_id: reservation.id,
         room_id: reservation.room_id,
-        seat_scope: normalizeSeatScope(reservation.seat_id),
+        seat_scope: roomPolicy.slotScope(tables.rooms.find(room => Number(room.id) === Number(reservation.room_id)),
+          { seatId: reservation.seat_id }, reservation.id),
         date: reservation.date,
         slot_minute: minute,
         created_at: reservation.created_at || helpers.formatDateTime(new Date())
@@ -185,12 +185,8 @@ const createReservationInMock = async function(input) {
   }
 
   validateMockReservationInput(input, user, room, seat);
-  const dailyCount = tables.reservations.filter(function(row) {
-    return Number(row.user_id) === Number(input.userId) &&
-      String(row.date).slice(0, 10) === String(input.date).slice(0, 10) &&
-      ACTIVE_STATUSES.includes(row.status);
-  }).length;
-  if (dailyCount >= 3) throw createHttpError(400, '每日最多预约3次');
+  dailyPolicy.assertMock(input, tables);
+  roomPolicy.assertOccupancy(input, room, tables.reservations);
 
   const seatScope = normalizeSeatScope(input.seatId);
   const slotMinutes = getSlotMinutes(input.startTime, input.endTime);
@@ -200,7 +196,7 @@ const createReservationInMock = async function(input) {
       String(slot.date).slice(0, 10) === String(input.date).slice(0, 10) &&
       slotMinutes.includes(Number(slot.slot_minute));
   });
-  if (conflict) throw createHttpError(409, '该时间段已有预约，存在冲突', 'SLOT_CONFLICT');
+  if (conflict && !roomPolicy.forRoom(room).sharedCapacity) throw createHttpError(409, '该时间段已有预约，存在冲突', 'SLOT_CONFLICT');
 
   const nextId = Math.max.apply(null, tables.reservations.map(function(row) {
     return Number(row.id) || 0;
@@ -234,7 +230,7 @@ const createReservationInMock = async function(input) {
       id: tables.reservation_slots.length + 1,
       reservation_id: reservation.id,
       room_id: reservation.room_id,
-      seat_scope: seatScope,
+      seat_scope: roomPolicy.slotScope(room, input, reservation.id),
       date: reservation.date,
       slot_minute: minute,
       created_at: now

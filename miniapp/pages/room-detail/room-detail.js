@@ -1,5 +1,6 @@
 var request = require('../../utils/request')
 var localData = require('../../utils/local-data')
+var bookingPolicy = require('../../utils/room-booking-policy')
 
 function getIconKey(type) {
   var map = {
@@ -23,10 +24,6 @@ function getIconKey(type) {
     psychology_room: 'psychology'
   }
   return map[type] || 'room'
-}
-
-function canGroupReserve(type) {
-  return ['study_room', 'study'].indexOf(String(type || '')) === -1
 }
 
 Page({
@@ -55,7 +52,7 @@ Page({
         : (data.facilities || [])
     }
     var name = data.name || ''
-    return {
+    return bookingPolicy.presentRoom({
       id: data.id,
       name: name,
       iconKey: getIconKey(data.type || ''),
@@ -71,9 +68,10 @@ Page({
       rules: data.rules || data.management_rules || '',
       type: data.type || '',
       status: data.status || '',
-      need_counselor: data.need_counselor || data.need_counselor_audit || false,
-      canGroupReserve: canGroupReserve(data.type)
-    }
+      bookingPolicy: data.bookingPolicy,
+      booking_channel: data.booking_channel,
+      need_counselor: data.need_counselor || data.need_counselor_audit || false
+    })
   },
 
   loadRoomDetail: function (roomId) {
@@ -97,7 +95,7 @@ Page({
 
   onReserveTap: function () {
     var room = this.data.room
-    if (!room) return
+    if (!room || !room.canPersonalReserve) return
 
     if (room.type === 'study' || room.type === 'study_room') {
       wx.navigateTo({ url: '/pages/study-room/study-room?roomId=' + room.id })

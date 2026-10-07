@@ -9,9 +9,9 @@
  *     多个团队同时预约同一房间同一时段、审批阶段才发现冲突。
  *  3. 主预约挂在创建者名下，签到、爽约、信用分变动全部归属创建者，
  *     成员仅作为参与人登记（reservation_group_members），不产生独立预约记录。
- *  4. 成员加入/退出不改变库存占用，只同步主预约的 participants。
+ *  4. 成员加入/退出仅登记参与人，不改变声明实际人数或库存占用。
  *  5. 团队被拒绝或取消后锁定，成员不能再加入或退出；
- *     审批状态本身不锁定招募（无需审核的房间创建即 approved，此时仍应可加入）。
+ *     预约开始或主预约结束、取消、爽约、签到后停止招募。
  *  6. 自习室等按座位预约的空间不支持组团（成员无法各自落座）。
  */
 
@@ -23,6 +23,8 @@ const lifecycleService = require('./reservationLifecycleService');
 const notificationService = require('./notificationService');
 const auditTrailService = require('./auditTrailService');
 const reservationAuditTrailService = require('./reservationAuditTrailService');
+const dailyPolicy = require('./reservationDailyPolicy');
+const roomPolicy = require('./roomBookingPolicy');
 
 const httpError = commandService.httpError;
 
@@ -47,6 +49,34 @@ const withLock = function(executor, sql) {
 };
 
 const plainExecutor = { execute: db.query, __noLock: true };
+const mockGroupQueues = new Map();
+const serializeMockGroup = function(groupId, work) {
+  if (!db.isMock()) return work();
+  const key = Number(groupId);
+  const previous = mockGroupQueues.get(key) || Promise.resolve();
+  const run = previous.then(work);
+  const tail = run.catch(() => {});
+  mockGroupQueues.set(key, tail);
+  tail.then(() => { if (mockGroupQueues.get(key) === tail) mockGroupQueues.delete(key); });
+  return run;
+};
+
+const assertRecruitmentOpen = async function(executor, group) {
+  if (!group.reservation_id) throw httpError(409, '该组团缺少关联预约，无法招募');
+  const [rows] = await executor.execute(withLock(executor, 'SELECT * FROM reservations WHERE id = ?'), [group.reservation_id]);
+  const reservation = rows[0];
+  if (!reservation || !['pending', 'counselor_pending', 'approved'].includes(reservation.status)) {
+    throw httpError(409, '主预约已取消、结束或办理签到，该组团已停止招募');
+  }
+  const [rooms] = await executor.execute(withLock(executor, 'SELECT * FROM rooms WHERE id = ?'), [reservation.room_id]);
+  if (!rooms[0] || !require('./roomStatusSchedule').bookingAllowed(rooms[0], { date: reservation.date, startTime: reservation.start_time, endTime: reservation.end_time })) {
+    throw httpError(409, '所选时段空间不可预约，暂不能加入该组团');
+  }
+  const start = require('./checkinWindowPolicy').startDate(reservation);
+  if (!Number.isFinite(start.getTime()) || start.getTime() <= Date.now()) {
+    throw httpError(409, '预约已开始，该组团已停止招募');
+  }
+};
 
 const normalizeHour = function(value, label) {
   if (value === undefined || value === null || value === '') {
@@ -75,8 +105,9 @@ const normalizeHour = function(value, label) {
 
 const resolveMaxMembers = function(raw, room) {
   let value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) value = DEFAULT_MAX_MEMBERS;
-  value = Math.floor(value);
+  if (raw === undefined || raw === null || raw === '') value = DEFAULT_MAX_MEMBERS;
+  if (!Number.isInteger(value)) throw httpError(400, '实际参与人数必须为至少2人的整数');
+  if (value < 2) throw httpError(400, '实际参与人数至少2人');
   if (value > MAX_MEMBERS_HARD_LIMIT) {
     throw httpError(400, '团队人数上限不能超过' + MAX_MEMBERS_HARD_LIMIT + '人');
   }
@@ -212,8 +243,8 @@ const loadGroup = async function(groupId, viewerId, executor) {
 
 const syncParticipants = async function(executor, reservationId, count) {
   if (!reservationId) return;
-  const safeCount = Math.max(1, Number(count) || 1);
-  await executor.execute('UPDATE reservations SET participants = ? WHERE id = ?', [safeCount, reservationId]);
+  // Registration/recruitment does not change the declared actual headcount.
+  // Releasing it here lets other bookings consume capacity already promised.
 };
 
 const notifySafely = async function(userId, type, title, content, data) {
@@ -236,17 +267,12 @@ const assertNoPersonalConflict = async function(executor, userId, date, startTim
 
 const assertMemberEligible = async function(executor, userId) {
   const [users] = await executor.execute(
-    'SELECT id, status, credit_score FROM users WHERE id = ?',
+    'SELECT id, status, credit_score, restricted_until FROM users WHERE id = ?',
     [Number(userId)]
   );
   const user = users[0];
   if (!user) throw httpError(404, '用户不存在');
-  if (user.status === 'banned' || user.status === 'restricted') {
-    throw httpError(403, '账号已被限制预约');
-  }
-  if (Number(user.credit_score) < Number(config.credit.restrictThreshold)) {
-    throw httpError(403, '信用分过低，无法参与组团');
-  }
+  if (require('./creditBookingPolicy').isAccountDisabled(user)) throw httpError(403, '账号已被停用');
   return user;
 };
 
@@ -269,7 +295,8 @@ const createGroup = async function(userId, rawInput) {
       startTime: input.startTime,
       endTime: input.endTime,
       purpose: input.title,
-      participants: 1
+      participants: maxMembers,
+      groupBooking: true
     });
     const [result] = await db.query(
       'INSERT INTO reservation_groups (name, room_id, date, start_time, end_time, purpose, max_members, status, reservation_id, created_by, created_at) ' +
@@ -281,6 +308,7 @@ const createGroup = async function(userId, rawInput) {
       "INSERT INTO reservation_group_members (group_id, user_id, seat_id, status, created_at) VALUES (?, ?, NULL, 'confirmed', NOW())",
       [result.insertId, userId]
     );
+    await require('./danceGroupNotificationService').notifySafely(reservation.id);
     return loadGroup(result.insertId, userId);
   }
 
@@ -303,7 +331,8 @@ const createGroup = async function(userId, rawInput) {
       startTime: input.startTime,
       endTime: input.endTime,
       purpose: input.title,
-      participants: 1
+      participants: maxMembers,
+      groupBooking: true
     });
 
     const [result] = await connection.execute(
@@ -321,6 +350,7 @@ const createGroup = async function(userId, rawInput) {
 
     await connection.commit();
     logger.info('团队预约创建成功: groupId=' + groupId + ' reservationId=' + reservation.id + ' userId=' + userId);
+    await require('./danceGroupNotificationService').notifySafely(reservation.id);
     return await loadGroup(groupId, userId);
   } catch (err) {
     try { await connection.rollback(); } catch (rollbackErr) {}
@@ -345,13 +375,14 @@ const loadRoomPlain = async function(roomId) {
 // 成员变动
 // ---------------------------------------------------------------------------
 
-const joinGroup = async function(groupId, userId) {
+const joinGroupUnlocked = async function(groupId, userId) {
   if (db.isMock()) {
     const group = await fetchGroupRow(plainExecutor, groupId, false);
     if (!group) throw httpError(404, '组团不存在');
     if (isGroupLocked(group)) {
       throw httpError(409, '该组团已停止招募');
     }
+    await assertRecruitmentOpen(plainExecutor, group);
     const members = await fetchMembers(plainExecutor, groupId);
     if (countActiveMembers(members) >= Number(group.max_members)) {
       throw httpError(409, '该组团人数已满');
@@ -360,6 +391,8 @@ const joinGroup = async function(groupId, userId) {
       throw httpError(409, '你已在该组团中');
     }
     await assertMemberEligible(plainExecutor, userId);
+    dailyPolicy.assertMock({ userId, roomId: group.room_id, date: group.date,
+      startTime: group.start_time, endTime: group.end_time }, require('../config/mock-db').__tables, group.reservation_id);
     await db.query(
       "INSERT INTO reservation_group_members (group_id, user_id, seat_id, status, created_at) VALUES (?, ?, NULL, 'confirmed', NOW())",
       [groupId, userId]
@@ -374,11 +407,13 @@ const joinGroup = async function(groupId, userId) {
   try {
     await connection.beginTransaction();
 
+    await connection.execute('SELECT id FROM users WHERE id = ? FOR UPDATE', [Number(userId)]);
     const group = await fetchGroupRow(connection, groupId, true);
     if (!group) throw httpError(404, '组团不存在');
     if (isGroupLocked(group)) {
       throw httpError(409, '该组团已停止招募');
     }
+    await assertRecruitmentOpen(connection, group);
 
     const members = await fetchMembers(connection, groupId);
     const activeCount = countActiveMembers(members);
@@ -392,7 +427,8 @@ const joinGroup = async function(groupId, userId) {
     }
 
     await assertMemberEligible(connection, userId);
-    await assertNoPersonalConflict(connection, userId, group.date, group.start_time, group.end_time, group.reservation_id);
+    await dailyPolicy.assertTransaction(connection, { userId, roomId: group.room_id, date: group.date,
+      startTime: group.start_time, endTime: group.end_time }, group.room_type, group.reservation_id);
 
     try {
       await connection.execute(
@@ -420,7 +456,7 @@ const joinGroup = async function(groupId, userId) {
   }
 };
 
-const leaveGroup = async function(groupId, userId) {
+const leaveGroupUnlocked = async function(groupId, userId) {
   if (db.isMock()) {
     const group = await fetchGroupRow(plainExecutor, groupId, false);
     if (!group) throw httpError(404, '组团不存在');
@@ -430,6 +466,7 @@ const leaveGroup = async function(groupId, userId) {
     if (isGroupLocked(group)) {
       throw httpError(409, '该组团已锁定，无法退出');
     }
+    await assertRecruitmentOpen(plainExecutor, group);
     await db.query('DELETE FROM reservation_group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
     const members = await fetchMembers(plainExecutor, groupId);
     await syncParticipants(plainExecutor, group.reservation_id, Math.max(1, countActiveMembers(members)));
@@ -441,6 +478,7 @@ const leaveGroup = async function(groupId, userId) {
   try {
     await connection.beginTransaction();
 
+    await connection.execute('SELECT id FROM users WHERE id = ? FOR UPDATE', [Number(userId)]);
     const group = await fetchGroupRow(connection, groupId, true);
     if (!group) throw httpError(404, '组团不存在');
     if (Number(group.created_by) === Number(userId)) {
@@ -449,6 +487,7 @@ const leaveGroup = async function(groupId, userId) {
     if (isGroupLocked(group)) {
       throw httpError(409, '该组团已锁定，无法退出');
     }
+    await assertRecruitmentOpen(connection, group);
 
     await connection.execute('DELETE FROM reservation_group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
     const members = await fetchMembers(connection, groupId);
@@ -469,13 +508,14 @@ const leaveGroup = async function(groupId, userId) {
 // 解散 / 审批
 // ---------------------------------------------------------------------------
 
-const dissolveGroup = async function(groupId, userId) {
+const dissolveGroupUnlocked = async function(groupId, userId) {
   const group = await fetchGroupRow(plainExecutor, groupId, false);
   if (!group) throw httpError(404, '组团不存在');
   if (Number(group.created_by) !== Number(userId)) {
     throw httpError(403, '只有发起人可以解散组团');
   }
-  if (group.status === 'cancelled' || group.status === 'rejected') {
+  if (group.status === 'cancelled') return loadGroup(groupId, userId);
+  if (group.status === 'rejected') {
     throw httpError(409, '该组团已取消');
   }
   if (group.status === 'approved' && !group.reservation_id) {
@@ -488,7 +528,7 @@ const dissolveGroup = async function(groupId, userId) {
       nextStatus: 'cancelled',
       actorRole: 'student',
       actorUserId: userId,
-      allowedCurrentStatuses: HOLDING_STATUSES
+      allowedCurrentStatuses: ['approved', 'pending', 'counselor_pending']
     });
   }
 
@@ -587,6 +627,7 @@ const approveGroup = async function(groupId, adminId, role, options) {
   }
 
   await notifySafely(group.created_by, 'group_approved', '组团预约已通过', '你的组团预约「' + (group.name || '') + '」已通过审批', { groupId });
+  await require('./danceGroupNotificationService').notifySafely(group.reservation_id);
   return loadGroup(groupId, group.created_by);
 };
 
@@ -786,6 +827,10 @@ const listPendingGroups = async function(options) {
   }
   return { list, total: Number(countRows[0].total) || 0, page, pageSize };
 };
+
+const joinGroup = (groupId, userId) => serializeMockGroup(groupId, () => joinGroupUnlocked(groupId, userId));
+const leaveGroup = (groupId, userId) => serializeMockGroup(groupId, () => leaveGroupUnlocked(groupId, userId));
+const dissolveGroup = (groupId, userId) => serializeMockGroup(groupId, () => dissolveGroupUnlocked(groupId, userId));
 
 module.exports = {
   DEFAULT_MAX_MEMBERS,

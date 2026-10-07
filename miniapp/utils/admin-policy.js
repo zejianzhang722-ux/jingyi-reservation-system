@@ -1,3 +1,4 @@
+var roleModel = require('./role-model')
 var ROLE_CAPABILITIES = {
   dorm_manager: ['scanCheckin'],
   admin: [
@@ -38,7 +39,7 @@ var ROLE_CAPABILITIES = {
 }
 
 function can(role, capability) {
-  var capabilities = ROLE_CAPABILITIES[role]
+  var capabilities = ROLE_CAPABILITIES[roleModel.normalizeRole(role)]
   return !!capabilities && capabilities.indexOf(capability) !== -1
 }
 
@@ -48,7 +49,7 @@ function queueType(role, preferred) {
 }
 
 function defaultQueueType(role) {
-  return role === 'counselor' || role === 'super_admin' ? 'counselor' : 'admin'
+  return can(role, 'counselorApproval') ? 'counselor' : 'admin'
 }
 
 function canQuickApprove(role, status) {
@@ -60,5 +61,7 @@ module.exports = {
   can: can,
   queueType: queueType,
   defaultQueueType: defaultQueueType,
-  canQuickApprove: canQuickApprove
+  canQuickApprove: canQuickApprove,
+  isDormRole: roleModel.isDormRole,
+  isGuideRole: roleModel.isGuideRole
 }

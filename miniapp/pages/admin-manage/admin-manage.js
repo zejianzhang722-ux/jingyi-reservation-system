@@ -1,4 +1,5 @@
 var auth = require('../../utils/auth')
+var roleModel = require('../../utils/role-model')
 var adminPolicy = require('../../utils/admin-policy')
 var request = require('../../utils/request')
 var pageMotion = require('../../utils/page-motion')
@@ -7,8 +8,8 @@ var CATALOG = [
   {
     title: '工作台与统计',
     items: [
-      { key: 'pending', name: '普通预约审核', desc: '处理共享空间等普通待审预约', icon: 'check', tone: 'gold', capability: 'ordinaryApproval' },
-      { key: 'counselorPending', name: '重点预约审核', desc: '处理需辅导员把关的特殊空间预约', icon: 'check', tone: 'red', capability: 'counselorApproval' },
+      { key: 'pending', name: '预约审核', desc: '处理共享空间等预约申请', icon: 'check', tone: 'gold', capability: 'ordinaryApproval' },
+      { key: 'counselorPending', name: '辅导员审核', desc: '处理需辅导员把关的特殊空间预约', icon: 'check', tone: 'red', capability: 'counselorApproval' },
       { key: 'stats', name: '数据统计', desc: '查看预约、使用、爽约和信用概览', icon: 'chart', tone: 'blue', capability: 'statsView' }
     ]
   },
@@ -48,6 +49,10 @@ Page({
   ensureAdmin: function () {
     if (!auth.isLoggedIn() || !auth.isAdmin()) {
       wx.reLaunch({ url: '/pages/login/login' })
+      return false
+    }
+    if (!roleModel.isGuideRole(auth.getUserRole())) {
+      wx.reLaunch({ url: auth.getAdminHome() })
       return false
     }
     return true
@@ -114,9 +119,14 @@ Page({
   },
 
   onItemTap: function (e) {
+    if (!this.ensureAdmin()) return
     var key = e.currentTarget.dataset.key
+    var permitted = CATALOG.some(function (group) {
+      return group.items.some(function (item) { return item.key === key && adminPolicy.can(auth.getUserRole(), item.capability) })
+    })
+    if (!permitted) return
     var routes = {
-      verification: '/pages/verification/verification',
+      verification: roleModel.scanPath(auth.getUserRole()),
       pending: '/pages/admin-home/admin-home?queueType=' + adminPolicy.queueType(auth.getUserRole(), 'admin'),
       counselorPending: '/pages/admin-home/admin-home?queueType=' + adminPolicy.queueType(auth.getUserRole(), 'counselor'),
       stats: '/pages/admin-stats/admin-stats', reservation: '/pages/admin-reservation/admin-reservation',

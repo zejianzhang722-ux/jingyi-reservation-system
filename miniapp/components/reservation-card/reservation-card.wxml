@@ -22,14 +22,14 @@
     </view>
   </view>
 
-  <view class="reservation-card-actions" wx:if="{{showActions && (canCancel || canCheckIn)}}">
+  <view class="reservation-card-actions" wx:if="{{showActions && (canCancel || canCheckIn || reservation.status === 'approved' || reservation.status === 'checked_in' || reservation.status === 'using')}}">
     <view class="reservation-card-action btn-cancel" wx:if="{{canCancel}}" catchtap="onCancel">
       取消预约
     </view>
     <view class="reservation-card-action btn-checkin" wx:if="{{canCheckIn}}" catchtap="onCheckIn">
       签到
     </view>
-    <view class="reservation-card-action btn-qrcode" wx:if="{{reservation.status === 'approved' || reservation.status === 'using'}}" catchtap="onQRCode">
+    <view class="reservation-card-action btn-qrcode" wx:if="{{reservation.status === 'approved' || reservation.status === 'checked_in' || reservation.status === 'using'}}" catchtap="onQRCode">
       凭证码
     </view>
   </view>

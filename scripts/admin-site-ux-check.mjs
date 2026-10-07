@@ -293,7 +293,7 @@ for (const name of ['Account/Index', 'Room/Manage', 'Credit/Blacklist', 'System/
 
 const guardedManagementActions = {
   'Account/Index': ['handleSubmit', 'doImport'],
-  'Credit/Blacklist': ['confirmBan', 'handleUnban'],
+  'Credit/Blacklist': ['handleUnban'],
   'System/Announcements': ['handlePublish', 'handleArchive', 'handleDelete', 'handleSubmit'],
   'System/Backup': ['handleCreateBackup', 'handleVerify']
 }
@@ -331,7 +331,7 @@ for (const [name, source, loadEvidence, primaryEvidence] of [
   ['Room/Monitor', managementPages['Room/Monitor'], /async function loadRooms/, /@click="loadRooms"/],
   ['Room/RulesConfig', await readFile(new URL('../admin/src/views/Room/RulesConfig.vue', import.meta.url), 'utf8'), /async function loadRules/, /@click="handleSave"/],
   ['Account/Index', managementPages['Account/Index'], /async function loadData/, /@click="handleAdd"/],
-  ['Credit/Blacklist', managementPages['Credit/Blacklist'], /async function loadData/, /@click="handleManualBan"/],
+  ['Credit/Blacklist', managementPages['Credit/Blacklist'], /async function loadData/, /@click="handleUnban\(row\)"/],
   ['Credit/ScoreConfig', await readFile(new URL('../admin/src/views/Credit/ScoreConfig.vue', import.meta.url), 'utf8'), /async function loadConfig/, /@click="handleSave"/],
   ['System/Announcements', managementPages['System/Announcements'], /async function loadData/, /@click="handleAdd"/],
   ['System/Backup', managementPages['System/Backup'], /async function loadData/, /@click="handleCreateBackup"/]

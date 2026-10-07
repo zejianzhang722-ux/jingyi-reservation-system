@@ -50,7 +50,7 @@
       </view>
     </view>
 
-    <view class="qrcode-section" wx:if="{{reservation.status === 'approved' || reservation.status === 'using'}}">
+    <view class="qrcode-section" wx:if="{{reservation.status === 'approved' || reservation.status === 'checked_in' || reservation.status === 'using'}}">
       <view class="qrcode-placeholder" bindtap="onViewQRCode">
         <text class="qrcode-icon">▦</text>
         <text class="qrcode-text">查看签到凭证码</text>
@@ -61,7 +61,7 @@
   <view class="detail-actions" wx:if="{{reservation && !loading}}">
     <view class="action-btn btn-danger" wx:if="{{canCancel}}" bindtap="onCancel">取消预约</view>
     <view class="action-btn btn-primary" wx:if="{{canCheckIn}}" bindtap="onCheckIn">签到</view>
-    <view class="action-btn btn-outline" wx:if="{{reservation.status === 'approved' || reservation.status === 'using'}}" bindtap="onViewQRCode">查看凭证码</view>
+    <view class="action-btn btn-outline" wx:if="{{reservation.status === 'approved' || reservation.status === 'checked_in' || reservation.status === 'using'}}" bindtap="onViewQRCode">查看凭证码</view>
     <view class="action-btn btn-secondary" bindtap="onGoMyReservations">我的预约</view>
     <view class="action-btn btn-secondary" bindtap="onGoHome">返回首页</view>
   </view>

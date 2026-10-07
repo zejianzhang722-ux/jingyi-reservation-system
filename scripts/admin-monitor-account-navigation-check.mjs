@@ -22,7 +22,7 @@ function collectVueFiles(directoryUrl) {
 }
 
 function visibleCopyFromVue(source) {
-  const template = source.split('<script setup>')[0] || ''
+  const template = source.match(/<template>[\s\S]*<\/template>/)?.[0]?.replace(/<!--[\s\S]*?-->/g, '') || ''
   const feedbackCalls = [...source.matchAll(/(?:ElMessage(?:\.\w+)?|ElMessageBox\.confirm)\(\s*(['"`])([\s\S]*?)\1/g)]
     .map(match => match[2])
     .join('\n')
@@ -194,7 +194,7 @@ for (const fileUrl of visibleCopyFiles) {
   assert.doesNotMatch(source, /['"]\u9884\u7ea6ID['"]\s*:/, `${fileUrl.pathname} exports an internal identifier under a user-facing heading`)
 }
 
-const legacyAdminsSource = readFileSync(new URL('../admin/src/views/System/Admins.vue', import.meta.url), 'utf8')
+const legacyAdminsSource = readFileSync(new URL('../admin/src/views/Account/Index.vue', import.meta.url), 'utf8')
 assert.doesNotMatch(legacyAdminsSource, /label:\s*['"]\u7ba1\u7406\u5458['"]|<el-option label="\u7ba1\u7406\u5458"/)
 assert.match(legacyAdminsSource, /\u5bfc\u751f\u7ba1\u7406\u5458/)
 
@@ -208,8 +208,15 @@ for (const [relativePath, listName, retryName] of loadStatePages) {
   const source = readFileSync(new URL(`../admin/src/views/${relativePath}`, import.meta.url), 'utf8')
   const template = source.split('<script setup>')[0] || ''
   assert.match(source, /const loadError = ref\(''\)/, `${relativePath} needs explicit list load error state`)
-  assert.match(template, new RegExp(`v-if="loadError"[\\s\\S]{0,240}@click="${retryName}"`), `${relativePath} needs a retryable error notice`)
-  assert.match(template, new RegExp(`!loading && !loadError && !${listName}\\.length`), `${relativePath} needs an empty state distinct from load failure`)
+  if (/<AsyncState\b/.test(template)) {
+    assert.match(template, /:error="[^"]*\bloadError\b[^"]*"/, `${relativePath} must pass errors to AsyncState`)
+    assert.match(template, /:loading="[^"]*\bloading\b[^"]*"/, `${relativePath} must pass loading state to AsyncState`)
+    assert.match(template, new RegExp(`@retry="${retryName}"`), `${relativePath} must wire retry`)
+    assert.match(template, new RegExp(`:empty="[^"]*!${listName}\\.length[^"]*"`), `${relativePath} must wire empty state`)
+  } else {
+    assert.match(template, new RegExp(`v-if="loadError"[\\s\\S]{0,240}@click="${retryName}"`), `${relativePath} needs a retryable error notice`)
+    assert.match(template, new RegExp(`!loading && !loadError && !${listName}\\.length`), `${relativePath} needs an empty state distinct from load failure`)
+  }
   assert.match(source, /createLatestRequestCoordinator/, `${relativePath} must coordinate list requests`)
   assert.match(source, /\.run\(/, `${relativePath} must run list loads through the coordinator`)
   assert.match(source, /\.invalidate\(\)/, `${relativePath} must invalidate list loads when unmounted`)
@@ -218,27 +225,29 @@ for (const [relativePath, listName, retryName] of loadStatePages) {
 }
 
 const expectedNavigationGroups = {
-  admin: ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表'],
-  counselor: ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表', '内容与沟通'],
-  super_admin: ['今日工作', '预约与使用', '空间管理', '宿生与信用', '数据与报表', '内容与沟通', '系统运维']
+  admin: ['工作台', '预约审核', '现场运营', '宿生与信用', '数据报表'],
+  counselor: ['工作台', '预约审核', '现场运营', '宿生与信用', '数据报表', '公告与反馈'],
+  super_admin: ['工作台', '预约审核', '现场运营', '空间与规则', '宿生与信用', '数据报表', '公告与反馈', '系统运维']
 }
 
 assert.deepEqual(navSections.map(section => section.title), [
-  '今日工作',
-  '预约与使用',
-  '空间管理',
+  '工作台',
+  '预约审核',
+  '现场运营',
+  '空间与规则',
   '宿生与信用',
-  '数据与报表',
-  '内容与沟通',
+  '数据报表',
+  '公告与反馈',
   '系统运维'
 ])
 assert.deepEqual(Object.fromEntries(navSections.map(section => [section.key, section.children])), {
   today: ['Dashboard'],
-  reservation: ['CounselorPending', 'ReservationPending', 'ReservationAll', 'CheckinManage', 'ReadingRoomLogs'],
-  space: ['RoomMonitor', 'RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig'],
+  reservation: ['CounselorPending', 'ReservationPending', 'ReservationGroups'],
+  operations: ['Verification', 'CheckinManage', 'ReservationAll', 'ReadingRoomLogs', 'RoomMonitor'],
+  space: ['RoomManage', 'BuildingManage', 'SeatManage', 'RulesConfig', 'PosterPosition'],
   governance: ['CreditViolations', 'CreditBlacklist', 'AccountManage', 'CreditConfig'],
   statistics: ['StatsOverview', 'StatsExport'],
-  content: ['PosterPending', 'PosterPosition', 'Feedback', 'SystemAnnouncements'],
+  content: ['PosterPending', 'Feedback', 'SystemAnnouncements'],
   system: ['SystemLogs', 'SystemBackup']
 })
 const groupedAdminRouteNames = navSections.flatMap(section => section.children)
@@ -266,9 +275,9 @@ const adminNavigation = buildNavigation('admin')
 assert.ok(!adminNavigation.some(group => group.title === '系统运维'))
 assert.ok(!adminNavigation.flatMap(group => group.children).some(item => item.name === 'AccountManage'))
 const counselorNavigation = buildNavigation('counselor')
-const counselorReservationNames = counselorNavigation.find(group => group.title === '预约与使用').children.map(item => item.name)
+const counselorReservationNames = counselorNavigation.find(group => group.title === '预约审核').children.map(item => item.name)
 assert.ok(counselorReservationNames.indexOf('CounselorPending') < counselorReservationNames.indexOf('ReservationPending'))
-assert.equal(counselorNavigation.find(group => group.title === '内容与沟通').children[0].name, 'PosterPending')
+assert.equal(counselorNavigation.find(group => group.title === '公告与反馈').children[0].name, 'PosterPending')
 const superNavigation = buildNavigation('super_admin')
 assert.ok(superNavigation.find(group => group.title === '宿生与信用').children.some(item => item.name === 'AccountManage'))
 assert.deepEqual(superNavigation.find(group => group.title === '系统运维').children.map(item => item.name), ['SystemLogs', 'SystemBackup'])
@@ -342,7 +351,7 @@ assert.deepEqual(
 )
 assert.equal(navigationState.getWorkspaceLabel('admin'), '导生工作区')
 assert.equal(navigationState.getWorkspaceLabel('counselor'), '辅导员工作区')
-assert.equal(navigationState.getWorkspaceLabel('super_admin'), '超级管理工作区')
+assert.equal(navigationState.getWorkspaceLabel('super_admin'), '会长团工作区')
 
 const menuCalls = []
 const menu = {
@@ -367,7 +376,7 @@ menuCalls.length = 0
 menuSync.markClosed('content')
 menuSync.sync(menu, ['today'], 'content')
 assert.deepEqual(menuCalls, [['open', 'today'], ['open', 'content']])
-assert.equal(navigationState.findActiveGroupKey(counselorNavigation, '/room/monitor'), 'space')
+assert.equal(navigationState.findActiveGroupKey(counselorNavigation, '/room/monitor'), 'operations')
 assert.equal(navigationState.findActiveGroupKey(counselorNavigation, '/not-found'), '')
 
 const layoutSource = readFileSync(new URL('../admin/src/components/Layout.vue', import.meta.url), 'utf8')
@@ -430,7 +439,8 @@ const timelineView = buildTimelineView({
 })
 
 assert.deepEqual(timelineView.summary, { total: 6, reservationCount: 3, busySlotCount: 3, reservationCountReliable: true, isAllAvailable: false })
-assert.deepEqual(timelineView.slots.map(slot => slot.label), ['空闲', '已预约', '使用中', '使用中', '维护', '状态未知'])
+assert.deepEqual(timelineView.slots.map(slot => slot.label), ['空闲', '已预约', '使用中', '使用中', '不可预约', '状态未知'])
+assert.equal(buildTimelineView({ timeline: [{ time: '10:00', status: 'maintenance' }] }).slots[0].label, '维护')
 assert.equal(timelineView.slots[1].purpose, '课题讨论')
 assert.equal(timelineView.slots[1].userName, '张三')
 assert.equal(timelineView.slots[1].reservationId, 18)
@@ -535,7 +545,7 @@ const mockDb = {
     if (studyMode && sql.includes('FROM rooms WHERE id')) return [[{ id: 8, name: '自习室', type: 'study_room', capacity: 1, open_start_time: '08:00', open_end_time: '08:30' }]]
     if (studyMode && sql.includes('FROM seats')) return [[{ id: 1, status: 'available', seat_number: 'A1', row_num: 1, col_num: 1 }]]
     if (studyMode && sql.includes('FROM reservations')) return [[{ id: 55, user_id: 5, seat_id: 1, start_time: '08:00', end_time: '08:30', status: 'approved' }]]
-    if (sql.includes('FROM rooms WHERE id')) return [[{ id: 7, name: '讨论室', type: 'seminar_room', capacity: 6, open_start_time: '08:00', open_end_time: '09:00' }]]
+    if (sql.includes('FROM rooms WHERE id')) return [[{ id: 7, name: '讨论室', type: 'seminar_room', status: 'open', capacity: 6, open_start_time: '08:00', open_end_time: '09:00' }]]
     if (sql.includes('FROM seats')) return [[]]
     if (sql.includes('FROM reservations')) return [[{
       id: 42,
@@ -557,7 +567,7 @@ const response = { status() { return this }, json(body) { responseBody = body; r
 await roomController.timeline({ params: { id: '7' }, query: { date: '2026-07-13' }, user: { id: 99, role: 'admin' } }, response)
 assert.equal(responseBody.code, 200)
 assert.deepEqual(responseBody.data.timeline[0], {
-  time: '08:00', endTime: '08:30', status: 'checked_in', availableCount: 5, totalCount: 6,
+  time: '08:00', endTime: '08:30', status: 'checked_in', availableCount: 0, totalCount: 6,
   reservationId: 42, userName: '李四', purpose: '小组会议'
 })
 await roomController.timeline({ params: { id: '7' }, query: { date: '2026-07-13' }, user: { id: 99, role: 'student' } }, response)

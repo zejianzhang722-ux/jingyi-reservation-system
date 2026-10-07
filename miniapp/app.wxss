@@ -1,6 +1,24 @@
 @import "styles/icons.wxss";
+@import "styles/button.wxss";
 
 page {
+  --btn-h-lg: 96rpx;
+  --btn-h-md: 88rpx;
+  --btn-h-sm: 88rpx;
+  --btn-px-lg: 36rpx;
+  --btn-px-md: 28rpx;
+  --btn-px-sm: 20rpx;
+  --btn-font-lg: 30rpx;
+  --btn-font-md: 28rpx;
+  --btn-font-sm: 26rpx;
+  --btn-radius: 12rpx;
+  --btn-gap: 16rpx;
+  --btn-gap-sm: 12rpx;
+  --btn-primary-bg: #0066CC;
+  --btn-success-bg: #237f3d;
+  --btn-danger-bg: #cf3f43;
+  --btn-disabled-bg: #eef2f6;
+  --btn-disabled-fg: #687487;
   --primary: #0066CC;
   --primary-dark: #003D7A;
   --primary-light: #E6F0FF;

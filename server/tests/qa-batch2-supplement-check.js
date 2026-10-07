@@ -104,11 +104,14 @@ const main = async function() {
   await db.ready();
   eq('数据库已回退 mock', db.isMock(), true);
 
-  // 真实 MySQL 尝试（无凭据则如实标注）
+  // 真实迁移会改变数据库，只有明确开启专用数据库检查时才执行。
   let migrateNote = '';
-  for (const s of ['apply-reservation-audit-migration.js', 'apply-supplement-migration.js']) {
+  if (process.env.RUN_REAL_MIGRATION_CHECK !== 'true') {
+    console.log('PARTIAL: real MySQL migrations not verified; isolated service assertions still run');
+  }
+  for (const s of process.env.RUN_REAL_MIGRATION_CHECK === 'true' ? ['apply-reservation-audit-migration.js', 'apply-supplement-migration.js'] : []) {
     try {
-      execFileSync(process.execPath, [path.join(ROOT, 'scripts', s)], { cwd: ROOT, encoding: 'utf8', timeout: 30000, env: Object.assign({}, process.env, { MYSQL_HOST: '127.0.0.1', MYSQL_PORT: '3306', MYSQL_USER: 'root', MYSQL_PASSWORD: '', MYSQL_DATABASE: 'jingyi_reservation' }) });
+      execFileSync(process.execPath, [path.join(ROOT, 'scripts', s)], { cwd: ROOT, encoding: 'utf8', timeout: 30000, env: process.env });
       migrateNote += s + '=成功; ';
     } catch (err) {
       const text = String((err && (err.stdout || err.stderr)) || err.message || err);
@@ -208,7 +211,9 @@ const main = async function() {
   tables.checkins = [];
   const captured = [];
   const recordRunner = { transactional: false, query: async function(sql, params) { captured.push(sql); return mockDb.query(sql, params); } };
-  await checkinController.applyManualCheckinWithinTransaction(recordRunner, { reservationId: 4, statusMessage: 'x' });
+  const legacyReservation = findRes(4);
+  const legacyDate = new Date(legacyReservation.date + 'T' + legacyReservation.start_time);
+  await checkinController.applyManualCheckinWithinTransaction(recordRunner, { reservationId: 4, statusMessage: 'x', now: legacyDate });
   const legacyInsert = captured.filter(function(s) { return /INSERT\s+INTO\s+checkins/i.test(s); })[0] || '';
   check('旧路径 INSERT 不含 supplement_request_id', !/supplement_request_id/.test(legacyInsert), legacyInsert.slice(0, 90));
   eq('旧路径成功写入 checkin', checkinsOf(4).length, 1);
@@ -235,7 +240,7 @@ const main = async function() {
   check('list(超管全局) 落审计', auditCount() > aBefore);
   const lOut = await call(supplementController.list, listReq({ id: 98, role: 'admin' }, { adminId: 98, role: 'admin', isGlobal: false, buildingId: 99999 }));
   const rowOut = (lOut.body.data || [])[0] || {};
-  check('list(越权楼栋管理员) 学号掩码', /\*/.test(String(rowOut.student_id)), 'student_id=' + rowOut.student_id);
+  eq('list(越权楼栋管理员) 不返回其他楼栋记录', (lOut.body.data || []).length, 0);
   const lPeer = await call(supplementController.list, listReq({ id: 1, role: 'student' }, undefined));
   const rowPeer = (lPeer.body.data || [])[0] || {};
   check('list(宿生看他人) 学号掩码', /\*/.test(String(rowPeer.student_id)), 'student_id=' + rowPeer.student_id);
@@ -256,8 +261,7 @@ const main = async function() {
   // 越权楼栋管理员：学号掩码，但 review_remark 仍原样返回（非个人敏感信息）
   const lOut2 = await call(supplementController.list, listReq({ id: 98, role: 'admin' }, { adminId: 98, role: 'admin', isGlobal: false, buildingId: 99999 }));
   const rowOut2 = (lOut2.body.data || [])[0] || {};
-  check('list(越权) 学号掩码', /\*/.test(String(rowOut2.student_id)), 'student_id=' + rowOut2.student_id);
-  eq('list(越权) 仍返回 review_remark（非 PII 不掩码）', rowOut2.review_remark, '同意补签');
+  eq('list(越权) 不返回其他楼栋记录或审核意见', (lOut2.body.data || []).length, 0);
   eq('list 出口掩码不污染 review_remark 原值', suppRow(c5.id).review_remark, '同意补签');
 
   console.log('qa-batch2-supplement-check: PASS=' + pass + ' FAIL=' + fail);

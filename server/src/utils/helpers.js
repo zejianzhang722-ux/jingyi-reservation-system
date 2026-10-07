@@ -16,8 +16,8 @@ const formatTime = function(date) {
 const isDateInRange = function(dateStr, advanceDays) {
   const today = dayjs().startOf('day');
   const target = dayjs(dateStr).startOf('day');
-  const maxDate = today.add(advanceDays || config.reservation.advanceDays, 'day');
-  return !target.isBefore(today) && !target.isAfter(maxDate);
+  const maxDate = today.add(advanceDays === undefined || advanceDays === null ? config.reservation.advanceDays : advanceDays, 'day');
+  return target.isValid() && !target.isBefore(today) && !target.isAfter(maxDate);
 };
 
 const isTimeInRange = function(timeStr, startTime, endTime) {
